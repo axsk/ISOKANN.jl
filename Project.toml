@@ -1,0 +1,13 @@
+name = "ISOKANN"
+uuid = "512544ac-929d-4ba3-aa9d-55e9313a4b47"
+authors = ["Sikorski <sikorski@zib.de> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.8"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
