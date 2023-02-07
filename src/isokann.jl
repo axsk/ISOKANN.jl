@@ -3,7 +3,7 @@ import Flux
 import StatsBase
 import Optimisers
 import Plots
-using Plots: plot, plot!, scatter!, savefig
+using Plots: plot, plot!, scatter!, savefig, contour
 using Random
 
 #@assert @elapsed isokann(Doublewell()) < 2
@@ -61,7 +61,7 @@ function isokann(;dynamics=Doublewell(), model=defaultmodel(dynamics),
         if i < poweriter
             callback_throttled(;losses=ls, model, xs, target, stds, std, cs)
         else
-            plot_callback(;losses=ls, model, xs, target, stds, std, cs)
+            callback(;losses=ls, model, xs, target, stds, std, cs)
             break
         end
 
@@ -93,6 +93,8 @@ function plot_callback(; kwargs...)
     plot(p1, p2) |> display
     return p1,p2
 end
+
+no_callback(; kwargs...) = nothing
 
 function plot_loss(losses, stds)
     p=plot(yaxis=:log, title="loss", legend=:bottomleft)

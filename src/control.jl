@@ -1,6 +1,8 @@
 using FLoops: @floop
 using StaticArrays
 
+nocontrol(x, t) = zero(x)
+
 # b + σu
 function controlled_drift(D, xx, p, t, ::Val{n}, f::F, g::G, u::U) where {n,F,G,U}
     x = SVector{n}(@view xx[1:n])
@@ -53,6 +55,17 @@ function GirsanovSDE(sde, u::U, ::Val{n}) where {n, U}
         noise_rate_prototype = nrp, sde.kwargs...)
 end
 
+function GirsanovSDE(sde, u::typeof(nocontrol), ::Val{n}) where {n}
+    u0 = vcat(sde.u0,0)
+
+    drift(x,p,t) = vcat(sde.f(@view(x[1:end-1]),p,t), 0)
+    noise(x,p,t) = vcat(sde.g(@view(x[1:end-1]),p,t), 0)
+
+    return StochasticDiffEq.SDEProblem(
+        drift, noise, u0, sde.tspan, sde.p; sde.kwargs...)
+
+end
+
 ## TODO: where do we use this?
 function CompoundSDE(sde, u::U, v::Val{n} = Val(length(sde.u0))) where {n, U}
     nrp = zeros(n+1, n+1)
@@ -84,7 +97,7 @@ function CompoundSDE(sde, u::U, v::Val{n} = Val(length(sde.u0))) where {n, U}
         noise=sde.noise, noise_rate_prototype = nrp, sde.kwargs...)
 end
 
-nocontrol(x, t) = zero(x)
+
 
 " convenience wrapper for obtaining X[end] and the Girsanov Weight"
 function girsanovsample(cde, x0)
@@ -100,8 +113,8 @@ function girsanovbatch(cde, xs, n)
     dim, nx = size(xs)
     ys ::Array{Float64, 3} = zeros(dim, nx, n)
     ws ::Array{Float64, 2} = zeros(nx, n)
-    @floop for i in 1:nx, j in 1:n  # using @floop allows threaded iteration over i AND j
-            ys[:, i, j], ws[i, j] = girsanovsample(cde, xs[:, i])
+    #=@floop=# for i in 1:nx, j in 1:n  # using @floop allows threaded iteration over i AND j
+            @show ys[:, i, j], ws[i, j] = girsanovsample(cde, xs[:, i])
     end
     return ys, ws
 end
