@@ -62,7 +62,7 @@ function GirsanovSDE(sde, u::typeof(nocontrol), ::Val{n}) where {n}
     noise(x,p,t) = vcat(sde.g(@view(x[1:end-1]),p,t), 0)
 
     return StochasticDiffEq.SDEProblem(
-        drift, noise, u0, sde.tspan, sde.p; sde.kwargs...)
+        drift, noise, u0, sde.tspan, p=sde.p; sde.kwargs...)
 
 end
 
@@ -114,7 +114,7 @@ function girsanovbatch(cde, xs, n)
     ys ::Array{Float64, 3} = zeros(dim, nx, n)
     ws ::Array{Float64, 2} = zeros(nx, n)
     #=@floop=# for i in 1:nx, j in 1:n  # using @floop allows threaded iteration over i AND j
-            @show ys[:, i, j], ws[i, j] = girsanovsample(cde, xs[:, i])
+        ys[:, i, j], ws[i, j] = girsanovsample(cde, xs[:, i])
     end
     return ys, ws
 end

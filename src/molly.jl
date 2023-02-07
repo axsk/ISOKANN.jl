@@ -53,12 +53,10 @@ function StochasticDiffEq.SDEProblem(sys::System, T=1e-3; dt=1e-5, alg=SROCK2(),
 
 
     function driftf(x,p,t)
-        # This should work... c.f. https://github.com/JuliaMolSim/Molly.jl/issues/112
-        # @set sys.coords = vec_to_coords(x, sys)
-        @show typeof(x), size(x)
-        @show x[1]
+        (;neighborlist) = p
         sys = setcoords(sys, x)
-        f = forces(sys, find_neighbors(sys))
+
+        f = forces(sys, neighborlist, n_threads=1)
 
         drift = f ./ masses(sys) ./ gamma
         drift = reduce(vcat, drift) ./ 1u"Na"
@@ -69,7 +67,10 @@ function StochasticDiffEq.SDEProblem(sys::System, T=1e-3; dt=1e-5, alg=SROCK2(),
     noise(x,p,t) = sigma
     x0 = coords_to_vec(sys)
 
-    SDEProblem(driftf, noise, x0, T, alg=alg, dt=dt; kwargs...)
+    neighborlist = find_neighbors(sys)
+
+
+    SDEProblem(driftf, noise, x0, T, (;neighborlist), alg=alg, dt=dt, kwargs...)
 end
 
 dim(sys::System) = length(sys.atoms) * 3
