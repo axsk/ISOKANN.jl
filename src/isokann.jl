@@ -1,7 +1,7 @@
 # cleaner and simpler reimplementation of ISOKANN (1)
 import Flux
 import StatsBase
-import Optimisers
+import Optimisers: setup, Adam, update!
 import Plots
 using Plots: plot, plot!, scatter!, savefig, contour
 using Random
@@ -26,7 +26,7 @@ function isokann(;dynamics=Doublewell(), model=defaultmodel(dynamics),
     xs = randx0(dynamics, nx) :: Matrix
     sde = SDEProblem(dynamics, dt = dt, alg=alg)
 
-    opt = Optimisers.setup(opt, model)
+    isa(opt, Optimisers.AbstractRule) && (opt = Optimisers.setup(opt, model))
     stds = Float64[]
     ls = Float64[]
     local S, cde, target, std, cs
@@ -59,9 +59,9 @@ function isokann(;dynamics=Doublewell(), model=defaultmodel(dynamics),
         end
 
         if i < poweriter
-            callback_throttled(;losses=ls, model, xs, target, stds, std, cs)
+            callback_throttled(;losses=ls, model, xs, target, stds, std, cs, dynamics, ys)
         else
-            callback(;losses=ls, model, xs, target, stds, std, cs)
+            callback(;losses=ls, model, xs, target, stds, std, cs, dynamics, ys)
             break
         end
 
@@ -83,6 +83,11 @@ function isokann(;dynamics=Doublewell(), model=defaultmodel(dynamics),
         end
     end
     return (;model, ls, S, sde, cde, xs, dynamics, target, stds, std, cs, opt)
+end
+
+function loss_callback(;kwargs...)
+    (;losses) = NamedTuple(kwargs)
+    println(losses[end])
 end
 
 function plot_callback(; kwargs...)

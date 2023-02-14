@@ -12,6 +12,8 @@ include("isokann.jl")   # new implementation of isokann
 
 export isokann
 
+
 include("molly.jl")
+include("isomolly.jl")
 
 end
