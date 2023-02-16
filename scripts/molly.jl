@@ -8,28 +8,32 @@ using ISOKANN:
     stratified_x0,
     bootstrapx0
 
-using Optimisers: Adam
+using ISOKANN
+using Optimisers
 using Plots
 import Flux
 using JLD2
+import StatsBase, Zygote, Optimisers, ISOKANN
+
+
+# Adhoc constructor for the experiment, stored in a named tuple
 
 function setup(;
-    nd = 200, # number of outer iterations
+    nd = 100, # number of outer iterations
     nx = 100, # size of data subsamples
-    np = 2, # number of power iterates
-    nl = 2, # number of learning steps  #merely >1 for performance reasons
+    np = 1, # number of power iterates
+    nl = 20, # number of learning steps  #merely >1 for performance reasons
 
-    nres = 40, # how often to resample
+    nres = Inf, # how often to resample
     ny = 8, # number of new x samples to generate
-    nk = 8, # number of koop samples
+    nk = 16, # number of koop samples
 
     batchsize = Inf, # minibatchsize for sgd
 
-    sys = PDB_6MRR(),
-    dt = 2e-5,
+    sys = PDB_ACEMD(),
 
     model = defaultmodel(sys),
-    opt = Adam(1e-4),
+    opt = Adam(1e-3),
 
     data = nothing,
     losses = Float64[])
@@ -37,29 +41,30 @@ function setup(;
     isa(opt, Optimisers.AbstractRule) && (opt = Optimisers.setup(opt, model))
 
     if isnothing(data)
-        x0 = bootstrapx0(sys, ny; dt)
-        @time data = generatedata(sys, nk; dt, x0)
+        x0 = bootstrapx0(sys, ny)
+        @time data = generatedata(sys, nk, x0)
     end
 
-
-    return (; nd, nx, ny, nk, np, nl, dt, sys, model, opt, data, losses, batchsize, nres)
+    return (; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, batchsize, nres)
 end
+
+
+## Reimplementation of ISOKANN
+
 
 runloop(setup::NamedTuple = setup(); kwargs...) = runloop(;setup..., kwargs...)
 
-function runloop(; nd, nx, ny, nk, np, nl, dt, sys, model, opt, data, losses, batchsize, nres)
+function runloop(; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, batchsize, nres, plotevery=10, kwargs...)
     isa(opt, Optimisers.AbstractRule) && (opt = Optimisers.setup(opt, model))
     datastats(data)
 
     local sdata
-    plt = Flux.throttle(1) do
-        plotlossdata(losses, sdata, model) |> display
-        xs, ys = sdata
-        #println("Extrema: $(model(xs) |> extrema), $(model(ys)|>extrema)")
-        #savefig("lastplot.png")
+    plt = Flux.throttle(plotevery) do
+        plot_learning(losses, data, model) |> display
+        savefig("out/lastplot.png")
     end
 
-    @time for j in 1:nd
+    for j in 1:nd
         sdata = datasubsample(model, data, nx)
         for i in 1:np
             # train model(xs) = target
@@ -70,30 +75,17 @@ function runloop(; nd, nx, ny, nk, np, nl, dt, sys, model, opt, data, losses, ba
             end
         end
 
-
         plt()
 
         if j%nres == 0
-            data = @time adddata(data, model, sys, ny, dt)
+            @time data = adddata(data, model, sys, ny)
+            extractdata(data[1], model, sys.sys)
         end
     end
 
-    return (; nd, nx, ny, nk, np, nl, dt, sys, model, opt, data, losses, batchsize,nres)
+    return (; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, batchsize,nres)
 end
 
-
-import StatsBase, Zygote, Optimisers, ISOKANN
-
-function datasubsample(model, data, nx)
-    # chi stratified subsampling
-    xs, ys = data
-    ks = ISOKANN.shiftscale(model(xs) |> vec)
-    ix = ISOKANN.subsample_uniformgrid(ks, nx)
-    xs = xs[:,ix]
-    ys = ys[:,ix,:]
-
-    return xs, ys
-end
 
 function koopman(data, model)
     xs, ys = data
@@ -102,7 +94,6 @@ function koopman(data, model)
     target = ((ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))) :: Vector
     return xs, target
 end
-
 
 """ batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::Matrix, target::Vector, opt, batchsize)
@@ -120,7 +111,6 @@ function learnbatch!(model, xs::Matrix, target::Vector, opt, batchsize)
     return l
 end
 
-
 """ single supervised learning step """
 function learnstep!(model, xs, target, opt)
     l, grad = let xs=xs  # `let` allows xs to not be boxed
@@ -132,20 +122,22 @@ function learnstep!(model, xs, target, opt)
     return l
 end
 
+
 ## DATA MANGLING
 
-
-""" subsample data=(x,y) uniformly in χ(x) """
-function retainolddata(data, model, nx)
+function datasubsample(model, data, nx)
+    # chi stratified subsampling
     xs, ys = data
     ks = ISOKANN.shiftscale(model(xs) |> vec)
     ix = ISOKANN.subsample_uniformgrid(ks, nx)
+    xs = xs[:,ix]
+    ys = ys[:,ix,:]
 
-    return xs[:,ix], ys[:,ix,:]
+    return xs, ys
 end
 
 
-function adddata(data, model, sys, ny, dt, lastonly = false)
+function adddata(data, model, sys, ny, lastonly = false)
     _, ys = data
     nk = size(ys, 3)
     if lastonly
@@ -153,12 +145,13 @@ function adddata(data, model, sys, ny, dt, lastonly = false)
     else
         x0 = stratified_x0(model, ys, ny)
     end
-    ndata = generatedata(sys, nk; dt, x0)
+    ndata = generatedata(sys, nk, x0)
     data = hcat.(data, ndata)
 
     datastats(data)
     return data
 end
+
 
 function datastats(data)
     xs, ys = data
@@ -167,3 +160,51 @@ function datastats(data)
     _, n, ks = size(ys)
     println("Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
 end
+
+
+""" save data into a pdb file sorted by model evaluation """
+function extractdata(data::AbstractArray, model, sys, path="out/data.pdb")
+    dd = data
+    dd = reshape(dd, size(dd, 1), :)
+    ks = model(dd)
+    i = sortperm(vec(ks))
+    dd = dd[:, i]
+    i = uniqueidx(dd[1,:] |> vec)
+    dd = dd[:, i]
+    ISOKANN.exportdata(sys, path, dd)
+    dd
+end
+
+uniqueidx(v) = unique(i -> v[i], eachindex(v))
+
+
+## Plotting
+
+function plot_learning(losses, data, model)
+    p1 = plot(losses, yaxis=:log, title="loss")
+    p2 = plot(); plotatoms!(data..., model)
+    p3 = scatter_ramachandran(data[1], model)
+    plot(p1, p2, p3, layout=(3,1), size=(600,1000))
+end
+
+function scatter_ramachandran(x::Matrix, model=nothing)
+    z = nothing
+    !isnothing(model) && (z = model(x) |> vec)
+    ph = phi(x)
+    ps = psi(x)
+    scatter(ph, ps, marker_z=z, xlabel="\\phi", ylabel="\\psi", title="Ramachandran")
+end
+
+
+function psi(x::AbstractVector)  # dihedral of the oxygens
+    x = reshape(x, 3, :)
+    @views ISOKANN.dihedral(x[:, [7,9,15,17]])
+end
+
+function phi(x::AbstractVector)
+    x = reshape(x, 3, :)
+    @views ISOKANN.dihedral(x[:, [5,7,9,15]])
+end
+
+phi(x::Matrix) = mapslices(phi, x, dims=1) |> vec  # is this a candidate for flatmap?
+psi(x::Matrix) = mapslices(psi, x, dims=1) |> vec

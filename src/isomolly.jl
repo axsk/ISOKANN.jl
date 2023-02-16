@@ -30,47 +30,11 @@ function isokann(data; model, poweriter, learniter, opt, losses=Float64[])
     return (;model, opt, losses, grad, target)
 end
 
-"""
-generate data for koopman evaluation by propagting the dynamics
-starting at the given `x0` (or sampling `nx` random starting points)
-returns `xs` the starting points and `ys` the corresponding endpoints
-"""
-function generatedata(dynamics, nkoop::Integer;
-        dt::Float64 = 0.01,
-        alg = SROCK2(),
-        nx::Integer = 10,
-        x0::Matrix = randx0(dynamics, nx))
 
-    dim, nx = size(x0)
-    ys = zeros(dim, nx, nkoop)
-    sde = SDEProblem(dynamics, dt = dt, alg=alg)
 
-    @floop for i in 1:nx, j in 1:nkoop
-        ys[:, i, j] = solve(sde; u0=x0[:,i])[end]
-    end
 
-    return center(x0), center(ys)
-end
 
-"""
-center any given states by shifting their individual 3d mean to the origin
-"""
-function center(xs)
-    mapslices(xs, dims=1) do x
-        coords = reshape(x, 3, :)
-        coords .-= mean(coords, dims=2)
-        vec(coords)
-    end
-end
 
-"""
-sample `nx` initial starting points by propagating from the systems coordinate
-"""
-function bootstrapx0(sys::System, nx; dt, alg=SROCK2())
-    x0 = reshape(getcoords(sys), :, 1)
-    _, xs = generatedata(sys, nx; x0=x0, dt, alg)
-    reshape(xs, :, nx)
-end
 
 """ empirical shift-scale operation """
 shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
