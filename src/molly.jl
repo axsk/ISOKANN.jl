@@ -6,15 +6,16 @@ using Plots
 
 import StochasticDiffEq: SDEProblem, solve
 
-export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata
+export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata,
+    inspecttrajectory, scatter_ramachandran
 
 @with_kw mutable struct MollySDE{S,A}
     sys::S
-    alg::A = SROCK2()
-    dt::Float64 = 1e-3  # in ps
-    T::Float64 = 1  # in ps
     temp::Float64 = 298. # 298 K = 25 °C
-    gamma::Float64 = 100.
+    gamma::Float64 = 10.
+    dt::Float64 = 2e-6 * gamma  # in ps
+    T::Float64 = 2e-3 * gamma # in ps   # tuned as to take ~.1 sec computation time
+    alg::A = EM()
     nthreads::Int = 1  # number of threads for the force computations
 end
 
@@ -45,13 +46,13 @@ function PDB_5XER()
 end
 
 """ Peptide Dialanine """
-function PDB_ACEMD()
+function PDB_ACEMD(;kwargs...)
     data_dir = joinpath(dirname(pathof(Molly)), "..", "data")
     ff = OpenMMForceField(joinpath(data_dir, "force_fields", "ff99SBildn.xml"))
-    sys = System(joinpath("data", "alanine-dipeptide-nowater.pdb"), ff,
+    sys = System(joinpath("data", "alanine-dipeptide-nowater av.pdb"), ff,
         rename_terminal_res = false  # this is important
     )
-    return MollySDE(;sys)
+    return MollySDE(;sys,kwargs...)
 end
 
 
@@ -63,8 +64,8 @@ function exportdata(m::MollySDE, sol; kwargs...)
 end
 
 function exportdata(m::MollySDE, traj::AbstractArray;
-    filepath="out/$(m.gamma) $(m.T) $(m.dt).pdb", kwargs...)
-    exportdata(m.sys, filepath, traj; kwargs...)
+    path="out/$(m.gamma) $(m.T) $(m.dt).pdb", kwargs...)
+    exportdata(m.sys, path, traj; kwargs...)
 end
 
 """
@@ -151,25 +152,74 @@ dim(sys::System) = length(sys.atoms) * 3
 
 import Flux
 using Distances
-using SliceMap # provides slicemap == mapslices but with zygote gradients
+import SliceMap # provides slicemap == mapslices but with zygote gradients
+import ChainRulesCore
 
-function defaultmodel(sys::System)
+defaultmodel(sys::System) = pairnet(sys::System)
+
+
+
+function threadpairdists(x)
+    ChainRulesCore.@ignore_derivatives begin
+        d, s... = size(x)
+        x = reshape(x, d, :)
+        pd = SliceMap.ThreadMapCols(pairwisevec, x)
+        pd = reshape(pd, :, s...)
+        return pd
+    end
+end
+
+function mythreadpairdists(x)
+    d, s... = size(x)
+    xx = reshape(x, d, :)
+    cols = size(xx, 2)
+    n = div(d, 3)
+    out = similar(x, n, n, cols)
+    @views Threads.@threads for i in 1:cols
+        c = reshape(xx[:, i], 3, :)
+        pairdistkernel(out[:, :, i], c)
+    end
+    reshape(out, n*n, s...)
+end
+
+function pairdistkernel(out, x)
+    n, k = size(out)
+    @views for i in 1:n, j in 1:k
+        out[k,j] = out[j,k] = ((x[1,i]-x[1,j])^2 + (x[2,i]-x[2,j])^2 + (x[3,i]-x[3,j])^2)
+    end
+end
+
+ChainRulesCore.@non_differentiable threadpairdists(x)
+
+function pairnet(sys::System)
     n = div(dim(sys), 3)
-    l = [
-        x->slicemap(x, dims=1) do col
+   #= l = [
+        x->SliceMap.slicemap(x, dims=1) do col
             vec(pairwise(SqEuclidean(), reshape(col,3,:), dims=2))
         end,
         Flux.Dense(n*n, n, Flux.sigmoid),
         Flux.Dense(n, 1, Flux.sigmoid)
         ]
-    Flux.Chain(l)
+        =#
+    nn = Flux.Chain(
+        x->threadpairdists(ChainRulesCore.ignore_derivatives(x)),
+        Flux.Dense(n*n, n, Flux.sigmoid),
+        Flux.Dense(n, 1, Flux.sigmoid))
+    return nn
 end
+
+
+pairdists(x) = SliceMap.slicemap(pairwisevec, x, dims=1)
+
+pairwisevec(col::AbstractVector) = vec(pairwise(SqEuclidean(), reshape(col,3,:), dims=2))
+
 
 function getcoords(sys::System)
     x0 = ustrip_vec(sys.coords)
     x0 = reduce(vcat, x0)
     return x0
 end
+
 
 
 ## Utility functions
@@ -204,6 +254,24 @@ setcoords(sys::System, coords::Array{<:SVector{3}}) = Molly.System(
     k=sys.k
 )
 
+# move the system to CUDA
+cu(sys::System) = Molly.System(
+    atoms = cu(sys.atoms),
+    atoms_data = cu(sys.atoms_data),
+    pairwise_inters=sys.pairwise_inters,
+    specific_inter_lists = sys.specific_inter_lists,
+    general_inters = sys.general_inters,
+    constraints = sys.constraints,
+    coords=cu(sys.coords),
+    velocities = cu(sys.velocities),
+    boundary=sys.boundary,
+    neighbor_finder = sys.neighbor_finder,
+    loggers = sys.loggers,
+    force_units = sys.force_units,
+    energy_units = sys.energy_units,
+    k=sys.k
+)
+
 function savecoords(sys::System, filepath, coords::AbstractVector)
     writer = Molly.StructureWriter(0, filepath)
     sys = setcoords(sys, coords)
@@ -212,9 +280,18 @@ end
 
 function exportdata(sys::System, filepath, data::AbstractMatrix; append = false)
     append || rm(filepath, force=true)
+    write
     for x in eachcol(data)
         savecoords(sys, filepath, x)
     end
+end
+
+function inspecttrajectory(sys)
+    @time sol = solve(SDEProblem(sys))
+    x = reduce(hcat, sol.u)
+    scatter_ramachandran(x) |> display
+    exportdata(sys, x, path="out/inspect.pdb")
+    return x
 end
 
 
@@ -247,3 +324,25 @@ function dihedral(coord0, coord1, coord2, coord3)
 end
 
 dihedral(x::AbstractMatrix) = @views dihedral(x[:,1], x[:,2], x[:,3], x[:,4])
+
+function scatter_ramachandran(x::Matrix, model=nothing)
+    z = nothing
+    !isnothing(model) && (z = model(x) |> vec)
+    ph = phi(x)
+    ps = psi(x)
+    scatter(ph, ps, markersize=3, markerstrokewidth=0, markeralpha=0.5, marker_z=z, xlabel="\\phi", ylabel="\\psi", title="Ramachandran",
+    xlims = [-pi, pi], ylims=[-pi, pi])
+end
+
+function psi(x::AbstractVector)  # dihedral of the oxygens
+    x = reshape(x, 3, :)
+    @views ISOKANN.dihedral(x[:, [7,9,15,17]])
+end
+
+function phi(x::AbstractVector)
+    x = reshape(x, 3, :)
+    @views ISOKANN.dihedral(x[:, [5,7,9,15]])
+end
+
+phi(x::Matrix) = mapslices(phi, x, dims=1) |> vec
+psi(x::Matrix) = mapslices(psi, x, dims=1) |> vec

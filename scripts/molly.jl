@@ -6,85 +6,18 @@ using ISOKANN:
     isokann,
     plotlossdata,
     stratified_x0,
-    bootstrapx0
+    bootstrapx0,
+    pairnet,
+    threadpairdists
 
 using ISOKANN
 using Optimisers
 using Plots
+using Parameters
 import Flux
 using JLD2
 import StatsBase, Zygote, Optimisers, ISOKANN
 
-
-# Adhoc constructor for the experiment, stored in a named tuple
-
-function setup(;
-    nd = 100, # number of outer iterations
-    nx = 100, # size of data subsamples
-    np = 1, # number of power iterates
-    nl = 20, # number of learning steps  #merely >1 for performance reasons
-
-    nres = Inf, # how often to resample
-    ny = 8, # number of new x samples to generate
-    nk = 16, # number of koop samples
-
-    batchsize = Inf, # minibatchsize for sgd
-
-    sys = PDB_ACEMD(),
-
-    model = defaultmodel(sys),
-    opt = Adam(1e-3),
-
-    data = nothing,
-    losses = Float64[])
-
-    isa(opt, Optimisers.AbstractRule) && (opt = Optimisers.setup(opt, model))
-
-    if isnothing(data)
-        x0 = bootstrapx0(sys, ny)
-        @time data = generatedata(sys, nk, x0)
-    end
-
-    return (; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, batchsize, nres)
-end
-
-
-## Reimplementation of ISOKANN
-
-
-runloop(setup::NamedTuple = setup(); kwargs...) = runloop(;setup..., kwargs...)
-
-function runloop(; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, batchsize, nres, plotevery=10, kwargs...)
-    isa(opt, Optimisers.AbstractRule) && (opt = Optimisers.setup(opt, model))
-    datastats(data)
-
-    local sdata
-    plt = Flux.throttle(plotevery) do
-        plot_learning(losses, data, model) |> display
-        savefig("out/lastplot.png")
-    end
-
-    for j in 1:nd
-        sdata = datasubsample(model, data, nx)
-        for i in 1:np
-            # train model(xs) = target
-            xs, target = koopman(sdata, model)
-            for i in 1:nl
-                l = learnbatch!(model, xs, target, opt, batchsize)
-                push!(losses, l)
-            end
-        end
-
-        plt()
-
-        if j%nres == 0
-            @time data = adddata(data, model, sys, ny)
-            extractdata(data[1], model, sys.sys)
-        end
-    end
-
-    return (; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, batchsize,nres)
-end
 
 
 function koopman(data, model)
@@ -115,6 +48,7 @@ end
 function learnstep!(model, xs, target, opt)
     l, grad = let xs=xs  # `let` allows xs to not be boxed
         Zygote.withgradient(model) do model
+            # sum(abs2, (model(threadpairdists(xs))|>vec) .- target) / length(target)
             sum(abs2, (model(xs)|>vec) .- target) / length(target)
         end
     end
@@ -128,7 +62,8 @@ end
 function datasubsample(model, data, nx)
     # chi stratified subsampling
     xs, ys = data
-    ks = ISOKANN.shiftscale(model(xs) |> vec)
+    cs = model(xs) |> vec
+    ks = ISOKANN.shiftscale(cs)
     ix = ISOKANN.subsample_uniformgrid(ks, nx)
     xs = xs[:,ix]
     ys = ys[:,ix,:]
@@ -137,14 +72,11 @@ function datasubsample(model, data, nx)
 end
 
 
-function adddata(data, model, sys, ny, lastonly = false)
+function adddata(data, model, sys, ny, lastn = Inf)
     _, ys = data
     nk = size(ys, 3)
-    if lastonly
-        x0 = stratified_x0(model, ys[:, end-ny+1:end, :], ny)
-    else
-        x0 = stratified_x0(model, ys, ny)
-    end
+    firstind = max(size(ys, 2) - lastn + 1, 1)
+    x0 = @views stratified_x0(model, ys[:, firstind:end, :], ny)
     ndata = generatedata(sys, nk, x0)
     data = hcat.(data, ndata)
 
@@ -181,30 +113,87 @@ uniqueidx(v) = unique(i -> v[i], eachindex(v))
 ## Plotting
 
 function plot_learning(losses, data, model)
-    p1 = plot(losses, yaxis=:log, title="loss")
-    p2 = plot(); plotatoms!(data..., model)
+    i = max(1, length(losses)-1000)
+    p1 = plot(losses[i:end], yaxis=:log, title="loss")
+    #p2 = plot(); plotatoms!(data..., model)
     p3 = scatter_ramachandran(data[1], model)
-    plot(p1, p2, p3, layout=(3,1), size=(600,1000))
-end
-
-function scatter_ramachandran(x::Matrix, model=nothing)
-    z = nothing
-    !isnothing(model) && (z = model(x) |> vec)
-    ph = phi(x)
-    ps = psi(x)
-    scatter(ph, ps, marker_z=z, xlabel="\\phi", ylabel="\\psi", title="Ramachandran")
+    plot(p1, p3, layout=(2,1), size=(600,1000))
 end
 
 
-function psi(x::AbstractVector)  # dihedral of the oxygens
-    x = reshape(x, 3, :)
-    @views ISOKANN.dihedral(x[:, [7,9,15,17]])
+
+
+
+## Reimplementation of ISOKANN
+
+abstract type ISOSim end
+
+ISOBench() = @time ISOSim1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
+
+function isobench()
+    @time iso = ISOBench()
+    @time run(iso)
 end
 
-function phi(x::AbstractVector)
-    x = reshape(x, 3, :)
-    @views ISOKANN.dihedral(x[:, [5,7,9,15]])
+ISOSim(;kwargs...) = ISOSim1(;kwargs...)
+
+@with_kw mutable struct ISOSim1
+    nd = 100
+    nx = 100
+    np = 1
+    nl = 5
+
+    nres = 100
+    ny = 8
+    nk = 16
+    sys = PDB_ACEMD()
+    model = pairnet(sys.sys)
+    opt = OptimiserChain(Optimisers.WeightDecay(), Adam())
+
+    data = generatedata(sys, nk, bootstrapx0(sys, ny))
+    losses = Float64[]
 end
 
-phi(x::Matrix) = mapslices(phi, x, dims=1) |> vec  # is this a candidate for flatmap?
-psi(x::Matrix) = mapslices(psi, x, dims=1) |> vec
+function run(iso::ISOSim1; plotevery = 1, batchsize=1)
+    (; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, nres) = iso
+    run(; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, nres)
+end
+    function run(; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, nres)
+        plotevery = 1
+        batchsize=Inf
+    isa(opt, Optimisers.AbstractRule) && (opt = Optimisers.setup(opt, model))
+    iso.opt = opt
+    #datastats(data)
+
+    pmodel = model
+    #pmodel(x) = model(ISOKANN.threadpairdists(x))
+
+
+    local sdata
+    plt = Flux.throttle(plotevery) do
+        #plot_learning(losses, sdata,pmodel) |> display
+        #savefig("out/lastplot.png")
+    end
+
+    @time for j in 1:nd
+        sdata = datasubsample(pmodel, data, nx)
+        for i in 1:np
+            # train model(xs) = target
+            xs, target = koopman(sdata, pmodel)
+            for i in 1:nl
+                l = learnbatch!(model, xs, target, opt, batchsize)
+                push!(losses, l)
+            end
+        end
+
+        plt()
+
+        if j%nres == 0
+            @time data = adddata(data, pmodel, sys, ny, ny)
+            iso.data = data
+            #extractdata(data[1], model, sys.sys)
+        end
+    end
+
+    return iso
+end

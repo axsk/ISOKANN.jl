@@ -48,7 +48,7 @@ end
 StatefulModel = Tuple{<:Lux.AbstractExplicitLayer, <:Any, <:NamedTuple}
 ((mod,ps,st)::StatefulModel)(x) = mod(x,ps,st)[1]
 
-
+#=
 import SimpleChains
 using SimpleChains: SimpleChain, TurboDense, init_params, static
 
@@ -72,6 +72,7 @@ function ((schain, ps)::SCModel)(x)
         schain(x, ps)
     end
 end
+=#
 
 ## gradient implementations/hotfixes
 ## not needed since Zygote handles them just fine
