@@ -19,6 +19,9 @@ export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata,
     nthreads::Int = 1  # number of threads for the force computations
 end
 
+#Base.show(io::IO, ::MIME"text/plain", x::System) = print(io, "Molly.System ($(dim(x))D)")
+#Base.show(io::IO, ::MIME"text/plain", x::Type{<:System}) = print(io, "Molly.System (TYPE)")
+
 ## loaders for the molecules in /data
 
 function PDB_6MRR()
@@ -80,7 +83,9 @@ function generatedata(ms::MollySDE, nkoop::Integer, x0::AbstractMatrix)
     sde = SDEProblem(ms)
 
     @floop for i in 1:nx, j in 1:nkoop
-        ys[:, i, j] = solve(sde; u0=x0[:,i])[end]
+        sol = solve(sde; u0=x0[:,i], tspan=(0,sde.tspan[2]))
+        #sol = solve(sde; u0=x0[:,i])
+        ys[:, i, j] = sol[end]
     end
 
     return center(x0), center(ys)
@@ -170,22 +175,24 @@ function threadpairdists(x)
 end
 
 function mythreadpairdists(x)
-    d, s... = size(x)
-    xx = reshape(x, d, :)
-    cols = size(xx, 2)
-    n = div(d, 3)
-    out = similar(x, n, n, cols)
-    @views Threads.@threads for i in 1:cols
-        c = reshape(xx[:, i], 3, :)
-        pairdistkernel(out[:, :, i], c)
+    ChainRulesCore.@ignore_derivatives begin
+        d, s... = size(x)
+        xx = reshape(x, d, :)
+        cols = size(xx, 2)
+        n = div(d, 3)
+        out = similar(x, n, n, cols)
+        @views Threads.@threads for i in 1:cols
+            c = reshape(xx[:, i], 3, :)
+            pairdistkernel(@views(out[:, :, i]), c)
+        end
+        reshape(out, n*n, s...)
     end
-    reshape(out, n*n, s...)
 end
 
 function pairdistkernel(out, x)
     n, k = size(out)
-    @views for i in 1:n, j in 1:k
-        out[k,j] = out[j,k] = ((x[1,i]-x[1,j])^2 + (x[2,i]-x[2,j])^2 + (x[3,i]-x[3,j])^2)
+    @views for i in 1:n, j in i:k
+        out[i,j] = out[j,i] = ((x[1,i]-x[1,j])^2 + (x[2,i]-x[2,j])^2 + (x[3,i]-x[3,j])^2)
     end
 end
 
@@ -202,14 +209,16 @@ function pairnet(sys::System)
         ]
         =#
     nn = Flux.Chain(
-        x->threadpairdists(ChainRulesCore.ignore_derivatives(x)),
+        mythreadpairdists,
+        #threadpairdists,
+        #slicemapdist,
         Flux.Dense(n*n, n, Flux.sigmoid),
         Flux.Dense(n, 1, Flux.sigmoid))
     return nn
 end
 
 
-pairdists(x) = SliceMap.slicemap(pairwisevec, x, dims=1)
+slicemapdist(x) = ChainRulesCore.@ignore_derivatives SliceMap.slicemap(pairwisevec, x, dims=1)
 
 pairwisevec(col::AbstractVector) = vec(pairwise(SqEuclidean(), reshape(col,3,:), dims=2))
 
@@ -237,22 +246,25 @@ function coords_to_vec(sys::System)
 end
 
 setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(coords, sys))
-setcoords(sys::System, coords::Array{<:SVector{3}}) = Molly.System(
-    atoms = sys.atoms,
-    atoms_data = sys.atoms_data,
-    pairwise_inters=sys.pairwise_inters,
-    specific_inter_lists = sys.specific_inter_lists,
-    general_inters = sys.general_inters,
-    constraints = sys.constraints,
-    coords=coords,
-    velocities = sys.velocities,
-    boundary=sys.boundary,
-    neighbor_finder = sys.neighbor_finder,
-    loggers = sys.loggers,
-    force_units = sys.force_units,
-    energy_units = sys.energy_units,
-    k=sys.k
-)
+function setcoords(sys::System, coords::Array{<:SVector{3}})
+
+    return Molly.System(
+        atoms = sys.atoms,
+        atoms_data = sys.atoms_data,
+        pairwise_inters=sys.pairwise_inters,
+        specific_inter_lists = sys.specific_inter_lists,
+        general_inters = sys.general_inters,
+        constraints = sys.constraints,
+        coords=coords,
+        velocities = sys.velocities,
+        boundary=sys.boundary,
+        neighbor_finder = sys.neighbor_finder,
+        loggers = sys.loggers,
+        force_units = sys.force_units,
+        energy_units = sys.energy_units,
+        k=sys.k
+    )
+end
 
 # move the system to CUDA
 cu(sys::System) = Molly.System(
@@ -330,8 +342,9 @@ function scatter_ramachandran(x::Matrix, model=nothing)
     !isnothing(model) && (z = model(x) |> vec)
     ph = phi(x)
     ps = psi(x)
-    scatter(ph, ps, markersize=3, markerstrokewidth=0, markeralpha=0.5, marker_z=z, xlabel="\\phi", ylabel="\\psi", title="Ramachandran",
-    xlims = [-pi, pi], ylims=[-pi, pi])
+    scatter(ph, ps, marker_z=z, xlims = [-pi, pi], ylims=[-pi, pi],
+        markersize=3, markerstrokewidth=0, markeralpha=1,  xlabel="\\phi", ylabel="\\psi", title="Ramachandran",
+    )
 end
 
 function psi(x::AbstractVector)  # dihedral of the oxygens

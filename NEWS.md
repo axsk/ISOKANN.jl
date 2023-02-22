@@ -1,5 +1,9 @@
 Let us try to keep a rough log of the changes we did.
 
+22.2.23
+- fix the ominous u0 bug where all trajectories always started in the same point
+- added a chifix plot
+
 21.2.23
 - use the avogadro pdb with connections (important!)
 - switch to ISOSim type
