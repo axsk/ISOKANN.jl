@@ -13,7 +13,10 @@ include("isokann.jl")   # new implementation of isokann
 export isokann
 
 
-include("molly.jl")
-include("isomolly.jl")
+include("pairdists.jl")  # pair distances
+include("molly.jl")      # mainly Molly-SDE interface
+include("molutils.jl")   # dihedrals, rotation
+include("isomolly.jl")   # ISOKANN for Molly systems
+include("plots.jl")      # visualizations
 
 end

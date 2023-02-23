@@ -1,43 +1,150 @@
-using StatsBase: mean
-#import Optimisers: setup, AbstractRule, Adam
-import Optimisers
-import Molly: System
+import StatsBase, Zygote, Optimisers, Flux
+export ISOSim, run!
 
+abstract type ISOSim end
 
-""" basic isokann routine for fixed data """
-function isokann(data; model, poweriter, learniter, opt, losses=Float64[])
-    # if opt is only a rule, initialize the optimizer
-    isa(opt, Optimisers.AbstractRule) && (opt = Optimisers.setup(opt, model))
+ISOSim(;kwargs...) = ISO_ACEMD(;kwargs...)
 
-    local grad, target
-    for i in 1:poweriter
-        xs, ys = data
-        cs = model(ys) :: Array{<:Number, 3}
-        ks = vec(mean(cs[1,:,:], dims=2)) :: Vector
+Base.@kwdef mutable struct ISO_ACEMD <: ISOSim # takes 10 min
+    nd = 1000 # number of outer datasubsampling steps
+    nx = 100  # size of subdata set
+    np = 1    # number of poweriterations with the same subdata
+    nl = 5    # number of weight updates  with the same poweriteration step
 
-        target = ((ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))) :: Vector
+    nres = 10  # resample new data every n outer steps
+    ny = 8     # number of new points to sample
+    nk = 8     # number of koopman points to sample
+    sys = PDB_ACEMD()
+    model = pairnet(sys)
+    opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-4), Optimisers.Adam(1e-4))
 
-        for _ in 1:learniter
-            l, grad = let xs=xs  # `let` allows xs to not be boxed
-                Zygote.withgradient(model) do model
-                    sum(abs2, (model(xs)|>vec) .- target) / length(target)
-                end
-            end
-            push!(losses, l)
-            Optimisers.update!(opt, model, grad[1])
-        end
-    end
-    return (;model, opt, losses, grad, target)
+    data = bootstrap(sys, ny, nk)
+    losses = Float64[]
 end
 
+function run!(iso::ISOSim; cb = Flux.throttle(plotcallback, 5), batchsize=Inf)
+    isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
+    (; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, nres) = iso
+    datastats(data)
 
+    local subdata
 
+    @time for j in 1:nd
+        subdata = datasubsample(model, data, nx)
+        # train model(xs) = target
+        for i in 1:np
+            xs, ys = subdata
+            target = shiftscale(koopman(model, ys))
+            for i in 1:nl
+                l = learnbatch!(model, xs, target, opt, batchsize)
+                push!(losses, l)
+            end
+        end
 
+        cb(;model, losses, subdata)
 
+        if j%nres == 0
+            @time data = adddata(data, model, sys, ny)
+            if size(data[1], 2) > 3000
+                data = datasubsample(model, data, 1000)
+            end
+            iso.data = data
 
+            #extractdata(data[1], model, sys.sys)
+        end
+    end
+
+    return iso
+end
+
+function plotcallback(;losses, subdata, model, kwargs...)
+    p = plot_learning(losses, subdata,model)
+    try display(p) catch e;
+        @warn "could not print ($e)"
+    end
+end
+
+""" evluation of koopman by shiftscale(mean(model(data))) on the data """
+function koopman(model, ys)
+    cs = model(ys) :: Array{<:Number, 3}
+    ks = vec(StatsBase.mean(cs[1,:,:], dims=2)) :: Vector
+    return ks
+end
 
 """ empirical shift-scale operation """
 shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
+
+""" batched supervised learning for a given batchsize """
+function learnbatch!(model, xs::Matrix, target::Vector, opt, batchsize)
+    ndata = length(target)
+    if ndata <= batchsize
+        return learnstep!(model, xs, target, opt)
+    end
+
+    nbatches = ceil(Int, ndata / batchsize)
+    l = 0.
+    for batch in 1:nbatches
+        ind = ((batch-1)*batchsize+1):min(batch*batchsize, ndata)
+        l += learnstep!(model, xs[:, ind], target[ind], opt)
+    end
+    return l
+end
+
+""" single supervised learning step """
+function learnstep!(model, xs, target, opt)
+    l, grad = let xs=xs  # `let` allows xs to not be boxed
+        Zygote.withgradient(model) do model
+            # sum(abs2, (model(threadpairdists(xs))|>vec) .- target) / length(target)
+            sum(abs2, (model(xs)|>vec) .- target) / length(target)
+        end
+    end
+    Optimisers.update!(opt, model, grad[1])
+    return l
+end
+
+
+## DATA MANGLING
+# TODO: better interface
+
+function generatedata(ms, x0, ny)
+    ys = propagate(ms, x0, ny)
+    return center(x0), center(ys)
+end
+
+""" compute initial data by propagating the molecules initial state
+to obtain the xs and propagating them further for the ys """
+function bootstrap(ms::MollySDE, nx, ny)
+    x0 = reshape(getcoords(ms), :, 1)
+    xs = reshape(propagate(ms, x0, nx), :, nx)
+    ys = propagate(ms, xs, ny)
+    center(xs), center(ys)
+end
+
+function datasubsample(model, data, nx)
+    # chi stratified subsampling
+    xs, ys = data
+    cs = model(xs) |> vec
+    ks = shiftscale(cs)
+    ix = ISOKANN.subsample_uniformgrid(ks, nx)
+    xs = xs[:,ix]
+    ys = ys[:,ix,:]
+
+    return xs, ys
+end
+
+function adddata(data, model, sys, ny, lastn = 1_000_000)
+    _, ys = data
+    nk = size(ys, 3)
+    firstind = max(size(ys, 2) - lastn + 1, 1)
+    x0 = @views stratified_x0(model, ys[:, firstind:end, :], ny)
+    #ndata = generatedata(sys, x0, nk)
+    ys = propagate(sys, x0, nk)
+    ndata = center(x0), center(ys)
+    data = hcat.(data, ndata)
+
+    datastats(data)
+    return data
+end
 
 """ given an array of states, return a chi stratified subsample """
 function stratified_x0(model, ys, n)
@@ -49,32 +156,26 @@ function stratified_x0(model, ys, n)
     return xs
 end
 
-"""
-scatter plot of all first "O" atoms of the starting points `xs`
-as well as the "O" atoms from the koopman samples to the first point from `ys`
-"""
-function plotatoms!(xs, ys, model=nothing)
-    dim, nx, nk = size(ys)
-    i = 3*(9-1) # first O atom
-    cx = 1
-    cy = 1
-
-    if !isnothing(model)
-        cx = model(xs) |> vec
-        cy = model(ys[:,1,:]) |> vec
-    end
-
-    a = reshape(xs[:,1], 3, :)
-    #scatter!(a[1,:], a[2,:], label="atoms of first x0") # all atoms of first x
-    scatter!(xs[i+1,:], xs[i+2,:], label = "x0", marker_z=cx, zlims=(0,1))
-    scatter!(ys[i+1,1,:], ys[i+2,1,:], label = "ys",
-        marker_z = cy, markershape=:xcross)
-    return plot!()
+function datastats(data)
+    xs, ys = data
+    ext = extrema(xs[1,:])
+    uni = length(unique(xs[1,:]))
+    _, n, ks = size(ys)
+    println("Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
 end
 
-""" combined plot of loss graph and current atoms """
-function plotlossdata(losses, data, model=nothing)
-    p1 = plot(losses, yaxis=:log)
-    p2 = plot(); plotatoms!(data..., model)
-    plot(p1, p2)
+# default setups
+
+ISOBench() = @time ISOSim1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
+ISOLong() = ISOSim1(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
+
+function isobench()
+    @time iso = ISOBench()
+    @time run(iso)
+end
+
+function isosave()
+    iso = ISOSim()
+    run(iso)
+    savefig("out/lastplot.png")
 end

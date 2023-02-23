@@ -1,3 +1,6 @@
+## Interface to the Molly.System and implementation of the Overdamped Langevin Equation
+## in MollySDE
+
 using Molly
 using Unitful
 using StochasticDiffEq
@@ -6,10 +9,13 @@ using Plots
 
 import StochasticDiffEq: SDEProblem, solve
 
-export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata,
-    inspecttrajectory, scatter_ramachandran
+export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata
 
-@with_kw mutable struct MollySDE{S,A}
+using Base: @kwdef
+
+
+" Type composing the Molly.System with its integration parameters "
+@kwdef mutable struct MollySDE{S,A}
     sys::S
     temp::Float64 = 298. # 298 K = 25 °C
     gamma::Float64 = 10.
@@ -19,104 +25,12 @@ export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata,
     nthreads::Int = 1  # number of threads for the force computations
 end
 
-#Base.show(io::IO, ::MIME"text/plain", x::System) = print(io, "Molly.System ($(dim(x))D)")
-#Base.show(io::IO, ::MIME"text/plain", x::Type{<:System}) = print(io, "Molly.System (TYPE)")
-
-## loaders for the molecules in /data
-
-function PDB_6MRR()
-    data_dir = joinpath(dirname(pathof(Molly)), "..", "data")
-    ff = OpenMMForceField(
-        joinpath(data_dir, "force_fields", "ff99SBildn.xml"),
-        joinpath(data_dir, "force_fields", "tip3p_standard.xml"),
-        joinpath(data_dir, "force_fields", "his.xml"),
-    )
-    sys = System(joinpath(data_dir, "6mrr_nowater.pdb"), ff)
-    return MollySDE(;sys)
-end
-
-function PDB_5XER()
-    sys = System(
-        joinpath(dirname(pathof(Molly)), "..", "data", "5XER", "gmx_coords.gro"),
-        joinpath(dirname(pathof(Molly)), "..", "data", "5XER", "gmx_top_ff.top");
-    )
-    #temp = 298.0u"K"
-    ## attempt at removing water. not working, some internal data is referring to all atoms
-    #nosol = map(sys.atoms_data) do a a.res_name != "SOL" end
-    #sys.atoms = sys.atoms[nosol]
-    #sys.atoms_data = sys.atoms_data[nosol]
-    return MollySDE(;sys)
-end
-
-""" Peptide Dialanine """
-function PDB_ACEMD(;kwargs...)
-    data_dir = joinpath(dirname(pathof(Molly)), "..", "data")
-    ff = OpenMMForceField(joinpath(data_dir, "force_fields", "ff99SBildn.xml"))
-    sys = System(joinpath("data", "alanine-dipeptide-nowater av.pdb"), ff,
-        rename_terminal_res = false  # this is important
-    )
-    return MollySDE(;sys,kwargs...)
-end
-
-
-solve(m::MollySDE; kwargs...) = solve(SDEProblem(m); kwargs...)
-
-
-function exportdata(m::MollySDE, sol; kwargs...)
-    exportdata(m, reduce(hcat, sol.u); kwargs...)
-end
-
-function exportdata(m::MollySDE, traj::AbstractArray;
-    path="out/$(m.gamma) $(m.T) $(m.dt).pdb", kwargs...)
-    exportdata(m.sys, path, traj; kwargs...)
-end
-
-"""
-generate data for koopman evaluation by propagting the dynamics
-starting at the given `x0` (or sampling `nx` random starting points)
-returns `xs` the starting points and `ys` the corresponding endpoints
-"""
-function generatedata(ms::MollySDE, nkoop::Integer, x0::AbstractMatrix)
-
-    dim, nx = size(x0)
-    ys = zeros(dim, nx, nkoop)
-    sde = SDEProblem(ms)
-
-    @floop for i in 1:nx, j in 1:nkoop
-        sol = solve(sde; u0=x0[:,i], tspan=(0,sde.tspan[2]))
-        #sol = solve(sde; u0=x0[:,i])
-        ys[:, i, j] = sol[end]
-    end
-
-    return center(x0), center(ys)
-end
-
-"""
-sample `nx` initial starting points by propagating from the systems coordinate
-"""
-function bootstrapx0(ms::MollySDE, nx)
-    x0 = reshape(getcoords(ms), :, 1)
-    _, ys = generatedata(ms, nx, x0)
-    reshape(ys, :, nx)
-end
-
-"""
-center any given states by shifting their individual 3d mean to the origin
-"""
-function center(xs)
-    mapslices(xs, dims=1) do x
-        coords = reshape(x, 3, :)
-        coords .-= mean(coords, dims=2)
-        vec(coords)
-    end
-end
 
 dim(ms::MollySDE) = dim(ms.sys)
 getcoords(ms::MollySDE) = getcoords(ms.sys)
 defaultmodel(ms::MollySDE) = defaultmodel(ms.sys)
 
-
-### my ::System interface
+dim(sys::System) = length(sys.atoms) * 3
 
 SDEProblem(m::MollySDE) = SDEProblem(m.sys, m.T;
        dt=m.dt, alg=m.alg, gamma=m.gamma, temp=m.temp, n_threads=m.nthreads)
@@ -146,59 +60,58 @@ function SDEProblem(sys::System, T=1e-3; dt, alg=SROCK2(),
     end
 
     noise(x,p,t) = sigma
-    x0 = coords_to_vec(sys)
+    x0 = getcoords(sys)
     neighborlist = find_neighbors(sys)  # TODO: is 1 setting enough?
 
     SDEProblem(driftf, noise, x0, T, (;neighborlist), alg=alg, dt=dt, kwargs...)
 end
 
-dim(sys::System) = length(sys.atoms) * 3
+
+
+#Base.show(io::IO, ::MIME"text/plain", x::System) = print(io, "Molly.System ($(dim(x))D)")
+#Base.show(io::IO, ::MIME"text/plain", x::Type{<:System}) = print(io, "Molly.System (TYPE)")
+
+
+
+# delegation for ::MollySDE
+
+solve(m::MollySDE; kwargs...) = solve(SDEProblem(m); kwargs...)
+
+savecoords(m::MollySDE, sol; kwargs...) = exportdata(m, reduce(hcat, sol.u); kwargs...)
+
+function savecoords(m::MollySDE, traj::AbstractArray;
+    path="out/$(m.gamma) $(m.T) $(m.dt).pdb", kwargs...)
+    savecoords(m.sys, traj, path; kwargs...)
+end
+
+"""
+propagting the dynamics `ms` starting at the given `x0` each `ny` times.
+return the corresponding endpoints in an array of shape [dim, nx, ny]
+"""
+function propagate(ms::MollySDE, x0::AbstractMatrix, ny)
+    dim, nx = size(x0)
+    ys = zeros(dim, nx, ny)
+    sde = SDEProblem(ms)
+    @floop for i in 1:nx, j in 1:ny
+        #  the tspan fixes u0 assignment (https://github.com/SciML/DiffEqBase.jl/issues/883)
+        sol = solve(sde; u0=x0[:,i], tspan=(0,sde.tspan[2]))
+        ys[:, i, j] = sol[end]
+    end
+    # TODO: at which point do we want to center the data?
+    return ys
+end
+
+
 #defaultmodel(sys::System, layers=round.(Int, dim(sys).^[2/3, 1/3])) = fluxnet([dim(sys); layers; 1])
 
+# Neural Network model for mol
+
 import Flux
-using Distances
-import SliceMap # provides slicemap == mapslices but with zygote gradients
-import ChainRulesCore
 
 defaultmodel(sys::System) = pairnet(sys::System)
 
-
-
-function threadpairdists(x)
-    ChainRulesCore.@ignore_derivatives begin
-        d, s... = size(x)
-        x = reshape(x, d, :)
-        pd = SliceMap.ThreadMapCols(pairwisevec, x)
-        pd = reshape(pd, :, s...)
-        return pd
-    end
-end
-
-function mythreadpairdists(x)
-    ChainRulesCore.@ignore_derivatives begin
-        d, s... = size(x)
-        xx = reshape(x, d, :)
-        cols = size(xx, 2)
-        n = div(d, 3)
-        out = similar(x, n, n, cols)
-        @views Threads.@threads for i in 1:cols
-            c = reshape(xx[:, i], 3, :)
-            pairdistkernel(@views(out[:, :, i]), c)
-        end
-        reshape(out, n*n, s...)
-    end
-end
-
-function pairdistkernel(out, x)
-    n, k = size(out)
-    @views for i in 1:n, j in i:k
-        out[i,j] = out[j,i] = ((x[1,i]-x[1,j])^2 + (x[2,i]-x[2,j])^2 + (x[3,i]-x[3,j])^2)
-    end
-end
-
-ChainRulesCore.@non_differentiable threadpairdists(x)
-
-function pairnet(sys::System)
+" Neural Network model for molecules, using pairwise distances as first layer "
+function pairnet(sys)
     n = div(dim(sys), 3)
    #= l = [
         x->SliceMap.slicemap(x, dims=1) do col
@@ -210,29 +123,22 @@ function pairnet(sys::System)
         =#
     nn = Flux.Chain(
         mythreadpairdists,
-        #threadpairdists,
-        #slicemapdist,
         Flux.Dense(n*n, n, Flux.sigmoid),
         Flux.Dense(n, 1, Flux.sigmoid))
     return nn
 end
 
 
-slicemapdist(x) = ChainRulesCore.@ignore_derivatives SliceMap.slicemap(pairwisevec, x, dims=1)
+## utils for interaction with the ::Molly.System
 
-pairwisevec(col::AbstractVector) = vec(pairwise(SqEuclidean(), reshape(col,3,:), dims=2))
-
-
+""" extract the unitful SVector coords from `sys` and return as a normal vector """
 function getcoords(sys::System)
     x0 = ustrip_vec(sys.coords)
     x0 = reduce(vcat, x0)
-    return x0
+    return x0 :: AbstractVector
 end
 
-
-
-## Utility functions
-
+""" convert normal vector of coords to SVectors of unitful system coords """
 function vec_to_coords(x::AbstractArray, sys::System)
     xx = reshape(x, 3, :)
     coord = sys.coords[1]
@@ -240,34 +146,27 @@ function vec_to_coords(x::AbstractArray, sys::System)
     return coords
 end
 
-function coords_to_vec(sys::System)
-    X = reduce(hcat, sys.coords)
-    return map(x->x.val, X) |> vec
-end
-
+""" set the system to the given coordinates """
 setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(coords, sys))
-function setcoords(sys::System, coords::Array{<:SVector{3}})
+setcoords(sys::System, coords::Array{<:SVector{3}}) = Molly.System(
+    atoms = sys.atoms,
+    atoms_data = sys.atoms_data,
+    pairwise_inters=sys.pairwise_inters,
+    specific_inter_lists = sys.specific_inter_lists,
+    general_inters = sys.general_inters,
+    constraints = sys.constraints,
+    coords=coords,
+    velocities = sys.velocities,
+    boundary=sys.boundary,
+    neighbor_finder = sys.neighbor_finder,
+    loggers = sys.loggers,
+    force_units = sys.force_units,
+    energy_units = sys.energy_units,
+    k=sys.k
+)
 
-    return Molly.System(
-        atoms = sys.atoms,
-        atoms_data = sys.atoms_data,
-        pairwise_inters=sys.pairwise_inters,
-        specific_inter_lists = sys.specific_inter_lists,
-        general_inters = sys.general_inters,
-        constraints = sys.constraints,
-        coords=coords,
-        velocities = sys.velocities,
-        boundary=sys.boundary,
-        neighbor_finder = sys.neighbor_finder,
-        loggers = sys.loggers,
-        force_units = sys.force_units,
-        energy_units = sys.energy_units,
-        k=sys.k
-    )
-end
-
-# move the system to CUDA
-cu(sys::System) = Molly.System(
+""" move the ::System to the GPU, mirroring behavior of Flux.gpu """
+gpu(sys::System) = Molly.System(
     atoms = cu(sys.atoms),
     atoms_data = cu(sys.atoms_data),
     pairwise_inters=sys.pairwise_inters,
@@ -285,65 +184,61 @@ cu(sys::System) = Molly.System(
 )
 
 
+## loaders for the molecules in /data
+
+const molly_data_dir = joinpath(dirname(pathof(Molly)), "..", "data")
+
+function PDB_6MRR()
+    ff = OpenMMForceField(
+        joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"),
+        joinpath(molly_data_dir, "force_fields", "tip3p_standard.xml"),
+        joinpath(molly_data_dir, "force_fields", "his.xml"),
+    )
+    sys = System(joinpath(molly_data_dir, "6mrr_nowater.pdb"), ff)
+    return MollySDE(;sys)
+end
+
+function PDB_5XER()
+    sys = System(
+        joinpath(dirname(pathof(Molly)), "..", "data", "5XER", "gmx_coords.gro"),
+        joinpath(dirname(pathof(Molly)), "..", "data", "5XER", "gmx_top_ff.top");
+    )
+    #temp = 298.0u"K"
+    ## attempt at removing water. not working, some internal data is referring to all atoms
+    #nosol = map(sys.atoms_data) do a a.res_name != "SOL" end
+    #sys.atoms = sys.atoms[nosol]
+    #sys.atoms_data = sys.atoms_data[nosol]
+    return MollySDE(;sys)
+end
+
+""" Peptide Dialanine """
+function PDB_ACEMD(;kwargs...)
+    ff = OpenMMForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
+    sys = System(joinpath("data", "alanine-dipeptide-nowater av.pdb"), ff,
+        rename_terminal_res = false  # this is important
+    )
+    return MollySDE(;sys,kwargs...)
+end
+
 ## Save to pdb files
 
-function savecoords(sys::System, filepath, coords::AbstractVector)
-    writer = Molly.StructureWriter(0, filepath)
+function savecoords(sys::System, coords::AbstractVector, path; append = false)
+    append || rm(path, force=true)
+    writer = Molly.StructureWriter(0, path)
     sys = setcoords(sys, coords)
     Molly.append_model!(writer, sys)
 end
 
-function exportdata(sys::System, filepath, data::AbstractMatrix; append = false)
-    append || rm(filepath, force=true)
-    write
+function savecoords(sys::System, data::AbstractMatrix, path; append = false)
+    append || rm(path, force=true)
     for x in eachcol(data)
-        savecoords(sys, filepath, x)
+        savecoords(sys, path, x, append=false)
     end
 end
 
-function inspecttrajectory(sys)
-    @time sol = solve(SDEProblem(sys))
-    x = reduce(hcat, sol.u)
-    scatter_ramachandran(x) |> display
-    exportdata(sys, x, path="out/inspect.pdb")
-    return x
-end
-
-""" save data into a pdb file sorted by model evaluation """
-function extractdata(data::AbstractArray, model, sys, path="out/data.pdb")
-    dd = data
-    dd = reshape(dd, size(dd, 1), :)
-    ks = model(dd)
-    i = sortperm(vec(ks))
-    dd = dd[:, i]
-    i = uniqueidx(dd[1,:] |> vec)
-    dd = dd[:, i]
-    dd = standardform(dd)
-    ISOKANN.exportdata(sys, path, dd)
-    dd
-end
 
 
-uniqueidx(v) = unique(i -> v[i], eachindex(v))
-
-
-## Plotting
-
-atommask(sys::System, atom="C") = map(x->x.element, sys.atoms_data) .== atom
-
-function visualize!(sys::System, coords::AbstractVector{<:Number}; subinds = :, atomtype="C")
-    coords = (reshape(coords, 3, :)')[atommask(sys, atomtype),:]
-    coords = coords[subinds,:]
-    scatter!(coords[:,1], coords[:,2], label=atomtype) |> display
-end
-
-function visualize(sys::System)
-    plot()
-    for a in ["C", "N", "O",]
-        visualize!(sys, coords_to_vec(sys), atomtype=a)
-    end
-    plot!()
-end
+### dihedrals / Ramachandrann
 
 using LinearAlgebra: cross
 
@@ -357,16 +252,7 @@ end
 
 dihedral(x::AbstractMatrix) = @views dihedral(x[:,1], x[:,2], x[:,3], x[:,4])
 
-function scatter_ramachandran(x::Matrix, model=nothing)
-    z = nothing
-    !isnothing(model) && (z = model(x) |> vec)
-    ph = phi(x)
-    ps = psi(x)
-    scatter(ph, ps, marker_z=z, xlims = [-pi, pi], ylims=[-pi, pi],
-        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:hawaii,
-        xlabel="\\phi", ylabel="\\psi", title="Ramachandran",
-    )
-end
+
 
 function psi(x::AbstractVector)  # dihedral of the oxygens
     x = reshape(x, 3, :)
@@ -382,8 +268,21 @@ phi(x::Matrix) = mapslices(phi, x, dims=1) |> vec
 psi(x::Matrix) = mapslices(psi, x, dims=1) |> vec
 
 
+### standardform
+
 using LinearAlgebra
 using StatsBase: mean
+
+"""
+center any given states by shifting their individual 3d mean to the origin
+"""
+function center(xs)
+    mapslices(xs, dims=1) do x
+        coords = reshape(x, 3, :)
+        coords .-= mean(coords, dims=2)
+        vec(coords)
+    end
+end
 
 function rotationmatrix(e1, e2)
     e1 ./= norm(e1)
@@ -394,6 +293,7 @@ function rotationmatrix(e1, e2)
     R = A / I  #  A * R = I
 end
 
+" rotate vec representation of ACEMD "
 function rotatevec(vec)
     x = reshape(vec, 3, :)
     e1 = x[:, 19] .- x[:, 2]
@@ -401,7 +301,6 @@ function rotatevec(vec)
     R = rotationmatrix(e1, e2)
     return R' * x
 end
-
 
 standardform(x::AbstractArray) = mapslices(x, dims=1) do col
     x = rotatevec(col)
