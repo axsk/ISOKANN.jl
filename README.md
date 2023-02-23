@@ -8,4 +8,4 @@ Currently things are still fluctuating, so we have different implementations
 - scripts/molly.jl - reimplementation of the above, working on given data
 
 The most recent plot:
-<img src="out/lastplot.png" width="128"/>
+<img src="out/lastplot.png"/>
