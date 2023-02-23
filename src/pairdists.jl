@@ -1,5 +1,4 @@
-using Distances
-import SliceMap  # provides slicemap == mapslices but with zygote gradients
+
 import ChainRulesCore
 
 ### custom implementation of multithreaded pairwise distances
@@ -32,6 +31,10 @@ end
 
 ### alternative implementation using SliceMap.jl and Distances.jl, was a little bit slower
 
+#=
+import SliceMap  # provides slicemap == mapslices but with zygote gradients
+using Distances
+
 " Threaded computation of pairwise dists using SliceMap.jl and Distances.jl"
 function threadpairdists(x)
     ChainRulesCore.@ignore_derivatives begin
@@ -47,3 +50,5 @@ end
 slicemapdist(x) = ChainRulesCore.@ignore_derivatives SliceMap.slicemap(pairwisevec, x, dims=1)
 
 pairwisevec(col::AbstractVector) = vec(pairwise(SqEuclidean(), reshape(col,3,:), dims=2))
+
+=#

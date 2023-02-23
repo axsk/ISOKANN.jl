@@ -4,18 +4,12 @@
 using Molly
 using Unitful
 using StochasticDiffEq
-using Accessors
-using Plots
-
 import StochasticDiffEq: SDEProblem, solve
-
 export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata
-
-using Base: @kwdef
 
 
 " Type composing the Molly.System with its integration parameters "
-@kwdef mutable struct MollySDE{S,A}
+Base.@kwdef mutable struct MollySDE{S,A}
     sys::S
     temp::Float64 = 298. # 298 K = 25 °C
     gamma::Float64 = 10.
@@ -232,7 +226,7 @@ end
 function savecoords(sys::System, data::AbstractMatrix, path; append = false)
     append || rm(path, force=true)
     for x in eachcol(data)
-        savecoords(sys, path, x, append=false)
+        savecoords(sys, x, path, append=true)
     end
 end
 

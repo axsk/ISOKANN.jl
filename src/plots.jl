@@ -1,3 +1,5 @@
+using Plots
+
 """
 scatter plot of all first "O" atoms of the starting points `xs`
 as well as the "O" atoms from the koopman samples to the first point from `ys`
@@ -71,4 +73,15 @@ function inspecttrajectory(sys)
     scatter_ramachandran(x) |> display
     exportdata(sys, x, path="out/inspect.pdb")
     return x
+end
+
+function scatter_ramachandran(x::Matrix, model=nothing)
+    z = nothing
+    !isnothing(model) && (z = model(x) |> vec)
+    ph = phi(x)
+    ps = psi(x)
+    scatter(ph, ps, marker_z=z, xlims = [-pi, pi], ylims=[-pi, pi],
+        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:hawaii,
+        xlabel="\\phi", ylabel="\\psi", title="Ramachandran",
+    )
 end

@@ -1,4 +1,4 @@
-import StatsBase, Zygote, Optimisers, Flux
+import StatsBase, Zygote, Optimisers, Flux, JLD2
 export ISOSim, run!
 
 abstract type ISOSim end
@@ -164,6 +164,23 @@ function datastats(data)
     println("Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
 end
 
+""" save data into a pdb file sorted by model evaluation """
+function extractdata(data::AbstractArray, model, sys, path="out/data.pdb")
+    dd = data
+    dd = reshape(dd, size(dd, 1), :)
+    ks = model(dd)
+    i = sortperm(vec(ks))
+    dd = dd[:, i]
+    i = uniqueidx(dd[1,:] |> vec)
+    dd = dd[:, i]
+    dd = standardform(dd)
+    ISOKANN.exportdata(sys, path, dd)
+    dd
+end
+
+uniqueidx(v) = unique(i -> v[i], eachindex(v))
+
+
 # default setups
 
 ISOBench() = @time ISOSim1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
@@ -178,4 +195,16 @@ function isosave()
     iso = ISOSim()
     run(iso)
     savefig("out/lastplot.png")
+end
+
+function save(iso::ISOSim)
+    (; model, losses, data) = iso
+    xs, ys = data
+    savefig(plot_learning(losses, data, model), "out/latest/learning.png")
+
+    JLD2.save("out/latest/iso.jld2", "iso", iso)
+
+
+    zs = standardform(stratified_x0(model, xs, 100))
+    savecoords(iso.sys, zs, path="out/latest/path.pdb")
 end
