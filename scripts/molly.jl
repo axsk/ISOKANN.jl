@@ -72,7 +72,7 @@ function datasubsample(model, data, nx)
 end
 
 
-function adddata(data, model, sys, ny, lastn = Inf)
+function adddata(data, model, sys, ny, lastn = 1_000_000)
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
@@ -94,20 +94,7 @@ function datastats(data)
 end
 
 
-""" save data into a pdb file sorted by model evaluation """
-function extractdata(data::AbstractArray, model, sys, path="out/data.pdb")
-    dd = data
-    dd = reshape(dd, size(dd, 1), :)
-    ks = model(dd)
-    i = sortperm(vec(ks))
-    dd = dd[:, i]
-    i = uniqueidx(dd[1,:] |> vec)
-    dd = dd[:, i]
-    ISOKANN.exportdata(sys, path, dd)
-    dd
-end
 
-uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
 
 ## Plotting
@@ -169,9 +156,15 @@ function run(iso::ISOSim1; plotevery = 5, batchsize=Inf)
     datastats(data)
 
     local sdata
-    plt = Flux.throttle(plotevery) do
-        plot_learning(losses, sdata,model) |> display
-        #savefig("out/lastplot.png")
+
+
+    plt = if plotevery > 0
+        Flux.throttle(plotevery) do
+            plot_learning(losses, sdata,model) |> display
+            #savefig("out/lastplot.png")
+        end
+    else
+        ()->nothing
     end
 
     @time for j in 1:nd
@@ -188,9 +181,9 @@ function run(iso::ISOSim1; plotevery = 5, batchsize=Inf)
         plt()
 
         if j%nres == 0
-            @time data = adddata(data, model, sys, ny, ny)
-            if size(data[1], 2) > 1000
-                data = datasubsample(model, data, 500)
+            @time data = adddata(data, model, sys, ny)
+            if size(data[1], 2) > 3000
+                data = datasubsample(model, data, 1000)
             end
             iso.data = data
 
