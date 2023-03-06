@@ -36,7 +36,7 @@ picking the closest points to a randomly perturbed grid in [0,1]."
 function subsample_uniformgrid(ys, n; keepedges=true)
     keepedges && (n = n - 2)
     needles = (rand(n)  .+ (0:n-1)) ./ n
-    keepedges && (needles = [[0,1]; needles])
+    keepedges && (needles = [0; needles; 1])
     pickclosest(ys, needles)
 end
 
