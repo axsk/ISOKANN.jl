@@ -113,7 +113,7 @@ end
 
 """ compute initial data by propagating the molecules initial state
 to obtain the xs and propagating them further for the ys """
-function bootstrap(sim::ISORunulation, nx, ny)
+function bootstrap(sim::IsoSimulation, nx, ny)
     x0 = reshape(getcoords(sim), :, 1)
     xs = reshape(propagate(sim, x0, nx), :, nx)
     ys = propagate(sim, xs, ny)
@@ -132,7 +132,7 @@ function datasubsample(model, data, nx)
     return xs, ys
 end
 
-function adddata(data, model, sim::ISORunulation, ny, lastn = 1_000_000)
+function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
@@ -199,11 +199,12 @@ end
 function save(iso::ISORun, pathlength=300)
     (; model, losses, data, sim) = iso
     xs, ys = data
+    zs = standardform(stratified_x0(model, xs, pathlength))
+    savecoords(sim, zs, path="out/latest/path.pdb")
     savefig(plot_learning(losses, data, model), "out/latest/learning.png")
 
     JLD2.save("out/latest/iso.jld2", "iso", iso)
 
 
-    zs = standardform(stratified_x0(model, xs, pathlength))
-    savecoords(iso.sim, zs, path="out/latest/path.pdb")
+
 end

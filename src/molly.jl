@@ -5,7 +5,7 @@ using Molly
 using Unitful
 using StochasticDiffEq
 import StochasticDiffEq: SDEProblem, solve
-export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata
+export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata, MollyLangevin
 
 abstract type IsoSimulation end
 
@@ -100,10 +100,21 @@ function pairnet(sys)
     n = div(dim(sys), 3)
     nn = Flux.Chain(
         mythreadpairdists,
+        Flux.Dense(n*n, round(Int,n^(4/3)), Flux.sigmoid),
+        Flux.Dense(round(Int,n^(4/3)), round(Int,n^(2/3)), Flux.sigmoid),
+        Flux.Dense(round(Int,n^(2/3)), 1, Flux.sigmoid))
+    return nn
+end
+
+function pairnet2(sys)
+    n = div(dim(sys), 3)
+    nn = Flux.Chain(
+        mythreadpairdists,
         Flux.Dense(n*n, n, Flux.sigmoid),
         Flux.Dense(n, 1, Flux.sigmoid))
     return nn
 end
+
 
 
 ## utils for interaction with the ::Molly.System
@@ -136,7 +147,7 @@ setcoords(sys::System, coords::Array{<:SVector{3}}) = Molly.System(
     coords=coords,  # <--
     velocities = copy(sys.velocities),  # <--
     boundary=sys.boundary,
-    neighbor_finder = deepcopy(sys.neighbor_finder),
+    neighbor_finder = deepcopy(sys.neighbor_finder), # this seems to be necessary for multithreading
     loggers = sys.loggers,
     force_units = sys.force_units,
     energy_units = sys.energy_units,
@@ -222,7 +233,7 @@ Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
     temp::Float64 = 298. # 298 K = 25 °C
     gamma::Float64 = 1.
     dt::Float64 = 2e-4 * gamma  # in ps
-    T::Float64 = 2e-2 * gamma # in ps   # tuned as to take ~.1 sec computation time
+    T::Float64 = 2e-1 * gamma # in ps   # tuned as to take ~.1 sec computation time
     n_threads::Int = 1  # number of threads for the force computations
 end
 
@@ -240,7 +251,7 @@ function solve(ml::MollyLangevin; u0)
         temperature = ml.temp * u"K",
         friction = ml.gamma * u"ps^-1",
     )
-   @show n_steps = round(Int, ml.T / ml.dt)
+    n_steps = round(Int, ml.T / ml.dt)
     simulate!(sys, simulator, n_steps; n_threads = ml.n_threads)
     return getcoords(sys)
 end
@@ -248,7 +259,7 @@ end
 function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, nx, ny)
-    for i in 1:nx, j in 1:ny
+    @floop for i in 1:nx, j in 1:ny
         ys[:, i, j] = solve(ms; u0=copy(x0[:,i]))
     end
     return ys
