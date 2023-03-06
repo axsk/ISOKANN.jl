@@ -1,11 +1,11 @@
 import StatsBase, Zygote, Optimisers, Flux, JLD2
-export ISOSim, run!
+export ISORun, run!
 
-abstract type ISOSim end
+abstract type ISORun end
 
-ISOSim(;kwargs...) = ISO_ACEMD(;kwargs...)
+ISORun(;kwargs...) = ISO_ACEMD(;kwargs...)
 
-Base.@kwdef mutable struct ISO_ACEMD <: ISOSim # takes 10 min
+Base.@kwdef mutable struct ISO_ACEMD <: ISORun # takes 10 min
     nd = 1000 # number of outer datasubsampling steps
     nx = 100  # size of subdata set
     np = 1    # number of poweriterations with the same subdata
@@ -22,7 +22,7 @@ Base.@kwdef mutable struct ISO_ACEMD <: ISOSim # takes 10 min
     losses = Float64[]
 end
 
-function run!(iso::ISOSim; callback = Flux.throttle(plotcallback, 5), batchsize=Inf)
+function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=Inf)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
     datastats(data)
@@ -113,7 +113,7 @@ end
 
 """ compute initial data by propagating the molecules initial state
 to obtain the xs and propagating them further for the ys """
-function bootstrap(sim::IsoSimulation, nx, ny)
+function bootstrap(sim::ISORunulation, nx, ny)
     x0 = reshape(getcoords(sim), :, 1)
     xs = reshape(propagate(sim, x0, nx), :, nx)
     ys = propagate(sim, xs, ny)
@@ -132,7 +132,7 @@ function datasubsample(model, data, nx)
     return xs, ys
 end
 
-function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
+function adddata(data, model, sim::ISORunulation, ny, lastn = 1_000_000)
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
@@ -182,8 +182,8 @@ uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
 # default setups
 
-ISOBench() = @time ISOSim1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
-ISOLong() = ISOSim1(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
+ISOBench() = @time ISORun1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
+ISOLong() = ISORun1(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
 
 function isobench()
     @time iso = ISOBench()
@@ -191,12 +191,12 @@ function isobench()
 end
 
 function isosave()
-    iso = ISOSim()
+    iso = ISORun()
     run(iso)
     savefig("out/lastplot.png")
 end
 
-function save(iso::ISOSim, pathlength=300)
+function save(iso::ISORun, pathlength=300)
     (; model, losses, data, sim) = iso
     xs, ys = data
     savefig(plot_learning(losses, data, model), "out/latest/learning.png")
