@@ -31,18 +31,6 @@ function plotlossdata(losses, data, model=nothing)
 end
 
 
-function scatter_ramachandran(x::Matrix, model=nothing)
-    z = nothing
-    !isnothing(model) && (z = model(x) |> vec)
-    ph = phi(x)
-    ps = psi(x)
-    scatter(ph, ps, marker_z=z, xlims = [-pi, pi], ylims=[-pi, pi],
-        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:hawaii,
-        xlabel="\\phi", ylabel="\\psi", title="Ramachandran",
-    )
-end
-
-
 
 ## Plotting
 
@@ -57,7 +45,7 @@ function plot_learning(losses, data, model; maxhist=100_000)
 end
 
 
-
+""" fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
     xs, ys = data
     target = shiftscale(koopman(model, ys))

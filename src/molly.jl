@@ -7,27 +7,35 @@ using StochasticDiffEq
 import StochasticDiffEq: SDEProblem, solve
 export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata
 
+abstract type IsoSimulation end
+
+dim(sim::IsoSimulation) = dim(sim.sys)
+dim(sys::System) = length(sys.atoms) * 3
+
+getcoords(sim::IsoSimulation) = getcoords(sim.sys)
+defaultmodel(sim::IsoSimulation) = defaultmodel(sim.sys)
+defaultmodel(sys::System) = pairnet(sys::System)
+
+function savecoords(sim::IsoSimulation, traj::AbstractArray;
+    path="out/$(sim.gamma) $(sim.T) $(sim.dt).pdb", kwargs...)
+    savecoords(sim.sys, traj, path; kwargs...)
+end
+
+
 
 " Type composing the Molly.System with its integration parameters "
-Base.@kwdef mutable struct MollySDE{S,A}
+Base.@kwdef mutable struct MollySDE{S,A} <: IsoSimulation
     sys::S
     temp::Float64 = 298. # 298 K = 25 °C
     gamma::Float64 = 10.
     dt::Float64 = 2e-6 * gamma  # in ps
     T::Float64 = 2e-3 * gamma # in ps   # tuned as to take ~.1 sec computation time
     alg::A = EM()
-    nthreads::Int = 1  # number of threads for the force computations
+    n_threads::Int = 1  # number of threads for the force computations
 end
 
-
-dim(ms::MollySDE) = dim(ms.sys)
-getcoords(ms::MollySDE) = getcoords(ms.sys)
-defaultmodel(ms::MollySDE) = defaultmodel(ms.sys)
-
-dim(sys::System) = length(sys.atoms) * 3
-
-SDEProblem(m::MollySDE) = SDEProblem(m.sys, m.T;
-       dt=m.dt, alg=m.alg, gamma=m.gamma, temp=m.temp, n_threads=m.nthreads)
+SDEProblem(ms::MollySDE) = SDEProblem(ms.sys, ms.T;
+       dt=ms.dt, alg=ms.alg, gamma=ms.gamma, temp=ms.temp, n_threads=ms.n_threads)
 
 function SDEProblem(sys::System, T=1e-3; dt, alg=SROCK2(),
     n_threads=1, gamma=10, temp=298, kwargs...)
@@ -61,23 +69,6 @@ function SDEProblem(sys::System, T=1e-3; dt, alg=SROCK2(),
 end
 
 
-
-#Base.show(io::IO, ::MIME"text/plain", x::System) = print(io, "Molly.System ($(dim(x))D)")
-#Base.show(io::IO, ::MIME"text/plain", x::Type{<:System}) = print(io, "Molly.System (TYPE)")
-
-
-
-# delegation for ::MollySDE
-
-solve(m::MollySDE; kwargs...) = solve(SDEProblem(m); kwargs...)
-
-savecoords(m::MollySDE, sol; kwargs...) = exportdata(m, reduce(hcat, sol.u); kwargs...)
-
-function savecoords(m::MollySDE, traj::AbstractArray;
-    path="out/$(m.gamma) $(m.T) $(m.dt).pdb", kwargs...)
-    savecoords(m.sys, traj, path; kwargs...)
-end
-
 """
 propagting the dynamics `ms` starting at the given `x0` each `ny` times.
 return the corresponding endpoints in an array of shape [dim, nx, ny]
@@ -88,6 +79,7 @@ function propagate(ms::MollySDE, x0::AbstractMatrix, ny)
     sde = SDEProblem(ms)
     @floop for i in 1:nx, j in 1:ny
         #  the tspan fixes u0 assignment (https://github.com/SciML/DiffEqBase.jl/issues/883)
+        # TODO: save only at end position
         sol = solve(sde; u0=x0[:,i], tspan=(0,sde.tspan[2]))
         ys[:, i, j] = sol[end]
     end
@@ -95,26 +87,17 @@ function propagate(ms::MollySDE, x0::AbstractMatrix, ny)
     return ys
 end
 
+#Base.show(io::IO, ::MIME"text/plain", x::System) = print(io, "Molly.System ($(dim(x))D)")
+#Base.show(io::IO, ::MIME"text/plain", x::Type{<:System}) = print(io, "Molly.System (TYPE)")
 
-#defaultmodel(sys::System, layers=round.(Int, dim(sys).^[2/3, 1/3])) = fluxnet([dim(sys); layers; 1])
 
 # Neural Network model for mol
 
 import Flux
 
-defaultmodel(sys::System) = pairnet(sys::System)
-
 " Neural Network model for molecules, using pairwise distances as first layer "
 function pairnet(sys)
     n = div(dim(sys), 3)
-   #= l = [
-        x->SliceMap.slicemap(x, dims=1) do col
-            vec(pairwise(SqEuclidean(), reshape(col,3,:), dims=2))
-        end,
-        Flux.Dense(n*n, n, Flux.sigmoid),
-        Flux.Dense(n, 1, Flux.sigmoid)
-        ]
-        =#
     nn = Flux.Chain(
         mythreadpairdists,
         Flux.Dense(n*n, n, Flux.sigmoid),
@@ -136,12 +119,13 @@ end
 function vec_to_coords(x::AbstractArray, sys::System)
     xx = reshape(x, 3, :)
     coord = sys.coords[1]
-    coords = typeof(coord)[c * unit(coord[1]) for c in eachcol(xx)]
+    u = unit(coord[1])
+    coords = typeof(coord)[c * u for c in eachcol(xx)]
     return coords
 end
 
 """ set the system to the given coordinates """
-setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(coords, sys))
+setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(center(coords) .+ 1.36, sys))
 setcoords(sys::System, coords::Array{<:SVector{3}}) = Molly.System(
     atoms = sys.atoms,
     atoms_data = sys.atoms_data,
@@ -149,10 +133,10 @@ setcoords(sys::System, coords::Array{<:SVector{3}}) = Molly.System(
     specific_inter_lists = sys.specific_inter_lists,
     general_inters = sys.general_inters,
     constraints = sys.constraints,
-    coords=coords,
-    velocities = sys.velocities,
+    coords=coords,  # <--
+    velocities = copy(sys.velocities),  # <--
     boundary=sys.boundary,
-    neighbor_finder = sys.neighbor_finder,
+    neighbor_finder = deepcopy(sys.neighbor_finder),
     loggers = sys.loggers,
     force_units = sys.force_units,
     energy_units = sys.energy_units,
@@ -176,6 +160,22 @@ gpu(sys::System) = Molly.System(
     energy_units = sys.energy_units,
     k=sys.k
 )
+
+## Save to pdb files
+
+function savecoords(sys::System, coords::AbstractVector, path; append = false)
+    append || rm(path, force=true)
+    writer = Molly.StructureWriter(0, path)
+    sys = setcoords(sys, coords)
+    Molly.append_model!(writer, sys)
+end
+
+function savecoords(sys::System, data::AbstractMatrix, path; append = false)
+    append || rm(path, force=true)
+    for x in eachcol(data)
+        savecoords(sys, x, path, append=true)
+    end
+end
 
 
 ## loaders for the molecules in /data
@@ -214,90 +214,57 @@ function PDB_ACEMD(;kwargs...)
     return MollySDE(;sys,kwargs...)
 end
 
-## Save to pdb files
 
-function savecoords(sys::System, coords::AbstractVector, path; append = false)
-    append || rm(path, force=true)
-    writer = Molly.StructureWriter(0, path)
-    sys = setcoords(sys, coords)
-    Molly.append_model!(writer, sys)
+## Langevin
+
+Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
+    sys::S
+    temp::Float64 = 298. # 298 K = 25 °C
+    gamma::Float64 = 1.
+    dt::Float64 = 2e-4 * gamma  # in ps
+    T::Float64 = 2e-2 * gamma # in ps   # tuned as to take ~.1 sec computation time
+    n_threads::Int = 1  # number of threads for the force computations
 end
 
-function savecoords(sys::System, data::AbstractMatrix, path; append = false)
-    append || rm(path, force=true)
-    for x in eachcol(data)
-        savecoords(sys, x, path, append=true)
+function solve(ml::MollyLangevin; u0)
+    #sys = deepcopy(ml.sys)
+    sys = setcoords(ml.sys, u0) :: System
+    #@show getcoords(sys)
+    #@show ml.sys.coords
+    #@show ml.sys.boundary
+    #ml.sys.coords = map(ml.sys.coords) do c c.+ 1.35*u"nm" end
+
+    random_velocities!(sys, ml.temp * u"K")
+    simulator = Langevin(
+        dt = ml.dt * u"ps",
+        temperature = ml.temp * u"K",
+        friction = ml.gamma * u"ps^-1",
+    )
+   @show n_steps = round(Int, ml.T / ml.dt)
+    simulate!(sys, simulator, n_steps; n_threads = ml.n_threads)
+    return getcoords(sys)
+end
+
+function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
+    dim, nx = size(x0)
+    ys = zeros(dim, nx, ny)
+    for i in 1:nx, j in 1:ny
+        ys[:, i, j] = solve(ms; u0=copy(x0[:,i]))
     end
+    return ys
 end
 
-
-
-### dihedrals / Ramachandrann
-
-using LinearAlgebra: cross
-
-# https://naturegeorge.github.io/blog/2022/07/dihedral/
-function dihedral(coord0, coord1, coord2, coord3)
-    b = coord2 - coord1
-    u = cross(b, coord1 - coord0)
-    w = cross(b, coord2 - coord3)
-    return atan(cross(u, w)'*b, u'*w * norm(b))
-end
-
-dihedral(x::AbstractMatrix) = @views dihedral(x[:,1], x[:,2], x[:,3], x[:,4])
-
-
-
-function psi(x::AbstractVector)  # dihedral of the oxygens
-    x = reshape(x, 3, :)
-    @views ISOKANN.dihedral(x[:, [7,9,15,17]])
-end
-
-function phi(x::AbstractVector)
-    x = reshape(x, 3, :)
-    @views ISOKANN.dihedral(x[:, [5,7,9,15]])
-end
-
-phi(x::Matrix) = mapslices(phi, x, dims=1) |> vec
-psi(x::Matrix) = mapslices(psi, x, dims=1) |> vec
-
-
-### standardform
-
-using LinearAlgebra
-using StatsBase: mean
-
-"""
-center any given states by shifting their individual 3d mean to the origin
-"""
-function center(xs)
-    mapslices(xs, dims=1) do x
-        coords = reshape(x, 3, :)
-        coords .-= mean(coords, dims=2)
-        vec(coords)
+" bugged "
+function solvetraj(ml, u0, T)
+    oldT = ml.T
+    ml.T = ml.dt
+    n_steps = round(Int, T / ml.dt)
+    x = zeros(dim(ml.sys), n_steps+1)
+    x[:, 1] = u0
+    for i in 1:n_steps
+        # this resamples random velocities on each timestep
+        x[:, i+1] = solve(ml; u0=x[:, i])
     end
-end
-
-function rotationmatrix(e1, e2)
-    e1 ./= norm(e1)
-    e2 .-= dot(e1, e2) * e1
-    e2 ./= norm(e2)
-    e3 = cross(e1, e2)
-    A = hcat(e1, e2, e3)
-    R = A / I  #  A * R = I
-end
-
-" rotate vec representation of ACEMD "
-function rotatevec(vec)
-    x = reshape(vec, 3, :)
-    e1 = x[:, 19] .- x[:, 2]
-    e2 = x[:, 11] .- x[:, 2]
-    R = rotationmatrix(e1, e2)
-    return R' * x
-end
-
-standardform(x::AbstractArray) = mapslices(x, dims=1) do col
-    x = rotatevec(col)
-    x .-= mean(x, dims=2)
-    vec(x)
+    ml.T = oldT
+    return x
 end

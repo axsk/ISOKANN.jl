@@ -1,6 +1,17 @@
 using LinearAlgebra
 using StatsBase: mean
 
+"""
+center any given states by shifting their individual 3d mean to the origin
+"""
+function center(xs)
+    mapslices(xs, dims=1) do x
+        coords = reshape(x, 3, :)
+        coords .-= mean(coords, dims=2)
+        vec(coords)
+    end
+end
+
 # https://naturegeorge.github.io/blog/2022/07/dihedral/
 function dihedral(coord0, coord1, coord2, coord3)
     b = coord2 - coord1

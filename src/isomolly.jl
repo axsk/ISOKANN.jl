@@ -14,17 +14,17 @@ Base.@kwdef mutable struct ISO_ACEMD <: ISOSim # takes 10 min
     nres = 10  # resample new data every n outer steps
     ny = 8     # number of new points to sample
     nk = 8     # number of koopman points to sample
-    sys = PDB_ACEMD()
-    model = pairnet(sys)
+    sim = PDB_ACEMD()
+    model = pairnet(sim)
     opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-4), Optimisers.Adam(1e-4))
 
-    data = bootstrap(sys, ny, nk)
+    data = bootstrap(sim, ny, nk)
     losses = Float64[]
 end
 
-function run!(iso::ISOSim; cb = Flux.throttle(plotcallback, 5), batchsize=Inf)
+function run!(iso::ISOSim; callback = Flux.throttle(plotcallback, 5), batchsize=Inf)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
-    (; nd, nx, ny, nk, np, nl, sys, model, opt, data, losses, nres) = iso
+    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
     datastats(data)
 
     local subdata
@@ -41,16 +41,16 @@ function run!(iso::ISOSim; cb = Flux.throttle(plotcallback, 5), batchsize=Inf)
             end
         end
 
-        cb(;model, losses, subdata)
+        callback(;model, losses, subdata, data)
 
         if j%nres == 0
-            @time data = adddata(data, model, sys, ny)
+            @time data = adddata(data, model, sim, ny)
             if size(data[1], 2) > 3000
                 data = datasubsample(model, data, 1000)
             end
             iso.data = data
 
-            #extractdata(data[1], model, sys.sys)
+            #extractdata(data[1], model, sim.sys)
         end
     end
 
@@ -113,10 +113,10 @@ end
 
 """ compute initial data by propagating the molecules initial state
 to obtain the xs and propagating them further for the ys """
-function bootstrap(ms::MollySDE, nx, ny)
-    x0 = reshape(getcoords(ms), :, 1)
-    xs = reshape(propagate(ms, x0, nx), :, nx)
-    ys = propagate(ms, xs, ny)
+function bootstrap(sim::IsoSimulation, nx, ny)
+    x0 = reshape(getcoords(sim), :, 1)
+    xs = reshape(propagate(sim, x0, nx), :, nx)
+    ys = propagate(sim, xs, ny)
     center(xs), center(ys)
 end
 
@@ -132,13 +132,12 @@ function datasubsample(model, data, nx)
     return xs, ys
 end
 
-function adddata(data, model, sys, ny, lastn = 1_000_000)
+function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
     x0 = @views stratified_x0(model, ys[:, firstind:end, :], ny)
-    #ndata = generatedata(sys, x0, nk)
-    ys = propagate(sys, x0, nk)
+    ys = propagate(sim, x0, nk)
     ndata = center(x0), center(ys)
     data = hcat.(data, ndata)
 
@@ -165,7 +164,7 @@ function datastats(data)
 end
 
 """ save data into a pdb file sorted by model evaluation """
-function extractdata(data::AbstractArray, model, sys, path="out/data.pdb")
+function extractdata(data::AbstractArray, model, sim, path="out/data.pdb")
     dd = data
     dd = reshape(dd, size(dd, 1), :)
     ks = model(dd)
@@ -174,7 +173,7 @@ function extractdata(data::AbstractArray, model, sys, path="out/data.pdb")
     i = uniqueidx(dd[1,:] |> vec)
     dd = dd[:, i]
     dd = standardform(dd)
-    ISOKANN.exportdata(sys, path, dd)
+    ISOKANN.exportdata(sim, path, dd)
     dd
 end
 
@@ -197,14 +196,14 @@ function isosave()
     savefig("out/lastplot.png")
 end
 
-function save(iso::ISOSim)
-    (; model, losses, data) = iso
+function save(iso::ISOSim, pathlength=300)
+    (; model, losses, data, sim) = iso
     xs, ys = data
     savefig(plot_learning(losses, data, model), "out/latest/learning.png")
 
     JLD2.save("out/latest/iso.jld2", "iso", iso)
 
 
-    zs = standardform(stratified_x0(model, xs, 100))
-    savecoords(iso.sys, zs, path="out/latest/path.pdb")
+    zs = standardform(stratified_x0(model, xs, pathlength))
+    savecoords(iso.sim, zs, path="out/latest/path.pdb")
 end
