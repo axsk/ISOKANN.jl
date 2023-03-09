@@ -63,13 +63,15 @@ function inspecttrajectory(sys)
     return x
 end
 
-function scatter_ramachandran(x::Matrix, model=nothing)
+# good colors
+# berlin, delta, roma, tofino, tokyo
+function scatter_ramachandran(x::Matrix, model=nothing;kwargs...)
     z = nothing
     !isnothing(model) && (z = model(x) |> vec)
     ph = phi(x)
     ps = psi(x)
     scatter(ph, ps, marker_z=z, xlims = [-pi, pi], ylims=[-pi, pi],
-        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:hawaii,
-        xlabel="\\phi", ylabel="\\psi", title="Ramachandran",
+        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:tofino,
+        xlabel="\\phi", ylabel="\\psi", title="Ramachandran", ;kwargs...
     )
 end

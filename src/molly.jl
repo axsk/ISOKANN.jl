@@ -119,9 +119,14 @@ end
 
 ## utils for interaction with the ::Molly.System
 
+## not perfect but better then writing it out
+type_to_tuple(x::System) = (;(fn=>getfield(x, fn) for fn ∈ fieldnames(typeof(x)))...)
+Molly.System(sys::System; kwargs...) = System(;type_to_tuple(sys)..., kwargs...)
+
 """ extract the unitful SVector coords from `sys` and return as a normal vector """
-function getcoords(sys::System)
-    x0 = ustrip_vec(sys.coords)
+getcoords(sys::System) = getcoords(sys.coords)
+function getcoords(coords::AbstractArray)
+    x0 = ustrip_vec(coords)
     x0 = reduce(vcat, x0)
     return x0 :: AbstractVector
 end
@@ -136,41 +141,22 @@ function vec_to_coords(x::AbstractArray, sys::System)
 end
 
 """ set the system to the given coordinates """
+# TODO: the center shift does not belong here, fix constant
 setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(center(coords) .+ 1.36, sys))
-setcoords(sys::System, coords::Array{<:SVector{3}}) = Molly.System(
-    atoms = sys.atoms,
-    atoms_data = sys.atoms_data,
-    pairwise_inters=sys.pairwise_inters,
-    specific_inter_lists = sys.specific_inter_lists,
-    general_inters = sys.general_inters,
-    constraints = sys.constraints,
-    coords=coords,  # <--
-    velocities = copy(sys.velocities),  # <--
-    boundary=sys.boundary,
-    neighbor_finder = deepcopy(sys.neighbor_finder), # this seems to be necessary for multithreading
-    loggers = sys.loggers,
-    force_units = sys.force_units,
-    energy_units = sys.energy_units,
-    k=sys.k
+setcoords(sys::System, coords::Array{<:SVector{3}}) = System(sys;
+    coords=coords,
+    velocities = copy(sys.velocities),
+    neighbor_finder = deepcopy(sys.neighbor_finder),
 )
 
 """ move the ::System to the GPU, mirroring behavior of Flux.gpu """
-gpu(sys::System) = Molly.System(
+gpu(sys::System) = System(sys;
     atoms = cu(sys.atoms),
     atoms_data = cu(sys.atoms_data),
-    pairwise_inters=sys.pairwise_inters,
-    specific_inter_lists = sys.specific_inter_lists,
-    general_inters = sys.general_inters,
-    constraints = sys.constraints,
-    coords=cu(sys.coords),
+    coords = cu(sys.coords),
     velocities = cu(sys.velocities),
-    boundary=sys.boundary,
-    neighbor_finder = sys.neighbor_finder,
-    loggers = sys.loggers,
-    force_units = sys.force_units,
-    energy_units = sys.energy_units,
-    k=sys.k
 )
+
 
 ## Save to pdb files
 
@@ -237,13 +223,14 @@ Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
     n_threads::Int = 1  # number of threads for the force computations
 end
 
-function solve(ml::MollyLangevin; u0)
-    #sys = deepcopy(ml.sys)
+solve(ml; kwargs...) = reduce(hcat, getcoords.(_solve(ml; kwargs...)))
+
+function _solve(ml::MollyLangevin;
+    u0=ml.sys.coords,
+    logevery = 1)
     sys = setcoords(ml.sys, u0) :: System
-    #@show getcoords(sys)
-    #@show ml.sys.coords
-    #@show ml.sys.boundary
-    #ml.sys.coords = map(ml.sys.coords) do c c.+ 1.35*u"nm" end
+
+    sys = System(sys, loggers=(coords=CoordinateLogger(logevery),))
 
     random_velocities!(sys, ml.temp * u"K")
     simulator = Langevin(
@@ -253,14 +240,21 @@ function solve(ml::MollyLangevin; u0)
     )
     n_steps = round(Int, ml.T / ml.dt)
     simulate!(sys, simulator, n_steps; n_threads = ml.n_threads)
-    return getcoords(sys)
+    return sys.loggers.coords.history
 end
+
+function solve_end(ml::MollyLangevin; u0)
+    n_steps = round(Int, ml.T / ml.dt)
+    getcoords(_solve(ml; u0, logevery=n_steps)[end])
+end
+
+
 
 function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, nx, ny)
     @floop for i in 1:nx, j in 1:ny
-        ys[:, i, j] = solve(ms; u0=copy(x0[:,i]))
+        ys[:, i, j] = solve_end(ms; u0=copy(x0[:,i]))
     end
     return ys
 end
