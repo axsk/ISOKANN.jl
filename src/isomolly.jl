@@ -3,6 +3,8 @@ export ISORun, run!
 
 abstract type ISORun end
 
+run() = run!(ISORun())
+
 ISORun(;kwargs...) = ISO_ACEMD(;kwargs...)
 
 Base.@kwdef mutable struct ISO_ACEMD <: ISORun # takes 10 min

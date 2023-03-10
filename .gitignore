@@ -1,2 +1,2 @@
-out/*.jld2
-out/**.pdb
+out
+JuliaSysimage.so
