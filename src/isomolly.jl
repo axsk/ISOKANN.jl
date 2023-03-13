@@ -1,5 +1,6 @@
 import StatsBase, Zygote, Optimisers, Flux, JLD2
 export ISORun, run!
+using LsqFit
 
 abstract type ISORun end
 
@@ -16,7 +17,7 @@ Base.@kwdef mutable struct ISO_ACEMD <: ISORun # takes 10 min
     nres = 10  # resample new data every n outer steps
     ny = 8     # number of new points to sample
     nk = 8     # number of koopman points to sample
-    sim = PDB_ACEMD()
+    sim = MollySDE(sys=PDB_ACEMD())
     model = pairnet(sim)
     opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-4), Optimisers.Adam(1e-4))
 
@@ -36,7 +37,9 @@ function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=
         # train model(xs) = target
         for i in 1:np
             xs, ys = subdata
-            target = shiftscale(koopman(model, ys))
+            ks = koopman(model, ys)
+            target = shiftscale(ks)
+            # target = gettarget(xs, ys, model)
             for i in 1:nl
                 l = learnbatch!(model, xs, target, opt, batchsize)
                 push!(losses, l)
@@ -209,4 +212,18 @@ function save(iso::ISORun, pathlength=300)
 
 
 
+end
+
+
+function estimate_K(x, Kx)
+    @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1-p[1]) * p[2])
+    fit = curve_fit(Kinv, vec(x), vec(Kx), [.5, 1])
+    lambda, a = coef(fit)
+end
+
+function gettarget(xs, ys, model)
+    ks = koopman(model, ys)
+    lambda, a = estimate_K(model(xs), ks)
+    @show lambda, a
+    target = (ks .- ((1-lambda)*a)) ./ lambda
 end

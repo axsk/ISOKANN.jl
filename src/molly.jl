@@ -4,8 +4,11 @@
 using Molly
 using Unitful
 using StochasticDiffEq
+using CUDA
 import StochasticDiffEq: SDEProblem, solve
-export PDB_5XER, PDB_6MRR, PDB_ACEMD, SDEProblem, MollySDE, solve, exportdata, MollyLangevin
+export PDB_5XER, PDB_6MRR, PDB_ACEMD,
+    MollyLangevin, MollySDE,
+    solve, exportdata
 
 abstract type IsoSimulation end
 
@@ -99,7 +102,7 @@ import Flux
 function pairnet(sys)
     n = div(dim(sys), 3)
     nn = Flux.Chain(
-        mythreadpairdists,
+        flatpairdists,
         Flux.Dense(n*n, round(Int,n^(4/3)), Flux.sigmoid),
         Flux.Dense(round(Int,n^(4/3)), round(Int,n^(2/3)), Flux.sigmoid),
         Flux.Dense(round(Int,n^(2/3)), 1, Flux.sigmoid))
@@ -109,7 +112,7 @@ end
 function pairnet2(sys)
     n = div(dim(sys), 3)
     nn = Flux.Chain(
-        mythreadpairdists,
+        flatpairdists,
         Flux.Dense(n*n, n, Flux.sigmoid),
         Flux.Dense(n, 1, Flux.sigmoid))
     return nn
@@ -186,7 +189,7 @@ function PDB_6MRR()
         joinpath(molly_data_dir, "force_fields", "his.xml"),
     )
     sys = System(joinpath(molly_data_dir, "6mrr_nowater.pdb"), ff)
-    return MollySDE(;sys)
+    return sys
 end
 
 function PDB_5XER()
@@ -199,16 +202,17 @@ function PDB_5XER()
     #nosol = map(sys.atoms_data) do a a.res_name != "SOL" end
     #sys.atoms = sys.atoms[nosol]
     #sys.atoms_data = sys.atoms_data[nosol]
-    return MollySDE(;sys)
+    return sys
 end
 
 """ Peptide Dialanine """
 function PDB_ACEMD(;kwargs...)
     ff = OpenMMForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath("data", "alanine-dipeptide-nowater av.pdb"), ff,
-        rename_terminal_res = false  # this is important
+        rename_terminal_res = false, # this is important
+        ; kwargs...
     )
-    return MollySDE(;sys,kwargs...)
+    return sys
 end
 
 

@@ -19,4 +19,6 @@ include("molutils.jl")   # dihedrals, rotation
 include("isomolly.jl")   # ISOKANN for Molly systems
 include("plots.jl")      # visualizations
 
+include("performance.jl")
+
 end
