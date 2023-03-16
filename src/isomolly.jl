@@ -1,29 +1,33 @@
 import StatsBase, Zygote, Optimisers, Flux, JLD2
-export ISORun, run!
+
 using LsqFit
+using ProgressMeter
+
+export ISORun, run!, Adam, ISO_ACEMD
 
 abstract type ISORun end
 
-run() = run!(ISORun())
+run(;kwargs...) = run!(ISORun(;kwargs...))
 
 ISORun(;kwargs...) = ISO_ACEMD(;kwargs...)
 
 Base.@kwdef mutable struct ISO_ACEMD <: ISORun # takes 10 min
     nd = 1000 # number of outer datasubsampling steps
     nx = 100  # size of subdata set
-    np = 1    # number of poweriterations with the same subdata
+    np = 2    # number of poweriterations with the same subdata
     nl = 5    # number of weight updates  with the same poweriteration step
 
-    nres = 10  # resample new data every n outer steps
+    nres = 50  # resample new data every n outer steps
     ny = 8     # number of new points to sample
     nk = 8     # number of koopman points to sample
-    sim = MollySDE(sys=PDB_ACEMD())
+    sim = MollyLangevin(sys=PDB_ACEMD())
     model = pairnet(sim)
-    opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-4), Optimisers.Adam(1e-4))
+    opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-4), Optimisers.Adam(1e-3))
 
     data = bootstrap(sim, ny, nk)
     losses = Float64[]
 end
+
 
 function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=Inf)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
@@ -32,7 +36,9 @@ function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=
 
     local subdata
 
-    @time for j in 1:nd
+    p = Progress(nd, 1)
+
+    for j in 1:nd
         subdata = datasubsample(model, data, nx)
         # train model(xs) = target
         for i in 1:np
@@ -49,7 +55,7 @@ function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=
         callback(;model, losses, subdata, data)
 
         if j%nres == 0
-            @time data = adddata(data, model, sim, ny)
+            data = adddata(data, model, sim, ny)
             if size(data[1], 2) > 3000
                 data = datasubsample(model, data, 1000)
             end
@@ -57,15 +63,19 @@ function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=
 
             #extractdata(data[1], model, sim.sys)
         end
+
+        ProgressMeter.next!(p; showvalues = ()->[(:loss, losses[end]), (:n, length(losses)), (:data, size(data[2]))])
     end
 
     return iso
 end
 
 function plotcallback(;losses, subdata, model, kwargs...)
-    p = plot_learning(losses, subdata,model)
-    try display(p) catch e;
-        @warn "could not print ($e)"
+    begin
+        p = plot_learning(losses, subdata,model)
+        try display(p) catch e;
+            @warn "could not print ($e)"
+        end
     end
 end
 
@@ -165,8 +175,9 @@ function datastats(data)
     ext = extrema(xs[1,:])
     uni = length(unique(xs[1,:]))
     _, n, ks = size(ys)
-    println("Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
+    #println("\n Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
 end
+
 
 """ save data into a pdb file sorted by model evaluation """
 function extractdata(data::AbstractArray, model, sim, path="out/data.pdb")
@@ -190,18 +201,8 @@ uniqueidx(v) = unique(i -> v[i], eachindex(v))
 ISOBench() = @time ISORun1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
 ISOLong() = ISORun1(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
 
-function isobench()
-    @time iso = ISOBench()
-    @time run(iso)
-end
-
-function isosave()
-    iso = ISORun()
-    run(iso)
-    savefig("out/lastplot.png")
-end
-
 function save(iso::ISORun, pathlength=300)
+    mkpath("out/latest")
     (; model, losses, data, sim) = iso
     xs, ys = data
     zs = standardform(stratified_x0(model, xs, pathlength))
@@ -209,9 +210,6 @@ function save(iso::ISORun, pathlength=300)
     savefig(plot_learning(losses, data, model), "out/latest/learning.png")
 
     JLD2.save("out/latest/iso.jld2", "iso", iso)
-
-
-
 end
 
 
@@ -227,3 +225,38 @@ function gettarget(xs, ys, model)
     @show lambda, a
     target = (ks .- ((1-lambda)*a)) ./ lambda
 end
+
+function Base.show(io::IO, mime::MIME"text/plain", iso::ISO_ACEMD)
+    println(io, typeof(iso), ":")
+    println(io, " nd=$(iso.nd), np=$(iso.np), nl=$(iso.nl), nres=$(iso.nres), ")
+    println(io, " nx=$(iso.nx), ny=$(iso.ny), nk=$(iso.nk)")
+    println(io, " model: $(iso.model.layers)")
+    println(io, " opt: $(optimizerstring(iso.opt))")
+    println(io, " data: $(size.(iso.data))")
+    length(iso.losses)>0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
+end
+
+optimizerstring(opt) = typeof(opt)
+optimizerstring(opt::NamedTuple) = opt.layers[end].weight.rule
+
+function autotune!(iso::ISORun, targets=[4,1,1,4])
+    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
+    tdata = @elapsed adddata(data, model, sim, ny)
+    tsubdata = @elapsed (subdata = datasubsample(model, data, nx))
+    xs, ys = subdata
+    ttarget = @elapsed target = shiftscale(koopman(model, ys))
+    ttrain = @elapsed learnbatch!(model, xs, target, opt, Inf)
+
+
+    nl = round(Int, ttarget/ttrain   * targets[4]/targets[3])
+    np = max(1, round(Int, tsubdata/ttarget * targets[3]/targets[2]))
+    nres = round(Int, tdata/(tsubdata + np * ttarget + np*nl*ttrain) * sum(targets[2:end])/targets[1])
+
+    iso.nl = nl
+    iso.np = np
+    iso.nres = nres
+
+    return (;tdata, tsubdata, ttarget, ttrain), (;nl, np, nres)
+end
+
+slicedata(data::Tuple, slice) = (data[1][:,slice], data[2][:,slice,:])

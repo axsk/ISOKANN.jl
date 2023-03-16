@@ -8,7 +8,8 @@ using CUDA
 import StochasticDiffEq: SDEProblem, solve
 export PDB_5XER, PDB_6MRR, PDB_ACEMD,
     MollyLangevin, MollySDE,
-    solve, exportdata
+    solve, exportdata,
+    pairnet, pairnetn
 
 abstract type IsoSimulation end
 
@@ -90,6 +91,8 @@ function propagate(ms::MollySDE, x0::AbstractMatrix, ny)
     return ys
 end
 
+solve(ms::MollySDE) = solve(SDEProblem(ms))
+
 #Base.show(io::IO, ::MIME"text/plain", x::System) = print(io, "Molly.System ($(dim(x))D)")
 #Base.show(io::IO, ::MIME"text/plain", x::Type{<:System}) = print(io, "Molly.System (TYPE)")
 
@@ -100,13 +103,7 @@ import Flux
 
 " Neural Network model for molecules, using pairwise distances as first layer "
 function pairnet(sys)
-    n = div(dim(sys), 3)
-    nn = Flux.Chain(
-        flatpairdists,
-        Flux.Dense(n*n, round(Int,n^(4/3)), Flux.sigmoid),
-        Flux.Dense(round(Int,n^(4/3)), round(Int,n^(2/3)), Flux.sigmoid),
-        Flux.Dense(round(Int,n^(2/3)), 1, Flux.sigmoid))
-    return nn
+    pairnetn(div(dim(sys),3), 3)
 end
 
 function pairnet2(sys)
@@ -118,11 +115,21 @@ function pairnet2(sys)
     return nn
 end
 
-
+function pairnetn(n=22, layers=3)
+    nn = Flux.Chain(
+            flatpairdists,
+            [Flux.Dense(
+                round(Int, n^(2*l/layers)),
+                round(Int, n^(2*(l-1)/layers)),
+                Flux.sigmoid)
+            for l in layers:-1:1]...
+        )
+    return nn
+end
 
 ## utils for interaction with the ::Molly.System
 
-## not perfect but better then writing it out
+## not perfect but better then writing it out (but way slower..)
 type_to_tuple(x::System) = (;(fn=>getfield(x, fn) for fn ∈ fieldnames(typeof(x)))...)
 Molly.System(sys::System; kwargs...) = System(;type_to_tuple(sys)..., kwargs...)
 
@@ -149,7 +156,7 @@ setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(center(coords) .+ 
 setcoords(sys::System, coords::Array{<:SVector{3}}) = System(sys;
     coords=coords,
     velocities = copy(sys.velocities),
-    neighbor_finder = deepcopy(sys.neighbor_finder),
+    #    neighbor_finder = deepcopy(sys.neighbor_finder),
 )
 
 """ move the ::System to the GPU, mirroring behavior of Flux.gpu """
@@ -234,6 +241,9 @@ function _solve(ml::MollyLangevin;
     logevery = 1)
     sys = setcoords(ml.sys, u0) :: System
 
+    # this seems to be necessary for multithreading, but expensive
+    sys = System(sys; neighbor_finder = deepcopy(sys.neighbor_finder))
+
     sys = System(sys, loggers=(coords=CoordinateLogger(logevery),))
 
     random_velocities!(sys, ml.temp * u"K")
@@ -263,7 +273,7 @@ function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     return ys
 end
 
-" bugged "
+" bugged as it reinits velocities"
 function solvetraj(ml, u0, T)
     oldT = ml.T
     ml.T = ml.dt
