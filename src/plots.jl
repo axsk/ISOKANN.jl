@@ -1,5 +1,8 @@
 using Plots
 
+export plot_learning,
+    scatter_ramachandran
+
 """
 scatter plot of all first "O" atoms of the starting points `xs`
 as well as the "O" atoms from the koopman samples to the first point from `ys`
@@ -34,7 +37,7 @@ end
 
 ## Plotting
 
-function plot_learning(losses, data, model; maxhist=100_000)
+function plot_learning(losses, data, model; maxhist=1_000_000)
     i = max(1, length(losses)-maxhist)
     p1 = plot(losses[i:end], yaxis=:log, title="loss")
     #p2 = plot(); plotatoms!(data..., model)
@@ -44,14 +47,16 @@ function plot_learning(losses, data, model; maxhist=100_000)
     plot(ps..., layout=(length(ps),1), size=(600,300*length(ps)))
 end
 
+plot_learning(iso) = plot_learning(iso.losses, iso.data, iso.model)
+
 
 """ fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
     xs, ys = data
-    target = shiftscale(koopman(model, ys))
+    target = koopman(model, ys)
     xs = model(xs)|>vec
-    scatter(xs, target, markersize=2, xlabel = "model", ylabel="target")
-    plot!([0, 1], [0,1], legend=false)
+    scatter(xs, target, markersize=2, xlabel = raw"\chi", ylabel=raw"K\chi")
+    plot!([0, 1], [minimum(target),maximum(target)], legend=false)
 end
 
 
