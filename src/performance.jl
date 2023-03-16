@@ -14,6 +14,24 @@ function compareperformance(refmodel, refdata)
     return err
 end
 
+function plot_datacomparison(models, iso, refiso)
+    l1=map(m->loss(m, iso.data), models)
+    l2=map(m->loss(m, refiso.data), models)
+    plot(l1, label="loss train")
+    plot!(l2, label="loss control")
+    plot!(iso.losses[1:div(length(iso.losses), length(models)):end], label="loss running")
+end
+
+
+
+function loggercallback(property, every=10)
+    log = []
+    function logger(;kwargs...)
+        push!(log, deepcopy(kwargs[property]))
+    end
+    return log, throttleiter(logger, every)
+end
+
 function comparecallback(xs, model)
     ref = model(xs)
     err = Float64[]
@@ -42,10 +60,18 @@ function callback_eval(xs, every=100)
 end
 
 function l2diff(model1, model2, data)
-    ks = model1(data)
-    ref = model2(data)
+    ks = model1(data) |> vec
+    ref = model2(data) |> vec
     e = min(sum(abs2, (1 .- ks) .- ref), sum(abs2, ks .- ref)) / length(ks)
     return e
+end
+
+function loss(model, data)
+    xs, ys = data
+    ks = koopman(model, ys)
+    target = shiftscale(ks)
+    l = mean(abs2, (model(xs)|>vec) .- target)
+    return l
 end
 
 function throttleiter(f, i)
