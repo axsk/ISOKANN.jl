@@ -28,7 +28,7 @@ id = "$job-$id"
 function isoreference(id=id, save=true)
     println("computing reference isokann solution $id")
     iso = ISORun(
-        sim=MollyLangevin(sys=PDB_ACEMD(), dt=1e-4),
+        sim=MollyLangevin(sys=PDB_ACEMD()),
         model=pairnetn(22,4),
         opt = Optimisers.Adam(1e-3),
         nd=20_000,

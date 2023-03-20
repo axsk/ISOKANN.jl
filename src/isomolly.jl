@@ -9,9 +9,9 @@ abstract type ISORun end
 
 run(;kwargs...) = run!(ISORun(;kwargs...))
 
-ISORun(;kwargs...) = ISO_ACEMD(;kwargs...)
+ISORun(;kwargs...) = ISO_ACEMD2(;kwargs...)
 
-Base.@kwdef mutable struct ISO_ACEMD <: ISORun # takes 10 min
+Base.@kwdef mutable struct ISO_ACEMD2 <: ISORun # takes 10 min
     nd = 1000 # number of outer datasubsampling steps
     nx = 100  # size of subdata set
     np = 2    # number of poweriterations with the same subdata
@@ -22,16 +22,22 @@ Base.@kwdef mutable struct ISO_ACEMD <: ISORun # takes 10 min
     nk = 8     # number of koopman points to sample
     sim = MollyLangevin(sys=PDB_ACEMD())
     model = pairnet(sim)
-    opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-4), Optimisers.Adam(1e-3))
+    #opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-3), Optimisers.Adam(1e-3))
+    opt = Adam(1e-3)
+    minibatch = Inf
 
     data = bootstrap(sim, ny, nk)
     losses = Float64[]
 end
 
+Regularized(opt, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), opt)
 
-function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=Inf)
+AdamRegularized(adam=1e-3, reg=1e-3) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
+
+
+function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5))
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
-    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
+    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, minibatch) = iso
     datastats(data)
 
     local subdata
@@ -47,14 +53,14 @@ function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5), batchsize=
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
             for i in 1:nl
-                l = learnbatch!(model, xs, target, opt, batchsize)
-                push!(losses, l)
+                ls = learnbatch!(model, xs, target, opt, minibatch)
+                push!(losses, ls)
             end
         end
 
         callback(;model, losses, subdata, data)
 
-        if j%nres == 0
+        if nres > 0 && j%nres == 0
             data = adddata(data, model, sim, ny)
             if size(data[1], 2) > 3000
                 data = datasubsample(model, data, 1000)
@@ -100,9 +106,9 @@ function learnbatch!(model, xs::Matrix, target::Vector, opt, batchsize)
     l = 0.
     for batch in 1:nbatches
         ind = ((batch-1)*batchsize+1):min(batch*batchsize, ndata)
-        l += learnstep!(model, xs[:, ind], target[ind], opt)
+        l += @views learnstep!(model, xs[:, ind], target[ind], opt)
     end
-    return l
+    return l / nbatches  # this is only approx correct for uneven batches
 end
 
 """ single supervised learning step """
@@ -138,6 +144,7 @@ end
 function datasubsample(model, data, nx)
     # chi stratified subsampling
     xs, ys = data
+    size(xs,2) <= nx && return data
     cs = model(xs) |> vec
     ks = shiftscale(cs)
     ix = ISOKANN.subsample_uniformgrid(ks, nx)
@@ -226,9 +233,10 @@ function gettarget(xs, ys, model)
     target = (ks .- ((1-lambda)*a)) ./ lambda
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", iso::ISO_ACEMD)
+function Base.show(io::IO, mime::MIME"text/plain", iso::ISORun)
     println(io, typeof(iso), ":")
-    println(io, " nd=$(iso.nd), np=$(iso.np), nl=$(iso.nl), nres=$(iso.nres), ")
+    show(io, mime, iso.sim)
+    println(io, " nd=$(iso.nd), np=$(iso.np), nl=$(iso.nl), nres=$(iso.nres), minibatch=$(iso.minibatch)")
     println(io, " nx=$(iso.nx), ny=$(iso.ny), nk=$(iso.nk)")
     println(io, " model: $(iso.model.layers)")
     println(io, " opt: $(optimizerstring(iso.opt))")
@@ -258,5 +266,3 @@ function autotune!(iso::ISORun, targets=[4,1,1,4])
 
     return (;tdata, tsubdata, ttarget, ttrain), (;nl, np, nres)
 end
-
-slicedata(data::Tuple, slice) = (data[1][:,slice], data[2][:,slice,:])

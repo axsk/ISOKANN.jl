@@ -20,10 +20,7 @@ getcoords(sim::IsoSimulation) = getcoords(sim.sys)
 defaultmodel(sim::IsoSimulation) = defaultmodel(sim.sys)
 defaultmodel(sys::System) = pairnet(sys::System)
 
-function savecoords(sim::IsoSimulation, traj::AbstractArray;
-    path="out/$(sim.gamma) $(sim.T) $(sim.dt).pdb", kwargs...)
-    savecoords(sim.sys, traj, path; kwargs...)
-end
+
 
 
 
@@ -36,6 +33,12 @@ Base.@kwdef mutable struct MollySDE{S,A} <: IsoSimulation
     T::Float64 = 2e-3 * gamma # in ps   # tuned as to take ~.1 sec computation time
     alg::A = EM()
     n_threads::Int = 1  # number of threads for the force computations
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", sim::IsoSimulation)
+    print(io, isa(sim, MollySDE) ? "Overdamped Langevin" : "Langevin")
+    println(io, " system with $(div(dim(sim.sys),3)) atoms")
+    println(io, " dt=$(sim.dt), T=$(sim.T), temp=$(sim.temp), gamma=$(sim.gamma)")
 end
 
 SDEProblem(ms::MollySDE) = SDEProblem(ms.sys, ms.T;
@@ -184,6 +187,11 @@ function savecoords(sys::System, data::AbstractMatrix, path; append = false)
     end
 end
 
+function savecoords(sim::IsoSimulation, traj::AbstractArray;
+    path="out/$(sim.gamma) $(sim.T) $(sim.dt).pdb", kwargs...)
+    savecoords(sim.sys, traj, path; kwargs...)
+end
+
 
 ## loaders for the molecules in /data
 
@@ -239,6 +247,7 @@ solve(ml; kwargs...) = reduce(hcat, getcoords.(_solve(ml; kwargs...)))
 function _solve(ml::MollyLangevin;
     u0=ml.sys.coords,
     logevery = 1)
+
     sys = setcoords(ml.sys, u0) :: System
 
     # this seems to be necessary for multithreading, but expensive
@@ -262,8 +271,6 @@ function solve_end(ml::MollyLangevin; u0)
     getcoords(_solve(ml; u0, logevery=n_steps)[end])
 end
 
-
-
 function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, nx, ny)
@@ -271,19 +278,4 @@ function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
         ys[:, i, j] = solve_end(ms; u0=copy(x0[:,i]))
     end
     return ys
-end
-
-" bugged as it reinits velocities"
-function solvetraj(ml, u0, T)
-    oldT = ml.T
-    ml.T = ml.dt
-    n_steps = round(Int, T / ml.dt)
-    x = zeros(dim(ml.sys), n_steps+1)
-    x[:, 1] = u0
-    for i in 1:n_steps
-        # this resamples random velocities on each timestep
-        x[:, i+1] = solve(ml; u0=x[:, i])
-    end
-    ml.T = oldT
-    return x
 end

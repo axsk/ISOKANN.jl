@@ -69,6 +69,7 @@ end
 function loss(model, data)
     xs, ys = data
     ks = koopman(model, ys)
+    @show extrema(ks)
     target = shiftscale(ks)
     l = mean(abs2, (model(xs)|>vec) .- target)
     return l

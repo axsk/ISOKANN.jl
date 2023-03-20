@@ -20,5 +20,6 @@ include("isomolly.jl")   # ISOKANN for Molly systems
 include("plots.jl")      # visualizations
 
 include("performance.jl")
+include("data.jl")
 
 end

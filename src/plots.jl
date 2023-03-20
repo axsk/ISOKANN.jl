@@ -42,7 +42,7 @@ function plot_learning(losses, data, model; maxhist=1_000_000)
     p1 = plot(losses[i:end], yaxis=:log, title="loss")
     #p2 = plot(); plotatoms!(data..., model)
     p3 = scatter_chifix(data, model)
-    p2 = scatter_ramachandran(data[1], model)
+    p2 = scatter_ramachandran(reshape(data[2],66,:), model)
     ps = [p1,p2,p3]
     plot(ps..., layout=(length(ps),1), size=(600,300*length(ps)))
 end
