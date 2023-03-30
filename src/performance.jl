@@ -1,5 +1,107 @@
+Base.@kwdef mutable struct TrainlossLogger3
+    data
+    losses = Float64[]
+    every = 100
+end
+
+TrainlossLogger = TrainlossLogger3
+
+function log(l::TrainlossLogger; model, j, kwargs...)
+    j % l.every == 0 && push!(l.losses, loss(model, l.data))
+end
+
+function l2diff(model1, model2, data::DataTuple)
+    ks = model1(data) |> vec
+    ref = model2(data) |> vec
+    e = min(sum(abs2, (1 .- ks) .- ref), sum(abs2, ks .- ref)) / length(ks)
+    return e
+end
+
+Base.@kwdef mutable struct EigenvalueLogger
+    values = []
+    every = 100
+end
+
+function log(l::EigenvalueLogger; j, model, data, kwargs...)
+    j % l.every == 0 && push!(l.values, (;ev=eigenvalue(model, data), evr=eigenvalue_regression(model,data)))
+end
+
+""" estimate the eigenvalue of the chi function at the extrema of the data """
+function eigenvalue(model, data)
+    xs, ys = data
+    cs = model(xs)
+    ks = koopman(model, ys)
+    λ = reduce(-, extrema(ks)) / reduce(-, extrema(cs))
+    return λ
+end
+
+""" estimate the eigenvalue of the chi function by regression over all data """
+function eigenvalue_regression(model, data)
+    xs, ys = data
+    cs = model(xs) |> vec
+    ks = koopman(model, ys)
+    csm = mean(cs)
+    ksm = mean(ks)
+    λ = sum((cs .- csm) .* (ks .- ksm)) / sum(abs2, cs .- csm)
+    return λ
+end
+
+
+Base.@kwdef mutable struct ModelLogger
+    models = []
+    every = 100
+end
+
+function log(l::ModelLogger; model, j, kwargs...)
+    j % l.every != 0 && push!(l.models, model)
+end
+
+function log(f::Function; kwargs...)
+    f(; kwargs...)
+end
+
+
+function loss(model, data)
+    xs, ys = data
+    ks = koopman(model, ys)
+    target = shiftscale(ks)
+    l = mean(abs2, (model(xs) |> vec) .- target)
+    return l
+end
+
+
+## not really used = graveyard
+#=
+
+
+function throttleiter(f, i)
+    c = 0
+    function throttled(args...;kwargs...)
+        c += 1
+        if c%i == 0
+            c = 0
+            f(args...;kwargs...)
+        end
+    end
+    return throttled
+end
+
+function comparecallback(xs, refmodel)
+    ref = refmodel(xs)
+    err = Float64[]
+
+    function compare(;model, kwargs...)
+        ks = model(xs)
+        e = min(sum(abs2, (1 .- ks) .- ref), sum(abs2, ks .- ref)) / length(ks)
+        @show e
+        push!(err, e )
+    end
+
+    return err, compare
+end
+
 function compareperformance(refmodel, refdata)
-    iso = ISORun()
+    iso = IsoRun()
     iso.nd = iso.nres
 
     ref = refmodel(refdata)
@@ -24,27 +126,6 @@ end
 
 
 
-function loggercallback(property, every=10)
-    log = []
-    function logger(;kwargs...)
-        push!(log, deepcopy(kwargs[property]))
-    end
-    return log, throttleiter(logger, every)
-end
-
-function comparecallback(xs, model)
-    ref = model(xs)
-    err = Float64[]
-
-    function compare(;model, kwargs...)
-        ks = model(xs)
-        e = min(sum(abs2, (1 .- ks) .- ref), sum(abs2, ks .- ref)) / length(ks)
-        @show e
-        push!(err, e )
-    end
-
-    return err, compare
-end
 
 function callback_eval(xs, every=100)
     ks = []
@@ -59,39 +140,6 @@ function callback_eval(xs, every=100)
     return ks, evalmodel
 end
 
-function l2diff(model1, model2, data)
-    ks = model1(data) |> vec
-    ref = model2(data) |> vec
-    e = min(sum(abs2, (1 .- ks) .- ref), sum(abs2, ks .- ref)) / length(ks)
-    return e
-end
 
-function loss(model, data)
-    xs, ys = data
-    ks = koopman(model, ys)
-    @show extrema(ks)
-    target = shiftscale(ks)
-    l = mean(abs2, (model(xs)|>vec) .- target)
-    return l
-end
 
-function throttleiter(f, i)
-    c = 0
-    function throttled(args...;kwargs...)
-        c += 1
-        if c%i == 0
-            c = 0
-            f(args...;kwargs...)
-        end
-    end
-    return throttled
-end
-
-function multiplex(fs...)
-    function multiplexed(args...; kwargs...)
-        for f in fs
-            f(args...; kwargs...)
-        end
-    end
-    return multiplexed
-end
+=#

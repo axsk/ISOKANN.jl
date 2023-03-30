@@ -2,6 +2,9 @@
 
 module ISOKANN
 
+using Startup
+
+
 include("utils.jl")     # neural network convenience
 
 include("langevin.jl")  # langevin process
@@ -19,7 +22,10 @@ include("molutils.jl")   # dihedrals, rotation
 include("isomolly.jl")   # ISOKANN for Molly systems
 include("plots.jl")      # visualizations
 
-include("performance.jl")
 include("data.jl")
+include("performance.jl")
+include("benchmarks.jl")
+
+include("cuda.jl") # fixes for cuda
 
 end

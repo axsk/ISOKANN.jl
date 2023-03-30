@@ -1,7 +1,6 @@
 
 import ChainRulesCore
-using CUDA
-using NNlib, NNlibCUDA
+
 
 # Take an array of shape (i,j...) where the i=3*n vectors are the flattened coords of n 3d points.
 # returns the flattened pairwise dists in an array of shape (n^2, j)
@@ -16,13 +15,7 @@ function flatpairdists(x)
     return reshape(p, c*c, s...)
 end
 
-# given an (i,j,k) sized array compute the pairwise dists between j points in i dimensions,
-# batched along dimension k. return a (j,j,k) sized array.
-# in principle this also works for normal Arrays.
-# Its twice as slow however since not using the symmetry
-function batchedpairdists(x::CuArray)
-    p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2,1,3))
-end
+
 
 
 ### custom implementation of multithreaded pairwise distances

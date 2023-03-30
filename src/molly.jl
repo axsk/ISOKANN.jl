@@ -9,7 +9,8 @@ import StochasticDiffEq: SDEProblem, solve
 export PDB_5XER, PDB_6MRR, PDB_ACEMD,
     MollyLangevin, MollySDE,
     solve, exportdata,
-    pairnet, pairnetn
+    pairnet, pairnetn,
+    propagate
 
 abstract type IsoSimulation end
 
@@ -125,7 +126,22 @@ function pairnetn(n=22, layers=3)
                 round(Int, n^(2*l/layers)),
                 round(Int, n^(2*(l-1)/layers)),
                 Flux.sigmoid)
-            for l in layers:-1:1]...
+            for l in layers:-1:1]...,
+
+            #x->x .* 2 .- 1
+        )
+    return nn
+end
+
+function pairnetlin(n=22, layers=3)
+    nn = Flux.Chain(
+            flatpairdists,
+            [Flux.Dense(
+                round(Int, n^(2*l/layers)),
+                round(Int, n^(2*(l-1)/layers)),
+                Flux.sigmoid)
+            for l in layers:-1:2]...,
+            Flux.Dense(round(Int, n^(2/layers)), 1),
         )
     return nn
 end
@@ -162,13 +178,7 @@ setcoords(sys::System, coords::Array{<:SVector{3}}) = System(sys;
     #    neighbor_finder = deepcopy(sys.neighbor_finder),
 )
 
-""" move the ::System to the GPU, mirroring behavior of Flux.gpu """
-gpu(sys::System) = System(sys;
-    atoms = cu(sys.atoms),
-    atoms_data = cu(sys.atoms_data),
-    coords = cu(sys.coords),
-    velocities = cu(sys.velocities),
-)
+
 
 
 ## Save to pdb files
@@ -223,7 +233,7 @@ end
 """ Peptide Dialanine """
 function PDB_ACEMD(;kwargs...)
     ff = OpenMMForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
-    sys = System(joinpath("data", "alanine-dipeptide-nowater av.pdb"), ff,
+    sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
         rename_terminal_res = false, # this is important
         ; kwargs...
     )

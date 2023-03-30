@@ -34,6 +34,9 @@ end
 given a list of values `ys`, return `n`` indices `is` such that `ys[is]` are approximately uniform by
 picking the closest points to a randomly perturbed grid in [0,1]."
 function subsample_uniformgrid(ys, n; keepedges=true)
+    if n <= 2
+        keepedges=false  # TODO: maybe we should warn here?
+    end
     keepedges && (n = n - 2)
     needles = (rand(n)  .+ (0:n-1)) ./ n
     keepedges && (needles = [0; needles; 1])

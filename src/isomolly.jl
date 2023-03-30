@@ -3,46 +3,51 @@ import StatsBase, Zygote, Optimisers, Flux, JLD2
 using LsqFit
 using ProgressMeter
 
-export ISORun, run!, Adam, ISO_ACEMD
+export IsoRun, run!, Adam, AdamRegularized
 
-abstract type ISORun end
+abstract type IsoRun end
 
-run(;kwargs...) = run!(ISORun(;kwargs...))
+run(;kwargs...) = run!(IsoRun(;kwargs...))
 
-ISORun(;kwargs...) = ISO_ACEMD2(;kwargs...)
+IsoRun(;kwargs...) = ISO_ACEMD5(;kwargs...)
 
-Base.@kwdef mutable struct ISO_ACEMD2 <: ISORun # takes 10 min
-    nd = 1000 # number of outer datasubsampling steps
-    nx = 100  # size of subdata set
-    np = 2    # number of poweriterations with the same subdata
-    nl = 5    # number of weight updates  with the same poweriteration step
+Base.@kwdef mutable struct ISO_ACEMD5 <: IsoRun # takes 10 min
+    nd::Integer = 1000 # number of outer datasubsampling steps
+    nx::Integer = 100  # size of subdata set
+    np::Integer = 2    # number of poweriterations with the same subdata
+    nl::Integer = 5    # number of weight updates  with the same poweriteration step
 
-    nres = 50  # resample new data every n outer steps
-    ny = 8     # number of new points to sample
-    nk = 8     # number of koopman points to sample
+    nres::Integer = 50  # resample new data every n outer steps
+    ny::Integer = 8     # number of new points to sample
+    nk::Integer = 8     # number of koopman points to sample
+    nxmax::Integer = 0  # maximal number of x data points
     sim = MollyLangevin(sys=PDB_ACEMD())
     model = pairnet(sim)
-    #opt = Optimisers.OptimiserChain(Optimisers.WeightDecay(1e-3), Optimisers.Adam(1e-3))
-    opt = Adam(1e-3)
+    opt = AdamRegularized()
     minibatch = Inf
 
-    data = bootstrap(sim, ny, nk)
+    data::Tuple = bootstrap(sim, ny, nk)
     losses = Float64[]
+    loggers::Vector = Any[plotcallback(10)]
 end
 
 Regularized(opt, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), opt)
 
-AdamRegularized(adam=1e-3, reg=1e-3) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
+AdamRegularized(adam=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
 
+optparms(iso::IsoRun) = optparms(iso.opt.layers[2].bias.rule)
+optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
+optparms(o::Optimisers.WeightDecay) = (;WeightDecay = o.gamma)
+optparms(o::Optimisers.Adam) = (;Adam = o.eta)
 
-function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5))
+function run!(iso::IsoRun)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
-    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, minibatch) = iso
-    datastats(data)
+    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, minibatch, loggers, nxmax) = iso
+    #datastats(data)
 
     local subdata
 
-    p = Progress(nd, 1)
+    p = Progress(nd, 1, offset=1)
 
     for j in 1:nd
         subdata = datasubsample(model, data, nx)
@@ -58,13 +63,15 @@ function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5))
             end
         end
 
-        callback(;model, losses, subdata, data)
+        for logger in loggers
+            log(logger; model, losses, subdata, data, j, iso)
+        end
 
-        if nres > 0 && j%nres == 0
+        if nres > 0 && j%nres == 0 && (nxmax == 0 || size(data[1], 2) < nxmax)
             data = adddata(data, model, sim, ny)
-            if size(data[1], 2) > 3000
-                data = datasubsample(model, data, 1000)
-            end
+            #if size(data[1], 2) > 3000
+            #    data = datasubsample(model, data, 1000)
+            #end
             iso.data = data
 
             #extractdata(data[1], model, sim.sys)
@@ -76,19 +83,23 @@ function run!(iso::ISORun; callback = Flux.throttle(plotcallback, 5))
     return iso
 end
 
-function plotcallback(;losses, subdata, model, kwargs...)
-    begin
-        p = plot_learning(losses, subdata,model)
-        try display(p) catch e;
-            @warn "could not print ($e)"
+# note there is also plot_callback in isokann.jl
+function plotcallback(secs=10)
+    Flux.throttle(
+        function plotcallback(;iso, subdata, kwargs...)
+            p = plot_learning(iso; subdata)
+            try display(p) catch e;
+                @warn "could not print ($e)"
+            end
         end
-    end
+        , secs)
 end
 
 """ evluation of koopman by shiftscale(mean(model(data))) on the data """
 function koopman(model, ys)
-    cs = model(ys) :: Array{<:Number, 3}
-    ks = vec(StatsBase.mean(cs[1,:,:], dims=2)) :: Vector
+    #ys = Array(ys)
+    cs = model(ys) :: AbstractArray{<:Number, 3}
+    ks = vec(StatsBase.mean(cs[1,:,:], dims=2)) :: AbstractVector
     return ks
 end
 
@@ -96,7 +107,7 @@ end
 shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
 
 """ batched supervised learning for a given batchsize """
-function learnbatch!(model, xs::Matrix, target::Vector, opt, batchsize)
+function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
     ndata = length(target)
     if ndata <= batchsize
         return learnstep!(model, xs, target, opt)
@@ -144,7 +155,7 @@ end
 function datasubsample(model, data, nx)
     # chi stratified subsampling
     xs, ys = data
-    size(xs,2) <= nx && return data
+    size(xs,2) <= nx || nx == 0 && return data
     cs = model(xs) |> vec
     ks = shiftscale(cs)
     ix = ISOKANN.subsample_uniformgrid(ks, nx)
@@ -158,7 +169,7 @@ function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
-    x0 = @views stratified_x0(model, ys[:, firstind:end, :], ny)
+    x0 = stratified_x0(model, ys[:, firstind:end, :], ny)
     ys = propagate(sim, x0, nk)
     ndata = center(x0), center(ys)
     data = hcat.(data, ndata)
@@ -205,10 +216,10 @@ uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
 # default setups
 
-ISOBench() = @time ISORun1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
-ISOLong() = ISORun1(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
+IsoBench() = @time IsoRun1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
+IsoLong() = IsoRun1(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
 
-function save(iso::ISORun, pathlength=300)
+function saveall(iso::IsoRun, pathlength=300)
     mkpath("out/latest")
     (; model, losses, data, sim) = iso
     xs, ys = data
@@ -233,21 +244,22 @@ function gettarget(xs, ys, model)
     target = (ks .- ((1-lambda)*a)) ./ lambda
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", iso::ISORun)
+function Base.show(io::IO, mime::MIME"text/plain", iso::IsoRun)
     println(io, typeof(iso), ":")
     show(io, mime, iso.sim)
     println(io, " nd=$(iso.nd), np=$(iso.np), nl=$(iso.nl), nres=$(iso.nres), minibatch=$(iso.minibatch)")
     println(io, " nx=$(iso.nx), ny=$(iso.ny), nk=$(iso.nk)")
     println(io, " model: $(iso.model.layers)")
     println(io, " opt: $(optimizerstring(iso.opt))")
+    println(io, " loggers: $(length(iso.loggers))")
     println(io, " data: $(size.(iso.data))")
     length(iso.losses)>0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
 end
 
 optimizerstring(opt) = typeof(opt)
-optimizerstring(opt::NamedTuple) = opt.layers[end].weight.rule
+optimizerstring(opt::NamedTuple) = opt.layers[end-1].weight.rule
 
-function autotune!(iso::ISORun, targets=[4,1,1,4])
+function autotune!(iso::IsoRun, targets=[4,1,1,4])
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
     tdata = @elapsed adddata(data, model, sim, ny)
     tsubdata = @elapsed (subdata = datasubsample(model, data, nx))

@@ -37,17 +37,27 @@ end
 
 ## Plotting
 
-function plot_learning(losses, data, model; maxhist=1_000_000)
-    i = max(1, length(losses)-maxhist)
-    p1 = plot(losses[i:end], yaxis=:log, title="loss")
-    #p2 = plot(); plotatoms!(data..., model)
-    p3 = scatter_chifix(data, model)
+function plot_learning(iso; subdata = nothing)
+    (;losses, data, model) = iso
+
+    !isnothing(subdata) && (data = subdata)
+
+    p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss")
+
+    let td = filter(iso.loggers) do l isa(l, TrainlossLogger) end
+        if length(td) > 0 && length(td[1].losses) > 1
+            plot!(range(1, length(losses), length(td[1].losses)), td[1].losses, label = "testloss")
+        end
+    end
+
     p2 = scatter_ramachandran(reshape(data[2],66,:), model)
+
+    p3 = scatter_chifix(data, model)
+    #annotate!(0,0, repr(iso)[1:10])
+
     ps = [p1,p2,p3]
     plot(ps..., layout=(length(ps),1), size=(600,300*length(ps)))
 end
-
-plot_learning(iso) = plot_learning(iso.losses, iso.data, iso.model)
 
 
 """ fixed point plot, i.e. x vs model(x) """
@@ -56,7 +66,7 @@ function scatter_chifix(data, model)
     target = koopman(model, ys)
     xs = model(xs)|>vec
     scatter(xs, target, markersize=2, xlabel = raw"\chi", ylabel=raw"K\chi")
-    plot!([0, 1], [minimum(target),maximum(target)], legend=false)
+    plot!([minimum(xs), maximum(xs)], [minimum(target),maximum(target)], legend=false)
 end
 
 
@@ -70,7 +80,7 @@ end
 
 # good colors
 # berlin, delta, roma, tofino, tokyo
-function scatter_ramachandran(x::Matrix, model=nothing;kwargs...)
+function scatter_ramachandran(x::AbstractMatrix, model=nothing;kwargs...)
     z = nothing
     !isnothing(model) && (z = model(x) |> vec)
     ph = phi(x)

@@ -32,8 +32,8 @@ function phi(x::AbstractVector)
     @views dihedral(x[:, [5,7,9,15]])
 end
 
-phi(x::Matrix) = mapslices(phi, x, dims=1) |> vec
-psi(x::Matrix) = mapslices(psi, x, dims=1) |> vec
+phi(x::AbstractMatrix) = mapslices(phi, x, dims=1) |> vec
+psi(x::AbstractMatrix) = mapslices(psi, x, dims=1) |> vec
 
 function rotationmatrix(e1, e2)
     e1 ./= norm(e1)
