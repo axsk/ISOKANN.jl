@@ -21,36 +21,34 @@ using ISOKANN: IsoSimulation, data_sliced, shuffledata
 using SplitApplyCombine, Dictionaries, Plots
 using StatsBase: mean
 using ProgressMeter
+using JLD2
 
 global isos=Dictionary()
 
-function ISOConvergence(;kwargs...)
-    iso = ISORun(
-            sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=1e-1, temp=298., gamma=100.),
+function IsoConvergence(;kwargs...)
+    iso = IsoRun(
+            sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=2e-2, temp=298., gamma=10.),
             loggers=[];
             kwargs...)
 end
 
-function ISOConvergenceRef()
-    ISOConvergence(; nd=10000, opt=ISOKANN.AdamRegularized(1e-4,1e-5))
+function IsoConvergenceRef()
+    IsoConvergence(; nd=10000, opt=ISOKANN.AdamRegularized(1e-4,1e-5))
 end
 
-function analyse_dataconvergence_high(isos=isos)
+function analyse_dataconvergence_high()
     analyse_dataconvergence(
-        nxtest = 100,
-        nktest=100,
+        nxtest = 300,
+        nktest = 1000,
         mindata=100,
-        maxdata=2_000,
+        maxdata=10_000,
         i=1:5,
-        isos = isos,
-        iso = ISORun(
-            sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=1e-1, temp=298., gamma=10.),
-            loggers=[],)
+
     )
 end
 
 function analyse_dataconvergence_med()
-    analyse_dataconvergence(nxtest = 200, nktest=50, mindata=100, maxdata=1000, i=1:1,
+    analyse_dataconvergence(nxtest = 200, nktest=100, mindata=100, maxdata=2000, i=1:5,
         nk=[1])
 end
 
@@ -67,9 +65,9 @@ function analyse_dataconvergence(;
         maxdata = 16_000,
         trajlength = maxdata,
         isos = Dictionary(),
-        iso = ISORun(sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=1e-1, temp=298., gamma=100.)),
+        iso = IsoConvergence(),
         nx = [10,20,50,100,200,500,1000,2000,5000,10000,20000],
-        nk = [1,2,4,8,16],
+        nk = [1,2,4,8],
         i = 1:5,
         lossevery = 100,
         data_train = nothing,
@@ -128,6 +126,11 @@ function analyse_dataconvergence(;
         next!(p)
     end
 
+    try
+        save("isos.jld2", "isos", isos, "data", (data_train, data_test))
+    catch
+        println("couldnt save")
+    end
 
     return (;isos, data_train, data_test)
 end
@@ -208,7 +211,7 @@ function plotbenchmark(isos; plotargs...)
     end
     plot!(xaxis=:log, yaxis=:log)
 end
-
+using StatsBase:median
 
 
 function plot_isos2(isos)
@@ -220,7 +223,7 @@ function plot_isos2(isos)
                     i.loggers[1].losses[end],
                 isos)
             d = sortkeys(d)
-            d = mean.(d)
+            d = median.(d)
             #d = sortkeys(groupreduce(i->size(i.data[1],2) .* k, i->i.loggers[1].losses[end], mean, isos))
             plot!(collect(keys(d)), collect(values(d)), label="$k$type")
         end

@@ -22,9 +22,6 @@ defaultmodel(sim::IsoSimulation) = defaultmodel(sim.sys)
 defaultmodel(sys::System) = pairnet(sys::System)
 
 
-
-
-
 " Type composing the Molly.System with its integration parameters "
 Base.@kwdef mutable struct MollySDE{S,A} <: IsoSimulation
     sys::S
@@ -107,16 +104,7 @@ import Flux
 
 " Neural Network model for molecules, using pairwise distances as first layer "
 function pairnet(sys)
-    pairnetn(div(dim(sys),3), 3)
-end
-
-function pairnet2(sys)
-    n = div(dim(sys), 3)
-    nn = Flux.Chain(
-        flatpairdists,
-        Flux.Dense(n*n, n, Flux.sigmoid),
-        Flux.Dense(n, 1, Flux.sigmoid))
-    return nn
+    pairnetlin(div(dim(sys),3), 3)
 end
 
 function pairnetn(n=22, layers=3)
@@ -247,7 +235,7 @@ Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
     sys::S
     temp::Float64 = 298. # 298 K = 25 °C
     gamma::Float64 = 1.
-    dt::Float64 = 2e-4 * gamma  # in ps
+    dt::Float64 = 2e-3 * gamma  # in ps
     T::Float64 = 2e-1 * gamma # in ps   # tuned as to take ~.1 sec computation time
     n_threads::Int = 1  # number of threads for the force computations
 end
