@@ -50,7 +50,8 @@ function plot_learning(iso; subdata = nothing)
         end
     end
 
-    p2 = scatter_ramachandran(reshape(data[2],66,:), model)
+    xs, ys = data
+    p2 = scatter_ramachandran(reshape(xs,66,:), model)
 
     p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])

@@ -27,7 +27,7 @@ global isos=Dictionary()
 
 function IsoConvergence(;kwargs...)
     iso = IsoRun(
-            sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=2e-2, temp=298., gamma=10.),
+            sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=2e-2, temp=298., gamma=1.),
             loggers=[];
             kwargs...)
 end

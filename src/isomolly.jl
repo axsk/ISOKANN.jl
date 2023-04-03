@@ -58,7 +58,7 @@ function run!(iso::IsoRun)
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
             for i in 1:nl
-                ls = learnbatch!(model, xs, target, opt, minibatch)
+                ls = learnbatch!(model, Float32.(xs), Float32.(target), opt, minibatch)
                 push!(losses, ls)
             end
         end
@@ -155,7 +155,9 @@ end
 function datasubsample(model, data, nx)
     # chi stratified subsampling
     xs, ys = data
-    size(xs,2) <= nx || nx == 0 && return data
+    if size(xs,2) <= nx || nx == 0
+        return data
+    end
     cs = model(xs) |> vec
     ks = shiftscale(cs)
     ix = ISOKANN.subsample_uniformgrid(ks, nx)
