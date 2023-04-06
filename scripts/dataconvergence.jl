@@ -33,6 +33,140 @@ function addslurm(nworkers=1, ncores=4)
         constraint="Gold6338",)
 end
 
+function experiment(
+    iso = IsoRun(
+        sim=MollyLangevin(
+            sys=PDB_ACEMD(),
+            dt=2e-3,
+            T=2e-1,
+            gamma=10.,
+            temp=200.),
+        loggers=[],)
+    )
+
+    @time refiso, chidata = reference_chi(iso)
+    @time traj, trajdata = reference_pi(iso)
+
+    isos = iso_matrix(;iso, refiso, traj)
+
+    @time pmap(i->run!(i.iso), isos)
+
+    return (;isos, refiso, chidata, traj, trajdata)
+end
+
+
+""" reference solution used for later chi-strat sampling """
+function reference_chi(iso, nd=30_000, nx=200, nk=1_000)
+    iso = deepcopyset(iso, nd = nd)
+
+    @time run!(iso)
+
+    xs = ISOKANN.stratified_x0(iso.model, iso.data[1], nx)
+    ys = @time ISOKANN.propagate(iso.sim, xs, nk)
+
+    chidata = (xs, ys)
+
+    return iso, chidata
+end
+
+""" reference trajectory computation """
+reference_pi(iso::IsoRun, args...) = reference_pi(iso.sim, args...)
+function reference_pi(sim, nx=10_000, nk=200)
+    traj = @time ISOKANN.trajdata(sim, nx)
+
+    inds = sample(1:length(traj), nk, replace=false)
+    xs = traj[:, inds]
+    ys = @time ISOKANN.propagate(iso.sim, xs, 1_000)
+
+    trajdata = (xs,ys)
+
+    return traj, trajdata
+end
+
+function iso_matrix(
+        mindata = 100,
+        maxdata = 16_000,
+        nx = [10,20,50,100,200,500,1000,2000,5000,10000,20000],
+        nk = [1,2,4,8],
+        iso = nothing,
+        refiso = nothing,
+        traj = nothing,
+    )
+    isos = []
+
+    for nx in nx, nk in nk
+        mindata < nx*nk < maxdata || continue
+
+        push!(isos, (;type=:adapt, nx, nk,
+            iso = iso_adapt(iso, nx, nk)))
+
+        if nk == 1
+            push!(isos, (;type=:traj, nx, nk,
+                iso = iso_traj(iso, nx)))
+        end
+
+        if !isnothing(refiso)
+            push!(isos, (;type=:chi, nx, nk,
+                iso = iso_chi(iso, nx, nk; refiso)))
+        end
+
+        if !isnothing(traj)
+            push!(isos, (;type=:pi, nx, nk,
+                iso = iso_pi(iso, nx, nk; traj)))
+        end
+    end
+end
+
+
+""" sample chi-strat adaptively during training """
+function iso_adapt(iso, nx, nk)
+    # adjust resample size to resample up to nxmax=nx after 1/2 of the training
+    ny = max(ceil(Int, nx / (iso.nd/iso.nres*(2/3))),2)
+    return deepcopyset(iso;
+        nxmax = nx,
+        data = ISOKANN.bootstrap(iso.sim, ny, nk),
+        ny = ny)
+end
+
+""" sample and train on trajectory data of length `nx` """
+function iso_traj(iso, nx;)
+    traj = ISOKANN.trajdata(sim, nx)
+    data = ISOKANN.data_from_trajectory(traj, nx)
+    return deepcopyset(iso;
+        nres=0;
+        data = data)
+end
+
+""" trainingsdata is subsampled from a reference iso chi approximation """
+function iso_chi(iso, nx, nk; refiso)
+    xs = ISOKANN.stratified_x0(refiso.model, refiso.data[2], nx)
+    ys = ISOKANN.propagate(iso.sim, xs, nk)
+    return deepcopyset(iso;
+        nres=0;
+        data = (xs, ys))
+end
+
+""" trainingsdata is subsampled from a reference ergodic trajectory """
+function iso_pi(iso, nx, nk; traj)
+    inds = sample(1:size(traj,2), nx, replace=false)
+    xs = traj[:, inds]
+    ys = ISOKANN.propagate(iso.sim, xs, nk)
+    return deepcopyset(iso;
+        nres=0;
+        data = (xs, ys))
+end
+
+""" create a deepcopy of the object and set the kwargs fields """
+function deepcopyset(obj; kwargs...)
+    obj = deepcopy(obj)
+    for (k,v) in kwargs
+        setfield!(obj, k, v)
+    end
+    return obj
+end
+
+#= OLD STUFF
+
 global isos=Dictionary()
 
 function IsoConvergence(;kwargs...)
@@ -56,6 +190,7 @@ function analyse_dataconvergence_high()
 
     )
 end
+
 
 function analyse_dataconvergence_med()
     analyse_dataconvergence(nxtest = 200, nktest=100, mindata=100, maxdata=2000, i=1:5,
@@ -157,13 +292,7 @@ function adjust_nd_to_ndata(iso, ndata)
 end
 
 
-function deepcopyset(obj; kwargs...)
-    obj = deepcopy(obj)
-    for (k,v) in kwargs
-        setfield!(obj, k, v)
-    end
-    return obj
-end
+
 
 function generate_data_traj(sim, nx, warmup = 32)
     xs = ISOKANN.trajdata(sim, nx+warmup)
@@ -246,3 +375,5 @@ function plot_isos2(isos)
     end
     plot!(yaxis=:log, xaxis=:log)
 end
+
+=#

@@ -137,7 +137,7 @@ function shuffledata(data)
     return xs[:, i], ys[:, i, :]
 end
 
-function trajdata(sim, nx, nk)
+function trajdata(sim, nx)
     siml = deepcopy(sim)
     logevery = round(Int, sim.T / sim.dt)
     siml.T = sim.T * nx

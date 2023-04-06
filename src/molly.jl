@@ -160,6 +160,7 @@ end
 
 """ set the system to the given coordinates """
 # TODO: the center shift does not belong here, fix constant
+# TODO2: we can remove this now, that we dont have periodic boxes anymore, right?
 setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(center(coords) .+ 1.36, sys))
 setcoords(sys::System, coords::Array{<:SVector{3}}) = System(sys;
     coords=coords,
@@ -223,7 +224,8 @@ end
 function PDB_ACEMD(;kwargs...)
     ff = OpenMMForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
-        rename_terminal_res = false, # this is important
+        rename_terminal_res = false, # this is important,
+        boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  # need no boundary
         ; kwargs...
     )
     return sys
