@@ -2,16 +2,16 @@
 
 module ISOKANN
 
-using Startup
+using Startup           # precompiles most used packages
 
 
-include("utils.jl")     # neural network convenience
+include("forced/utils.jl")     # neural network convenience
 
-include("langevin.jl")  # langevin process
-include("control.jl")   # opt control
+include("forced/langevin.jl")  # langevin process
+include("forced/control.jl")   # opt control
 
 include("humboldtsample.jl")  # adaptive sampling
-include("isokann.jl")   # new implementation of isokann
+include("forced/isokann.jl")   # new implementation of isokann
 
 export isokann
 
@@ -22,10 +22,11 @@ include("molutils.jl")   # dihedrals, rotation
 include("isomolly.jl")   # ISOKANN for Molly systems
 include("plots.jl")      # visualizations
 
-include("data.jl")
-include("performance.jl")
-include("benchmarks.jl")
+include("data.jl")       # tools for handling the data (sampling, slicing, ...)
+include("performance.jl") # performance metric loggers
+include("benchmarks.jl") # benchmark runs, deprecated by scripts/*
 
-include("cuda.jl") # fixes for cuda
+include("cuda.jl")       # fixes for cuda
 
+include("precompile.jl") # precompile for faster ttx
 end

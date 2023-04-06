@@ -16,18 +16,28 @@ We may also inlcude a test of how many test datapoints (x) are necessary
 
 """
 
-using ISOKANN
+using Distributed, ClusterManagers
+@everywhere using ISOKANN
 using ISOKANN: IsoSimulation, data_sliced, shuffledata
 using SplitApplyCombine, Dictionaries, Plots
 using StatsBase: mean
 using ProgressMeter
 using JLD2
 
+function addslurm(nworkers=1, ncores=4)
+    ps = addprocs(SlurmManager(nworkers),
+        exeflags="-t $ncores",
+        cpus_per_task="$ncores",
+        partition="big",
+        env=["OPENBLAS_NUM_THREADS"=>"$(round(Int, ncores/2))"],
+        constraint="Gold6338",)
+end
+
 global isos=Dictionary()
 
 function IsoConvergence(;kwargs...)
     iso = IsoRun(
-            sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=2e-2, temp=298., gamma=1.),
+            sim=MollyLangevin(sys=PDB_ACEMD(), dt=2e-3, T=5e-2, gamma=100.),
             loggers=[];
             kwargs...)
 end
@@ -56,9 +66,30 @@ function analyse_dataconvergence_test()
     analyse_dataconvergence(nxtest = 10, nktest=4, mindata=1, maxdata=10, i=1:1)
 end
 
+function run_isos(isos)
+    try
+        p = Progress(length(isos))
+        pmap(run!, isos)
+        for (k,v) in pairs(isos)
+            @show k
+            length(v.losses) > 0 && continue
+            run!(v)
+            next!(p)
+        end
 
+        save("isos.jld2", "isos", isos, "data", (data_train, data_test))
+    catch e
+        isa(e, InterruptException) || rethrow(e)
+    finally
+        return (;isos, data_train, data_test)
+    end
+end
 
-function analyse_dataconvergence(;
+function run_parallel(isos)
+    pmap(run!, isos)
+end
+
+function isos_dataconvergence(;
         nxtest  = 100,    # number of x samples for ref data
         nktest = 10_000, # number of k samples for ref data
         mindata = 100,
@@ -118,21 +149,6 @@ function analyse_dataconvergence(;
         end
     end
 
-    p = Progress(length(isos))
-    for (k,v) in pairs(isos)
-        @show k
-        length(v.losses) > 0 && continue
-        run!(v)
-        next!(p)
-    end
-
-    try
-        save("isos.jld2", "isos", isos, "data", (data_train, data_test))
-    catch
-        println("couldnt save")
-    end
-
-    return (;isos, data_train, data_test)
 end
 
 function adjust_nd_to_ndata(iso, ndata)
@@ -150,7 +166,7 @@ function deepcopyset(obj; kwargs...)
 end
 
 function generate_data_traj(sim, nx, warmup = 32)
-    xs, _ = ISOKANN.trajdata(sim, nx+warmup, 0)
+    xs = ISOKANN.trajdata(sim, nx+warmup)
     return ISOKANN.data_from_trajectory(xs[:, warmup+1:end]) :: ISOKANN.DataTuple
 end
 
@@ -223,7 +239,7 @@ function plot_isos2(isos)
                     i.loggers[1].losses[end],
                 isos)
             d = sortkeys(d)
-            d = median.(d)
+            d = mean.(d)
             #d = sortkeys(groupreduce(i->size(i.data[1],2) .* k, i->i.loggers[1].losses[end], mean, isos))
             plot!(collect(keys(d)), collect(values(d)), label="$k$type")
         end

@@ -1,6 +1,5 @@
 import StatsBase, Zygote, Optimisers, Flux, JLD2
 
-using LsqFit
 using ProgressMeter
 
 export IsoRun, run!, Adam, AdamRegularized
@@ -138,82 +137,7 @@ end
 ## DATA MANGLING
 # TODO: better interface
 
-function generatedata(ms, x0, ny)
-    ys = propagate(ms, x0, ny)
-    return center(x0), center(ys)
-end
 
-""" compute initial data by propagating the molecules initial state
-to obtain the xs and propagating them further for the ys """
-function bootstrap(sim::IsoSimulation, nx, ny)
-    x0 = reshape(getcoords(sim), :, 1)
-    xs = reshape(propagate(sim, x0, nx), :, nx)
-    ys = propagate(sim, xs, ny)
-    center(xs), center(ys)
-end
-
-function datasubsample(model, data, nx)
-    # chi stratified subsampling
-    xs, ys = data
-    if size(xs,2) <= nx || nx == 0
-        return data
-    end
-    cs = model(xs) |> vec
-    ks = shiftscale(cs)
-    ix = ISOKANN.subsample_uniformgrid(ks, nx)
-    xs = xs[:,ix]
-    ys = ys[:,ix,:]
-
-    return xs, ys
-end
-
-function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
-    _, ys = data
-    nk = size(ys, 3)
-    firstind = max(size(ys, 2) - lastn + 1, 1)
-    x0 = stratified_x0(model, ys[:, firstind:end, :], ny)
-    ys = propagate(sim, x0, nk)
-    ndata = center(x0), center(ys)
-    data = hcat.(data, ndata)
-
-    datastats(data)
-    return data
-end
-
-""" given an array of states, return a chi stratified subsample """
-function stratified_x0(model, ys, n)
-    ys = reshape(ys, size(ys,1), :)
-    ks = shiftscale(model(ys) |> vec)
-
-    i = subsample_uniformgrid(ks, n)
-    xs = ys[:, i]
-    return xs
-end
-
-function datastats(data)
-    xs, ys = data
-    ext = extrema(xs[1,:])
-    uni = length(unique(xs[1,:]))
-    _, n, ks = size(ys)
-    #println("\n Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
-end
-
-
-""" save data into a pdb file sorted by model evaluation """
-function extractdata(data::AbstractArray, model, sim, path="out/data.pdb")
-    dd = data
-    dd = reshape(dd, size(dd, 1), :)
-    ks = model(dd)
-    i = sortperm(vec(ks))
-    dd = dd[:, i]
-    i = uniqueidx(dd[1,:] |> vec)
-    dd = dd[:, i]
-    dd = standardform(dd)
-    ISOKANN.exportdata(sim, path, dd)
-    dd
-end
-
-uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
 
 # default setups
@@ -232,6 +156,7 @@ function saveall(iso::IsoRun, pathlength=300)
     JLD2.save("out/latest/iso.jld2", "iso", iso)
 end
 
+using LsqFit
 
 function estimate_K(x, Kx)
     @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1-p[1]) * p[2])

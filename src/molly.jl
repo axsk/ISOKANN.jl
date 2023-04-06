@@ -27,8 +27,8 @@ Base.@kwdef mutable struct MollySDE{S,A} <: IsoSimulation
     sys::S
     temp::Float64 = 298. # 298 K = 25 °C
     gamma::Float64 = 10.
-    dt::Float64 = 2e-6 * gamma  # in ps
-    T::Float64 = 2e-3 * gamma # in ps   # tuned as to take ~.1 sec computation time
+    dt::Float64 = 2e-5 # in ps
+    T::Float64 = 2e-2  # in ps   # tuned as to take ~.1 sec computation time
     alg::A = EM()
     n_threads::Int = 1  # number of threads for the force computations
 end
@@ -109,6 +109,7 @@ end
 
 function pairnetn(n=22, layers=3)
     nn = Flux.Chain(
+            x->Float32.(x),
             flatpairdists,
             [Flux.Dense(
                 round(Int, n^(2*l/layers)),
@@ -235,8 +236,8 @@ Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
     sys::S
     temp::Float64 = 298. # 298 K = 25 °C
     gamma::Float64 = 1.
-    dt::Float64 = 2e-3 * gamma  # in ps
-    T::Float64 = 2e-1 * gamma # in ps   # tuned as to take ~.1 sec computation time
+    dt::Float64 = 2e-3  # in ps
+    T::Float64 = 2e-1 # in ps   # tuned as to take ~.1 sec computation time
     n_threads::Int = 1  # number of threads for the force computations
 end
 
