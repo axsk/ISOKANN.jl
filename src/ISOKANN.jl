@@ -4,6 +4,7 @@ module ISOKANN
 
 using Startup           # precompiles most used packages
 
+module IsoForce
 
 include("forced/utils.jl")     # neural network convenience
 
@@ -13,8 +14,10 @@ include("forced/control.jl")   # opt control
 include("humboldtsample.jl")  # adaptive sampling
 include("forced/isokann.jl")   # new implementation of isokann
 
-export isokann
+end
 
+
+include("humboldtsample.jl")  # adaptive sampling
 
 include("pairdists.jl")  # pair distances
 include("molly.jl")      # mainly Molly-SDE interface

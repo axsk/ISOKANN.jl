@@ -75,7 +75,6 @@ function inspecttrajectory(sys)
     @time sol = solve(SDEProblem(sys))
     x = reduce(hcat, sol.u)
     scatter_ramachandran(x) |> display
-    exportdata(sys, x, path="out/inspect.pdb")
     return x
 end
 

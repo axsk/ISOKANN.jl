@@ -8,7 +8,7 @@ using CUDA
 import StochasticDiffEq: SDEProblem, solve
 export PDB_5XER, PDB_6MRR, PDB_ACEMD,
     MollyLangevin, MollySDE,
-    solve, exportdata,
+    solve,
     pairnet, pairnetn,
     propagate
 
@@ -160,7 +160,7 @@ end
 
 """ set the system to the given coordinates """
 # TODO: the center shift does not belong here, fix constant
-# TODO2: we can remove this now, that we dont have periodic boxes anymore, right?
+# Note: Actually the Langevin integrator removes center of mass motion, so we should be fine
 setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(center(coords) .+ 1.36, sys))
 setcoords(sys::System, coords::Array{<:SVector{3}}) = System(sys;
     coords=coords,
@@ -187,9 +187,8 @@ function savecoords(sys::System, data::AbstractMatrix, path; append = false)
     end
 end
 
-function savecoords(sim::IsoSimulation, traj::AbstractArray;
-    path="out/$(sim.gamma) $(sim.T) $(sim.dt).pdb", kwargs...)
-    savecoords(sim.sys, traj, path; kwargs...)
+function savecoords(sim::IsoSimulation, data::AbstractArray, path; kwargs...)
+    savecoords(sim.sys, data, path; kwargs...)
 end
 
 
@@ -225,7 +224,7 @@ function PDB_ACEMD(;kwargs...)
     ff = OpenMMForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
         rename_terminal_res = false, # this is important,
-        boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  # need no boundary
+        #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
         ; kwargs...
     )
     return sys
@@ -275,7 +274,8 @@ end
 function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, nx, ny)
-    @floop for i in 1:nx, j in 1:ny
+    inds = [(i,j) for i in 1:nx, j in 1:ny]
+    Threads.@threads for (i,j) in inds
         ys[:, i, j] = solve_end(ms; u0=copy(x0[:,i]))
     end
     return ys

@@ -87,7 +87,7 @@ function extractdata(data::AbstractArray, model, sim, path="out/data.pdb")
     i = uniqueidx(dd[1,:] |> vec)
     dd = dd[:, i]
     dd = standardform(dd)
-    ISOKANN.exportdata(sim, path, dd)
+    savecoords(sys, dd, path)
     dd
 end
 

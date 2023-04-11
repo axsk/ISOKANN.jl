@@ -20,7 +20,7 @@ using Distributed, ClusterManagers
 @everywhere using ISOKANN
 using ISOKANN: IsoSimulation, data_sliced, shuffledata
 using SplitApplyCombine, Dictionaries, Plots
-using StatsBase: mean
+using StatsBase: mean, sample
 using ProgressMeter
 using JLD2
 
@@ -30,7 +30,8 @@ function addslurm(nworkers=1, ncores=4)
         cpus_per_task="$ncores",
         partition="big",
         env=["OPENBLAS_NUM_THREADS"=>"$(round(Int, ncores/2))"],
-        constraint="Gold6338",)
+        constraint="Gold6338",
+        time="30-00:00:00")
 end
 
 function experiment(
@@ -44,12 +45,18 @@ function experiment(
         loggers=[],)
     )
 
-    @time refiso, chidata = reference_chi(iso)
-    @time traj, trajdata = reference_pi(iso)
+
+    @time refiso, chidata = reference_chi(iso)  # 1400 sec
+    @time traj, trajdata = reference_pi(iso)    # 66 sec
 
     isos = iso_matrix(;iso, refiso, traj)
 
+    ps = addslurm(32,4)
+
     @time pmap(i->run!(i.iso), isos)
+    rmprocs(ps)
+
+    @save "isos.jld2" refiso chidata traj trajdata isos
 
     return (;isos, refiso, chidata, traj, trajdata)
 end
@@ -71,19 +78,19 @@ end
 
 """ reference trajectory computation """
 reference_pi(iso::IsoRun, args...) = reference_pi(iso.sim, args...)
-function reference_pi(sim, nx=10_000, nk=200)
-    traj = @time ISOKANN.trajdata(sim, nx)
+function reference_pi(sim, nd=10_000, nx=200, nk=1)
+    traj = @time ISOKANN.trajdata(sim, nd)
 
-    inds = sample(1:length(traj), nk, replace=false)
+    inds = sample(1:size(traj, 2), nx, replace=false)
     xs = traj[:, inds]
-    ys = @time ISOKANN.propagate(iso.sim, xs, 1_000)
+    ys = @time ISOKANN.propagate(iso.sim, xs, nk)
 
     trajdata = (xs,ys)
 
     return traj, trajdata
 end
 
-function iso_matrix(
+function iso_matrix(;
         mindata = 100,
         maxdata = 16_000,
         nx = [10,20,50,100,200,500,1000,2000,5000,10000,20000],
@@ -95,7 +102,7 @@ function iso_matrix(
     isos = []
 
     for nx in nx, nk in nk
-        mindata < nx*nk < maxdata || continue
+        mindata <= nx*nk <= maxdata || continue
 
         push!(isos, (;type=:adapt, nx, nk,
             iso = iso_adapt(iso, nx, nk)))
@@ -115,6 +122,7 @@ function iso_matrix(
                 iso = iso_pi(iso, nx, nk; traj)))
         end
     end
+    return isos
 end
 
 
@@ -130,11 +138,10 @@ end
 
 """ sample and train on trajectory data of length `nx` """
 function iso_traj(iso, nx;)
-    traj = ISOKANN.trajdata(sim, nx)
+    traj = ISOKANN.trajdata(iso.sim, nx)
     data = ISOKANN.data_from_trajectory(traj, nx)
     return deepcopyset(iso;
-        nres=0;
-        data = data)
+        nres=0, data)
 end
 
 """ trainingsdata is subsampled from a reference iso chi approximation """
@@ -142,18 +149,16 @@ function iso_chi(iso, nx, nk; refiso)
     xs = ISOKANN.stratified_x0(refiso.model, refiso.data[2], nx)
     ys = ISOKANN.propagate(iso.sim, xs, nk)
     return deepcopyset(iso;
-        nres=0;
-        data = (xs, ys))
+        nres=0, data = (xs, ys))
 end
 
 """ trainingsdata is subsampled from a reference ergodic trajectory """
 function iso_pi(iso, nx, nk; traj)
-    inds = sample(1:size(traj,2), nx, replace=false)
+    inds = sample(1:size(traj, 2), nx, replace=false)
     xs = traj[:, inds]
     ys = ISOKANN.propagate(iso.sim, xs, nk)
     return deepcopyset(iso;
-        nres=0;
-        data = (xs, ys))
+        nres=0, data = (xs, ys))
 end
 
 """ create a deepcopy of the object and set the kwargs fields """

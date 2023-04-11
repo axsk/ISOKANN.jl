@@ -150,8 +150,8 @@ function saveall(iso::IsoRun, pathlength=300)
     (; model, losses, data, sim) = iso
     xs, ys = data
     zs = standardform(stratified_x0(model, xs, pathlength))
-    savecoords(sim, zs, path="out/latest/path.pdb")
-    savefig(plot_learning(losses, data, model), "out/latest/learning.png")
+    savecoords(sim, zs, "out/latest/path.pdb")
+    savefig(plot_learning(iso), "out/latest/learning.png")
 
     JLD2.save("out/latest/iso.jld2", "iso", iso)
 end
