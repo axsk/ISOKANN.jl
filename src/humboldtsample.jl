@@ -64,3 +64,47 @@ function pickclosest(haystack::AbstractVector, needles::AbstractVector)
     end
     return picks
 end
+
+function pickclosestloop(hs::AbstractVector, ns::AbstractVector)
+    ih = sortperm(hs)  # this is where all the time goes
+    hs = hs[ih]
+    ns = sort(ns)
+    rs = _pickclosestloop(hs, ns)
+    return ih[rs]
+end
+
+function _pickclosestloop(hs::AbstractVector, ns::AbstractVector)
+    @assert issorted(hs) && issorted(ns)
+    avl = fill(true, length(hs))
+    rs = Int[]
+    i = 1
+    for n in ns
+        di = abs(hs[i] - n)
+        while true
+            j = findnext(avl, i+1)
+            if !isnothing(j) && ((dj = abs(hs[j] - n)) < di)
+                di = dj
+                i = j
+            else
+                push!(rs, i)
+                avl[i] = false
+                i = findprev(avl, i)
+                break
+            end
+        end
+        if isnothing(i)
+            i = findfirst(avl)
+            isnothing(i) && break
+        end
+    end
+    return rs
+end
+
+function pickclosest_test(hs, ns)
+    hs = sort(hs)
+    ns = sort(ns)
+    i1 = pickclosest(hs, ns)
+    i2 = pickclosestloop(hs, ns)
+    @assert i1 == i2
+    i1
+end
