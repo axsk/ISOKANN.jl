@@ -2,6 +2,11 @@ using ISOKANN
 #using Flux
 using Test
 
+@testset "IsoRun CPU" begin
+    iso = ISOKANN.IsoRun(loggers=[])
+    ISOKANN.run!(iso)
+end
+
 @testset "IsoRun GPU" begin
     using Flux
     using CUDA

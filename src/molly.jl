@@ -139,8 +139,24 @@ end
 ## utils for interaction with the ::Molly.System
 
 ## not perfect but better then writing it out (but way slower..)
-type_to_tuple(x::System) = (;(fn=>getfield(x, fn) for fn ∈ fieldnames(typeof(x)))...)
-Molly.System(sys::System; kwargs...) = System(;type_to_tuple(sys)..., kwargs...)
+function Molly.System(s::System; kwargs...)
+    System(;
+        atoms = s.atoms,
+        atoms_data = s.atoms_data,
+        pairwise_inters = s.pairwise_inters,
+        specific_inter_lists = s.specific_inter_lists,
+        general_inters = s.general_inters,
+        constraints = s.constraints,
+        coords = s.coords,
+        velocities = s.velocities,
+        boundary = s.boundary,
+        neighbor_finder = s.neighbor_finder,
+        loggers = s.loggers,
+        force_units = s.force_units,
+        energy_units = s.energy_units,
+        k = s.k,
+        kwargs...)
+end
 
 """ extract the unitful SVector coords from `sys` and return as a normal vector """
 getcoords(sys::System) = getcoords(sys.coords)
@@ -198,7 +214,7 @@ end
 const molly_data_dir = joinpath(dirname(pathof(Molly)), "..", "data")
 
 function PDB_6MRR()
-    ff = OpenMMForceField(
+    ff = MolecularForceField(
         joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"),
         joinpath(molly_data_dir, "force_fields", "tip3p_standard.xml"),
         joinpath(molly_data_dir, "force_fields", "his.xml"),
@@ -222,7 +238,7 @@ end
 
 """ Peptide Dialanine """
 function PDB_ACEMD(;kwargs...)
-    ff = OpenMMForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
+    ff = MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
         rename_terminal_res = false, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
@@ -252,9 +268,12 @@ function _solve(ml::MollyLangevin;
     sys = setcoords(ml.sys, u0) :: System
 
     # this seems to be necessary for multithreading, but expensive
-    sys = System(sys; neighbor_finder = deepcopy(sys.neighbor_finder))
-
-    sys = System(sys, loggers=(coords=CoordinateLogger(logevery),))
+    #sys.neighbor_finder = deepcopy(sys.neighbor_finder)
+    #sys.loggers = loggers=(coords=CoordinateLogger(logevery))
+    sys = System(sys;
+        neighbor_finder = deepcopy(sys.neighbor_finder),
+        loggers=(coords=CoordinateLogger(logevery),)
+        )
 
     random_velocities!(sys, ml.temp * u"K")
     simulator = Langevin(
@@ -277,7 +296,7 @@ function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     ys = zeros(dim, nx, ny)
     inds = [(i,j) for i in 1:nx, j in 1:ny]
     Threads.@threads for (i,j) in inds
-        ys[:, i, j] = solve_end(ms; u0=copy(x0[:,i]))
+        ys[:, i, j] = solve_end(ms; u0=x0[:,i])
     end
     return ys
 end

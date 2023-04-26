@@ -43,6 +43,7 @@ function subsample_uniformgrid(ys, n; keepedges=true)
     pickclosest(ys, needles)
 end
 
+pickclosest(hs::AbstractVector, ns::AbstractVector) = pickclosestloop(hs, ns)
 
 " pickclosest(haystack, needles)
 
@@ -51,7 +52,7 @@ by removing haystack candidates after a match.
 Note that this is not invariant under pertubations of needles
 
 scales with n log(n) m where n=length(haystack), m=length(needles) "
-function pickclosest(haystack::AbstractVector, needles::AbstractVector)
+function pickclosest_sort(haystack::AbstractVector, needles::AbstractVector)
     picks = Int[]
     for needle in needles
         inds = sortperm(norm.(haystack .- needle))
@@ -74,6 +75,7 @@ function pickclosestloop(hs::AbstractVector, ns::AbstractVector)
     rs = _pickclosestloop(hs, ns)
     return ih[rs]
 end
+
 
 """ scales with n=length(hs) """
 function _pickclosestloop(hs::AbstractVector, ns::AbstractVector)
