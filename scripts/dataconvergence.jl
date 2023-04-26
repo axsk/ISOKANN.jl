@@ -23,14 +23,15 @@ using SplitApplyCombine, Dictionaries, Plots
 using StatsBase: mean, sample
 using ProgressMeter
 using JLD2
+using Random
 
 function addslurm(nworkers=1, ncores=4)
     ps = addprocs(SlurmManager(nworkers),
         exeflags="-t $ncores",
+        env=["OPENBLAS_NUM_THREADS"=>"$(round(Int, ncores/2))"],
         cpus_per_task="$ncores",
         partition="big",
-        env=["OPENBLAS_NUM_THREADS"=>"$(round(Int, ncores/2))"],
-        constraint="Gold6338",
+        #constraint="Gold6338",
         time="30-00:00:00")
 end
 
@@ -51,24 +52,66 @@ function experiment(
 
     isos = iso_matrix(;iso, refiso, traj)
 
-    ps = addslurm(32,4)
+    ##ps = addslurm(32,4)
+    # find a way to run @everywhere here, eval?
 
-    @time pmap(i->run!(i.iso), isos)
-    rmprocs(ps)
+    isos = @time pmap(i->(;i..., iso = run!(i.iso)), isos)
+    ##rmprocs(ps)
 
-    @save "isos.jld2" refiso chidata traj trajdata isos
+    @save "dataconvergence.jld2" refiso chidata traj trajdata isos
 
     return (;isos, refiso, chidata, traj, trajdata)
 end
 
+function expl_expl_tradeoff(;
+        iso = IsoRun(
+            sim=MollyLangevin(
+                sys=PDB_ACEMD(),
+                dt=2e-3,
+                T=2e-1,
+                gamma=10.,
+                temp=200.),
+            loggers=[],),
+        nk=[1,2,4,8,16,32],
+        maxdata = 15_000,
+        iters=20,
+    )
+
+    Random.seed!(1337)
+
+    println("computing reference solution")
+    @time refiso, chidata = reference_chi(iso; nd=30_000, nx=200, nk=1000)
+
+    println("generating the iso matrix")
+    isos = iso_matrix(;iso, refiso, iso_adapt=false, iso_traj=false,
+        nk, maxdata, iters)
+
+    println("running experiments")
+    isos = @time pmap(i->(;i..., iso = run!(i.iso)), isos)
+
+    return (;isos, refiso, chidata)
+end
+
+function thesis()
+    isos, refiso, chidata = expl_expl_tradeoff()
+    p = plot_dataconvergence(isos, chidata)
+    savefig("scripts/dataconvergence.jl")
+
+    return (;isos, refiso, chidata, p)
+end
+
 
 """ reference solution used for later chi-strat sampling """
-function reference_chi(iso, nd=30_000, nx=200, nk=1_000)
+function reference_chi(iso; nd=30_000, nx=200, nk=1_000)
     iso = deepcopyset(iso, nd = nd)
 
     @time run!(iso)
 
+    liso = size(iso.data[1],2)
+    liso < nx && @warn("iso has not enough samples to generate data ($liso < $nx)")
+
     xs = ISOKANN.stratified_x0(iso.model, iso.data[1], nx)
+    println("Computing reference_chi->propagate()")
     ys = @time ISOKANN.propagate(iso.sim, xs, nk)
 
     chidata = (xs, ys)
@@ -83,7 +126,7 @@ function reference_pi(sim, nd=10_000, nx=200, nk=1)
 
     inds = sample(1:size(traj, 2), nx, replace=false)
     xs = traj[:, inds]
-    ys = @time ISOKANN.propagate(iso.sim, xs, nk)
+    ys = @time ISOKANN.propagate(sim, xs, nk)
 
     trajdata = (xs,ys)
 
@@ -93,21 +136,26 @@ end
 function iso_matrix(;
         mindata = 100,
         maxdata = 16_000,
-        nx = [10,20,50,100,200,500,1000,2000,5000,10000,20000],
-        nk = [1,2,4,8],
+        nx = [10,20,50,100,200,400,800,1600,3200,6400,12800, 24560],
+        nk = [1,2,4],
+        iters = 5,
         iso = nothing,
         refiso = nothing,
         traj = nothing,
+        iso_adapt = true,
+        iso_traj = true
     )
     isos = []
 
-    for nx in nx, nk in nk
+    for nx in nx, nk in nk, i in 1:iters
         mindata <= nx*nk <= maxdata || continue
 
-        push!(isos, (;type=:adapt, nx, nk,
-            iso = iso_adapt(iso, nx, nk)))
+        if iso_adapt
+            push!(isos, (;type=:adapt, nx, nk,
+                iso = iso_adapt(iso, nx, nk)))
+        end
 
-        if nk == 1
+        if iso_traj && nk == 1
             push!(isos, (;type=:traj, nx, nk,
                 iso = iso_traj(iso, nx)))
         end
@@ -168,6 +216,66 @@ function deepcopyset(obj; kwargs...)
         setfield!(obj, k, v)
     end
     return obj
+end
+
+using StatsBase: mean, median
+
+function plot_dataconvergence(isos, testdata)
+    plot()
+    ind = 1
+    for ((type, nk), is) in sort((pairs(group(x->(x.type, x.nk), isos))))
+        #nk > 2 && continue
+        d = group(i->size(i.iso.data[1],2) .* nk,
+                i->ISOKANN.loss(i.iso.model, testdata),
+                is)
+        d = sortkeys(d)
+        @show length.(d), type, nk
+
+        xs = [datasize(i.iso) for i in is]
+        ys = [ISOKANN.loss(i.iso.model, testdata) for i in is]
+        scatter!(xs, ys, label="", c=ind)
+
+        global RES = d
+        d = mean.(d)
+        plot!(collect(keys(d)), collect(values(d)), label="$nk$type", c=ind)
+        ind += 1
+    end
+    plot!(yaxis=:log, xaxis=:log)
+end
+
+function scatter_dataconvergence(isos, testdata)
+    plot()
+    for ((type, nk), isos) in pairs(group(x->(x.type, x.nk), isos))
+
+
+        xs = [datasize(i.iso) for i in isos]
+        ys = [ISOKANN.loss(i.iso.model, testdata) for i in isos]
+        scatter!(xs, ys, label="$nk$type")
+    end
+    plot!(yaxis=:log, xaxis=:log)
+end
+
+
+function datasize(iso)
+    s = size(iso.data[2])
+    s[2]*s[3]
+end
+
+function plot_isos2(isos)
+    plot()
+    for (type, isos) in pairs(group(kv -> kv[1].type, kv->kv[2], pairs(isos)))
+        for (k, isos) in pairs(group(i->i.nk, isos))
+            @show k
+            d = group(i->size(i.data[1],2) .* k, i->
+                    i.loggers[1].losses[end],
+                isos)
+            d = sortkeys(d)
+            d = mean.(d)
+            #d = sortkeys(groupreduce(i->size(i.data[1],2) .* k, i->i.loggers[1].losses[end], mean, isos))
+            plot!(collect(keys(d)), collect(values(d)), label="$k$type")
+        end
+    end
+    plot!(yaxis=:log, xaxis=:log)
 end
 
 #= OLD STUFF
