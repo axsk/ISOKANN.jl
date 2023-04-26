@@ -82,7 +82,8 @@ function propagate(ms::MollySDE, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, nx, ny)
     sde = SDEProblem(ms)
-    @floop for i in 1:nx, j in 1:ny
+    inds = [(i,j) for i in 1:nx, j in 1:ny]
+    Threads.@threads for (i,j) in inds
         #  the tspan fixes u0 assignment (https://github.com/SciML/DiffEqBase.jl/issues/883)
         # TODO: save only at end position
         sol = solve(sde; u0=x0[:,i], tspan=(0,sde.tspan[2]))

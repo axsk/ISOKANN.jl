@@ -8,9 +8,9 @@ abstract type IsoRun end
 
 run(;kwargs...) = run!(IsoRun(;kwargs...))
 
-IsoRun(;kwargs...) = ISO_ACEMD5(;kwargs...)
+IsoRun(;kwargs...) = ISO_ACEMD6(;kwargs...)
 
-Base.@kwdef mutable struct ISO_ACEMD5 <: IsoRun # takes 10 min
+Base.@kwdef mutable struct ISO_ACEMD6 <: IsoRun # takes 10 min
     nd::Integer = 1000 # number of outer datasubsampling steps
     nx::Integer = 100  # size of subdata set
     np::Integer = 2    # number of poweriterations with the same subdata
@@ -159,8 +159,8 @@ end
 using LsqFit
 
 function estimate_K(x, Kx)
-    @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1-p[1]) * p[2])
-    fit = curve_fit(Kinv, vec(x), vec(Kx), [.5, 1])
+    @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1-p[1]) * p[2])  # define the parametric inverse of K
+    fit = curve_fit(Kinv, vec(x), vec(Kx), [.5, 1])     # lsq regression
     lambda, a = coef(fit)
 end
 

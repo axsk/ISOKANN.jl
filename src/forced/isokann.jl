@@ -1,7 +1,7 @@
 # cleaner and simpler reimplementation of ISOKANN (1)
 import Flux
 import StatsBase
-import Optimisers: setup, Adam, update!
+import Optimisers
 import Plots
 using Plots: plot, plot!, scatter!, savefig, contour
 using Random

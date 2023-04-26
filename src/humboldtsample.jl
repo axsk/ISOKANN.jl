@@ -48,7 +48,9 @@ end
 
 Return the indices into haystack which lie closest to `needles` without duplicates
 by removing haystack candidates after a match.
-Note that this is not invariant under pertubations of needles"
+Note that this is not invariant under pertubations of needles
+
+scales with n log(n) m where n=length(haystack), m=length(needles) "
 function pickclosest(haystack::AbstractVector, needles::AbstractVector)
     picks = Int[]
     for needle in needles
@@ -73,10 +75,11 @@ function pickclosestloop(hs::AbstractVector, ns::AbstractVector)
     return ih[rs]
 end
 
+""" scales with n=length(hs) """
 function _pickclosestloop(hs::AbstractVector, ns::AbstractVector)
     @assert issorted(hs) && issorted(ns)
-    avl = fill(true, length(hs))
-    rs = Int[]
+    avl = fill(true, length(hs)) # available indices
+    rs = Int[]  # picked indices
     i = 1
     for n in ns
         di = abs(hs[i] - n)
