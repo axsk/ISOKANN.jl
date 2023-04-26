@@ -13,9 +13,10 @@ using Test
 end
 
 @testset "ISOKANN.jl" begin
-    ISOKANN.test_GirsanovSDE()
-    ISOKANN.test_optcontrol()
+    using ISOKANN.IsoForce: test_GirsanovSDE, test_optcontrol, isokann, Doublewell
+    test_GirsanovSDE()
+    test_optcontrol()
 
     @time isokann()
-    @time isokann(dynamics = ISOKANN.Doublewell(dim=2))
+    @time isokann(dynamics = Doublewell(dim=2))
 end
