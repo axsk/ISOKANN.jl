@@ -10,12 +10,6 @@ using StatsBase: sample
 
 DataTuple = Tuple{Matrix{T}, Array{T, 3}} where T<:Number
 
-
-function generatedata(ms, x0, ny)
-    ys = propagate(ms, x0, ny)
-    return center(x0), center(ys)
-end
-
 using JLD2
 function load_refiso()
     load("isoreference-6440710-0.jld2", "iso")
@@ -44,6 +38,36 @@ function datasubsample(model, data, nx)
 
     return xs, ys
 end
+
+
+function subsample_inds(model, xs, n)
+    ks = shiftscale(model(xs) |> vec)
+    i = subsample_uniformgrid(ks, n)
+end
+
+""" subsample n points of data uniformly according to the provided model
+
+Works for points provided either as plain Array or as (xs, ys) data tuple
+
+subsample(model, data::Array, n) :: Matrix
+subsample(model, data::Tuple, n) :: Tuple
+"""
+function subsample(model, xs::AbstractArray{<:Any, 2}, n)
+    xs[:, subsample_inds(model, xs, n)]
+end
+
+function subsample(model, ys::AbstractArray{<:Any, 3}, n)
+    xs = reshape(ys, size(ys, 1), :)
+    subsample(model, xs, n)
+end
+
+function subsample(model, data::Tuple, n)
+    xs, ys = data
+    @show ix = subsample_inds(model, xs, n)
+    return (xs[:, ix], ys[:, ix, :])
+end
+
+
 
 function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
     _, ys = data
