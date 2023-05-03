@@ -87,7 +87,7 @@ function _pickclosestloop(hs::AbstractVector, ns::AbstractVector)
         di = abs(hs[i] - n)
         while true
             j = findnext(avl, i+1)
-            if !isnothing(j) && ((dj = abs(hs[j] - n)) < di)
+            if !isnothing(j) && ((dj = abs(hs[j] - n)) <= di)
                 di = dj
                 i = j
             else
