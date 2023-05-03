@@ -92,13 +92,7 @@ function expl_expl_tradeoff(;
     return (;isos, refiso, chidata)
 end
 
-function thesis()
-    isos, refiso, chidata = expl_expl_tradeoff()
-    p = plot_dataconvergence(isos, chidata)
-    savefig("scripts/dataconvergence.jl")
 
-    return (;isos, refiso, chidata, p)
-end
 
 
 """ reference solution used for later chi-strat sampling """
