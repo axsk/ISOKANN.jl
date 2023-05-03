@@ -11,11 +11,14 @@ function flatpairdists(x)
     d, s... = size(x)
     c = div(d,3)
     b = reshape(x, 3, c, :)
-    p = batchedpairdists(b)
+    p = simplepairdists(b)
     return reshape(p, c*c, s...)
 end
 
-
+function simplepairdists(x)
+        p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2,1,3))
+        return p
+end
 
 
 ### custom implementation of multithreaded pairwise distances
