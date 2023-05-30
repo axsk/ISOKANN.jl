@@ -33,6 +33,17 @@ function reactionforce(sim, x, chi, direction=1, orth=0.01)
     collect(f)
 end
 
+function energyminforce(sim, x)
+    sys = setcoords(sim.sys, x)
+    v = Molly.accelerations(sys, find_neighbors(sys))  # TODO: scale with gamma?
+    return v / norm(v)
+end
+
+function energyminimization(sim, x0; t=0.1, dt=0.0001, kwargs...)
+    solve(ODEProblem((x,p,t)->energyminforce(sim, x), x0, 0.1, solver; dt, kwargs...))
+    return s.u[end]
+end
+
 
 function transitionpath(sim, x0, chi; orth = 0.01, solver=Rosenbrock23(), tmax = 1, kwargs...)
     direction = (first(chi(x0))) > 0.5 ? -1 : 1
@@ -42,15 +53,15 @@ function transitionpath(sim, x0, chi; orth = 0.01, solver=Rosenbrock23(), tmax =
 end
 
 export reactionpath
-function reactionpath(sim, x0, chi; extrapolate=0.01, orth=0.01, solver=Euler(), kwargs...)
+function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Euler(), dt=0.0001, kwargs...)
 
     t0 = chi(x0) |> first
     @show t0
 
-    bw = solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, -1, orth), x0, (0-extrapolate, t0)), solver; kwargs...)
+    bw = solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, -1, orth), x0, (0-extrapolate, t0)), solver; dt, kwargs...)
     #@show bw.stats
 
-    fw = solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, 1, orth), x0, (t0, 1+extrapolate)), solver; kwargs...)
+    fw = solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, 1, orth), x0, (t0, 1+extrapolate)), solver; dt, kwargs...)
     #@show fw.stats
 
     fw = reduce(hcat, fw.u)
@@ -58,6 +69,16 @@ function reactionpath(sim, x0, chi; extrapolate=0.01, orth=0.01, solver=Euler(),
 
     u = hcat(bw[:, end:-1:1], fw)
 end
+
+function reactionpath(iso::IsoRun; kwargs...)
+    xs, ys = iso.data
+    x0 = xs[:, rand(1:size(xs, 2))]
+    reactionpath(iso.sim, x0, iso.model; kwargs...)
+end
+
+
+## now come my attempts to fit the orthogonal speed to the "average χ-speed",
+## which however does not extist .. :D
 
 using SpecialFunctions: erf
 

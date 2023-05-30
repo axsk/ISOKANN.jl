@@ -39,7 +39,7 @@ optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
 optparms(o::Optimisers.WeightDecay) = (;WeightDecay = o.gamma)
 optparms(o::Optimisers.Adam) = (;Adam = o.eta)
 
-function run!(iso::IsoRun)
+function run!(iso::IsoRun, showprogress=true)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, minibatch, loggers, nxmax) = iso
     #datastats(data)
@@ -76,7 +76,7 @@ function run!(iso::IsoRun)
             #extractdata(data[1], model, sim.sys)
         end
 
-        ProgressMeter.next!(p; showvalues = ()->[(:loss, losses[end]), (:n, length(losses)), (:data, size(data[2]))])
+        showprogress && ProgressMeter.next!(p; showvalues = ()->[(:loss, losses[end]), (:n, length(losses)), (:data, size(data[2]))])
     end
 
     return iso

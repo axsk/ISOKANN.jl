@@ -57,7 +57,7 @@ function plot_learning(iso; subdata = nothing)
     #annotate!(0,0, repr(iso)[1:10])
 
     ps = [p1,p2,p3]
-    plot(ps..., layout=(length(ps),1), size=(600,300*length(ps)))
+    plot(ps..., layout=(length(ps),1), size=(400,300*length(ps)))
 end
 
 
