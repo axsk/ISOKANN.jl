@@ -1,9 +1,10 @@
 ## Interface to the Molly.System
 
-using Molly: System
+using Molly: Molly, System
 using Unitful
+using StaticArrays
 
-export PDB_5XER, PDB_6MRR, PDB_ACEMD,
+export PDB_5XER, PDB_6MRR, PDB_ACEMD
 
 dim(sys::System) = length(sys.atoms) * 3
 defaultmodel(sys::System) = pairnet(sys::System)
@@ -52,7 +53,7 @@ end
 """ extract the unitful SVector coords from `sys` and return as a normal vector """
 getcoords(sys::System) = getcoords(sys.coords)
 function getcoords(coords::AbstractArray)
-    x0 = ustrip_vec(coords)
+    x0 = Molly.ustrip_vec(coords)
     x0 = reduce(vcat, x0)
     return x0 :: AbstractVector
 end
@@ -123,7 +124,7 @@ end
 
 """ Peptide Dialanine """
 function PDB_ACEMD(;kwargs...)
-    ff = MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
+    ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
         rename_terminal_res = false, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search

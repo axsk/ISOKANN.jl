@@ -1,6 +1,6 @@
 using Parameters
 using StochasticDiffEq
-import StochasticDiffEq: SDEProblem
+import StochasticDiffEq: SDEProblem  # does this incur invalidations?
 import ForwardDiff
 
 abstract type AbstractLangevin end

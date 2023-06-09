@@ -2,7 +2,7 @@
 # Neural Network model for mol
 
 import Flux
-export pairnet, pairnetn,
+export pairnet, pairnetn
 
 " Neural Network model for molecules, using pairwise distances as first layer "
 function pairnet(sys)

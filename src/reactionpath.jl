@@ -4,6 +4,8 @@
 using Zygote
 using OrdinaryDiffEq
 
+export reactionpath
+
 function reactionforce(sim, x, chi, direction=1, orth=0.01)
     # setcoords
     sys = setcoords(sim.sys, x)
@@ -45,14 +47,6 @@ function energyminimization(sim, x0; t=0.1, dt=0.0001, kwargs...)
 end
 
 
-function transitionpath(sim, x0, chi; orth = 0.01, solver=Rosenbrock23(), tmax = 1, kwargs...)
-    direction = (first(chi(x0))) > 0.5 ? -1 : 1
-    prob = ODEProblem((x,p,t)->velocity(sim, x, chi, direction, orth), x0, (0,tmax))
-    sol = solve(prob, solver; kwargs...)
-    #return reduce(hcat, sol.u)
-end
-
-export reactionpath
 function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Euler(), dt=0.0001, kwargs...)
 
     t0 = chi(x0) |> first

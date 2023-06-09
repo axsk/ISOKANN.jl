@@ -1,6 +1,6 @@
 ## Implementation of the Langevin dynamics using Molly as a backend
 
-
+using Molly
 export MollyLangevin, MollySDE, propagate, solve
 
 ## This is supposed to contain the (Molecular) system + integrator
@@ -80,6 +80,8 @@ end
 
 
 ## DEPRECATED
+# commented out since importing solve seems to ruin precompilation
+#=
 
 using StochasticDiffEq # for OverdampedLangevin
 import StochasticDiffEq: SDEProblem, solve
@@ -153,3 +155,5 @@ function propagate(ms::MollySDE, x0::AbstractMatrix, ny)
 end
 
 solve(ms::MollySDE) = solve(SDEProblem(ms))
+
+=#

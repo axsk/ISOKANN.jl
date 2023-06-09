@@ -34,7 +34,9 @@ include("benchmarks.jl") # benchmark runs, deprecated by scripts/*
 
 include("cuda.jl")       # fixes for cuda
 
-include("precompile.jl") # precompile for faster ttx
 
 include("reactionpath.jl")
+
+#include("precompile.jl") # precompile for faster ttx
+
 end

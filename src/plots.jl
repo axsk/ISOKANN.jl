@@ -70,13 +70,15 @@ function scatter_chifix(data, model)
     plot!([minimum(xs), maximum(xs)], [minimum(target),maximum(target)], legend=false)
 end
 
-
+# DEPRECATED
+#=
 function inspecttrajectory(sys)
     @time sol = solve(SDEProblem(sys))
     x = reduce(hcat, sol.u)
     scatter_ramachandran(x) |> display
     return x
 end
+=#
 
 # good colors
 # berlin, delta, roma, tofino, tokyo
