@@ -35,6 +35,7 @@ end
 phi(x::AbstractMatrix) = mapslices(phi, x, dims=1) |> vec
 psi(x::AbstractMatrix) = mapslices(psi, x, dims=1) |> vec
 
+# compute the rotationmatrix rotating e1 and e2 onto the cartesian axes
 function rotationmatrix(e1, e2)
     e1 ./= norm(e1)
     e2 .-= dot(e1, e2) * e1
@@ -44,16 +45,21 @@ function rotationmatrix(e1, e2)
     R = A / I  #  A * R = I
 end
 
-function rotatevec(vec)
+# rotates a 3xn vector into standardform taking the i0, i1, and i2 atoms as handles
+function rotatevec(vec, rotationhandles)
+    i0,i1,i2 = rotationhandles
     x = reshape(vec, 3, :)
-    e1 = x[:, 19] .- x[:, 2]
-    e2 = x[:, 11] .- x[:, 2]
+    e1 = x[:, i1] .- x[:, i0]
+    e2 = x[:, i2] .- x[:, i0]
     R = rotationmatrix(e1, e2)
     return R' * x
 end
 
-standardform(x::AbstractArray) = mapslices(x, dims=1) do col
-    x = rotatevec(col)
+# compute the standardform by applying mean shift and rotatevec
+standardform(x::AbstractArray, rotationhandles=(2,11,19)) = mapslices(x, dims=1) do col
+    x = rotatevec(col, rotationhandles)
     x .-= mean(x, dims=2)
     vec(x)
 end
+
+standardform(x::AbstractArray, sim::IsoSimulation) = standardform(x, rotationhandles(sim))
