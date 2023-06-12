@@ -2,9 +2,9 @@ using LinearAlgebra
 using StatsBase: mean
 
 """
-center any given states by shifting their individual 3d mean to the origin
+centercoords any given states by shifting their individual 3d mean to the origin
 """
-function center(xs)
+function centercoords(xs)
     mapslices(xs, dims=1) do x
         coords = reshape(x, 3, :)
         coords .-= mean(coords, dims=2)

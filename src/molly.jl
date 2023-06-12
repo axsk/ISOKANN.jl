@@ -68,9 +68,9 @@ function vec_to_coords(x::AbstractArray, sys::System)
 end
 
 """ set the system to the given coordinates """
-# TODO: the center shift does not belong here, fix constant
-# Note: Actually the Langevin integrator removes center of mass motion, so we should be fine
-setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(center(coords) .+ 1.36, sys))
+# TODO: the centercoords shift does not belong here, fix constant
+# Note: Actually the Langevin integrator removes centercoords of mass motion, so we should be fine
+setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(centercoords(coords) .+ 1.36, sys))
 setcoords(sys::System, coords::Array{<:SVector{3}}) = System(sys;
     coords=coords,
     velocities = copy(sys.velocities),

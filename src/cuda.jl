@@ -24,7 +24,7 @@ function batchedpairdists(x::CuArray)
     return p
 end
 
-center(xs::CuArray) = cu(center(collect(xs)))
+centercoordscoords(xs::CuArray) = cu(centercoordscoords(collect(xs)))
 
 datastats(data::Tuple{<:CuArray, <:CuArray}) = datastats(collect.(data))
 

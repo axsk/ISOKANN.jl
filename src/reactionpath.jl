@@ -10,7 +10,7 @@ function reactionforce(sim, x, chi, direction=1, orth=0.01)
     # setcoords
     sys = setcoords(sim.sys, x)
     f_sys = Molly.accelerations(sys, find_neighbors(sys))  # TODO: scale with gamma?
-    f_sys = ustrip(reduce(vcat, f_sys))
+    f_sys = ustrip.(reduce(vcat, f_sys))
 
     #@show norm(f_sys)
 

@@ -21,7 +21,7 @@ function bootstrap(sim::IsoSimulation, nx, ny)
     x0 = reshape(getcoords(sim), :, 1)
     xs = reshape(propagate(sim, x0, nx), :, nx)
     ys = propagate(sim, xs, ny)
-    center(xs), center(ys)
+    centercoords(xs), centercoords(ys)
 end
 
 function datasubsample(model, data, nx)
@@ -75,7 +75,7 @@ function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
     firstind = max(size(ys, 2) - lastn + 1, 1)
     x0 = stratified_x0(model, ys[:, firstind:end, :], ny)
     ys = propagate(sim, x0, nk)
-    ndata = center(x0), center(ys)
+    ndata = centercoords(x0), centercoords(ys)
     data = hcat.(data, ndata)
 
     datastats(data)
