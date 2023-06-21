@@ -29,7 +29,7 @@ end
 
 # Molly.System is not mutable. We provide a constructor creating a new instance with updated fields.
 # (This was not possible programmatically since the System type is not inferrable from the fields alone.)
-
+#=
 " Constructor to update some fields of the (immutable) Molly.System "
 function Molly.System(s::System; kwargs...)
     System(;
@@ -49,6 +49,7 @@ function Molly.System(s::System; kwargs...)
         k = s.k,
         kwargs...)
 end
+=#
 
 """ extract the unitful SVector coords from `sys` and return as a normal vector """
 getcoords(sys::System) = getcoords(sys.coords)
@@ -126,6 +127,17 @@ end
 function PDB_ACEMD(;kwargs...)
     ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
+        rename_terminal_res = false, # this is important,
+        #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
+        ; kwargs...
+    )
+    return sys
+end
+
+""" Peptide Dialanine """
+function PDB_1UAO(;kwargs...)
+    ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
+    sys = System(joinpath(@__DIR__, "..", "data", "1uao av.pdb"), ff,
         rename_terminal_res = false, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
         ; kwargs...

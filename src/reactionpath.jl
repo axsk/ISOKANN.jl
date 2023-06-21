@@ -41,8 +41,8 @@ function energyminforce(sim, x)
     return v / norm(v)
 end
 
-function energyminimization(sim, x0; t=0.1, dt=0.0001, kwargs...)
-    solve(ODEProblem((x,p,t)->energyminforce(sim, x), x0, 0.1, solver; dt, kwargs...))
+function energyminimization(sim, x0; solver=Tsit5(), t=0.1, dt=0.0001, kwargs...)
+    OrdinaryDiffEq.solve(ODEProblem((x,p,t)->energyminforce(sim, x), x0, t; dt, kwargs...), solver)
     return s.u[end]
 end
 
@@ -52,10 +52,10 @@ function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Euler(),
     t0 = chi(x0) |> first
     @show t0
 
-    bw = solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, -1, orth), x0, (0-extrapolate, t0)), solver; dt, kwargs...)
+    bw = OrdinaryDiffEq.solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, -1, orth), x0, (0-extrapolate, t0)), solver; dt, kwargs...)
     #@show bw.stats
 
-    fw = solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, 1, orth), x0, (t0, 1+extrapolate)), solver; dt, kwargs...)
+    fw = OrdinaryDiffEq.solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, 1, orth), x0, (t0, 1+extrapolate)), solver; dt, kwargs...)
     #@show fw.stats
 
     fw = reduce(hcat, fw.u)
@@ -64,9 +64,12 @@ function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Euler(),
     u = hcat(bw[:, end:-1:1], fw)
 end
 
-function reactionpath(iso::IsoRun; kwargs...)
+function reactionpath(iso::IsoRun; minimize=true, kwargs...)
     xs, ys = iso.data
     x0 = xs[:, rand(1:size(xs, 2))]
+    #println("minimizing energy")
+    #x0 = energyminimization(iso.sim, x0)
+    println("computing reaction path")
     reactionpath(iso.sim, x0, iso.model; kwargs...)
 end
 

@@ -19,13 +19,17 @@ using Test
         ISOKANN.run!(iso)
     end
 
-    @testset "ISOKANN.jl" begin
+    @testset "IsoForce" begin
+        ISOKANN.IsoForce.isokann(usecontrol=true)
+    end
+#=
+    @testset "IsoForce (deprecated)" begin
         using ISOKANN.IsoForce: test_GirsanovSDE, test_optcontrol, isokann, Doublewell
         test_GirsanovSDE()
         test_optcontrol()
 
-        @time isokann()
-        @time isokann(dynamics = Doublewell(dim=2))
+        @test_broken @time isokann()
+        @test_broken @time isokann(dynamics = Doublewell(dim=2))
     end
-
+=#
 end

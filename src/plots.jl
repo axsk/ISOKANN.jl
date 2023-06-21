@@ -42,7 +42,7 @@ function plot_learning(iso; subdata = nothing)
 
     !isnothing(subdata) && (data = subdata)
 
-    p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss")
+    p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss", xlabel="iter")
 
     let td = filter(iso.loggers) do l isa(l, TrainlossLogger) end
         if length(td) > 0 && length(td[1].losses) > 1
@@ -51,7 +51,12 @@ function plot_learning(iso; subdata = nothing)
     end
 
     xs, ys = data
-    p2 = scatter_ramachandran(reshape(xs,66,:), model)
+    # TODO: make this more appealing
+    p2 = if isa(iso.sim, IsoSimulation)
+        scatter_ramachandran(reshape(xs,66,:), model)
+    else
+        plot(model(xs) |> vec, label="", ylabel="χ", xlabel="frame")
+    end
 
     p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])
@@ -66,7 +71,7 @@ function scatter_chifix(data, model)
     xs, ys = data
     target = koopman(model, ys)
     xs = model(xs)|>vec
-    scatter(xs, target, markersize=2, xlabel = raw"\chi", ylabel=raw"K\chi")
+    scatter(xs, target, markersize=2, xlabel = "χ", ylabel="Kχ")
     plot!([minimum(xs), maximum(xs)], [minimum(target),maximum(target)], legend=false)
 end
 

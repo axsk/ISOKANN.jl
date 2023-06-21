@@ -108,7 +108,7 @@ shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
 """ batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
     ndata = length(target)
-    if ndata <= batchsize
+    if ndata <= batchsize || batchsize==0
         return learnstep!(model, xs, target, opt)
     end
 
@@ -116,7 +116,7 @@ function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, bat
     l = 0.
     for batch in 1:nbatches
         ind = ((batch-1)*batchsize+1):min(batch*batchsize, ndata)
-        l += @views learnstep!(model, xs[:, ind], target[ind], opt)
+        l += learnstep!(model, xs[:, ind], target[ind], opt)
     end
     return l / nbatches  # this is only approx correct for uneven batches
 end

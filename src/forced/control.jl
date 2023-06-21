@@ -142,9 +142,9 @@ struct Shiftscale
 end
 
 function Shiftscale(data::AbstractArray, T=1)
-    @show data
+    #@show data
     a, b = extrema(data)
-    @show lambda = b-a
+    lambda = b-a
     a = a/(1-lambda)
     q = log(lambda) / T
     @assert isfinite(q)
