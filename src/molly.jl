@@ -135,12 +135,12 @@ function PDB_ACEMD(;kwargs...)
 end
 
 """ Peptide Dialanine """
-function PDB_1UAO(;kwargs...)
+function PDB_1UAO(;rename_terminal_res=true,kwargs...)
     ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "1uao av.pdb"), ff,
-        rename_terminal_res = false, # this is important,
+        ;rename_terminal_res, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
-        ; kwargs...
+        kwargs...
     )
     return sys
 end
