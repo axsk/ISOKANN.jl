@@ -2,7 +2,7 @@
 
 module ISOKANN
 
-using Startup           # precompiles most used packages
+#using Startup           # precompiles most used packages
 
 module IsoForce
 
