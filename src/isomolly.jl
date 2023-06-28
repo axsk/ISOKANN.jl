@@ -8,6 +8,7 @@ abstract type IsoRun end
 
 run(;kwargs...) = run!(IsoRun(;kwargs...))
 
+
 IsoRun(;kwargs...) = ISO_ACEMD6(;kwargs...)
 
 Base.@kwdef mutable struct ISO_ACEMD6 <: IsoRun # takes 10 min
@@ -162,6 +163,15 @@ function estimate_K(x, Kx)
     @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1-p[1]) * p[2])  # define the parametric inverse of K
     fit = curve_fit(Kinv, vec(x), vec(Kx), [.5, 1])     # lsq regression
     lambda, a = coef(fit)
+end
+
+""" compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
+function chi_exit_rate(x, Kx, tau)
+    @. shiftscale(x, p) = p[1] * x + p[1]
+    l1, l2 = coef(curve_fit(shiftscale, vec(x), vex(Kx), [1, .5]))
+    a = - 1 / tau * log(l1)
+    b = a * l2 / (l1 - 1)
+    return a+b
 end
 
 function gettarget(xs, ys, model)
