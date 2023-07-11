@@ -33,6 +33,7 @@ include("performance.jl") # performance metric loggers
 include("benchmarks.jl") # benchmark runs, deprecated by scripts/*
 
 include("cuda.jl")       # fixes for cuda
+include("dataloader.jl")
 
 
 include("reactionpath.jl")
