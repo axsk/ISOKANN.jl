@@ -1,14 +1,30 @@
-Base.@kwdef mutable struct TrainlossLogger3
+Base.@kwdef mutable struct TrainlossLogger7
     data
-    losses = Float64[]
     every = 100
+    losses = Float64[]
+    xs = Int[]
 end
 
-TrainlossLogger = TrainlossLogger3
+TrainlossLogger = TrainlossLogger7
 
-function log(l::TrainlossLogger; model, j, kwargs...)
-    j % l.every == 0 && push!(l.losses, loss(model, l.data))
+function log(l::TrainlossLogger; model, losses, j, kwargs...)
+    if j % l.every == 0
+        push!(l.xs, length(losses))
+        push!(l.losses, loss(model, l.data))
+    end
 end
+
+
+function add_validationloss!(iso::IsoRun, nx=100, ny=100, every=100)
+    xs, _ = iso.data
+    i = rand(1:size(xs, 2), nx)
+    xs = xs[:, i]
+    ys = propagate(iso.sim, xs, ny)
+    logger = TrainlossLogger(data=(xs, ys), every=every, losses=Float64[])
+    push!(iso.loggers, logger)
+    logger
+end
+
 
 function l2diff(model1, model2, data::DataTuple)
     ks = model1(data) |> vec

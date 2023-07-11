@@ -8,7 +8,7 @@ using StatsBase: sample
 # let us therefore collect all three datasets first
 
 
-DataTuple = Tuple{Matrix{T}, Array{T, 3}} where T<:Number
+DataTuple = Tuple{Matrix{T},Array{T,3}} where {T<:Number}
 
 using JLD2
 function load_refiso()
@@ -27,16 +27,26 @@ end
 function datasubsample(model, data, nx)
     # chi stratified subsampling
     xs, ys = data
-    if size(xs,2) <= nx || nx == 0
+    if size(xs, 2) <= nx || nx == 0
         return data
     end
     cs = model(xs) |> vec
     ks = shiftscale(cs)
     ix = ISOKANN.subsample_uniformgrid(ks, nx)
-    xs = xs[:,ix]
-    ys = ys[:,ix,:]
+    xs = xs[:, ix]
+    ys = ys[:, ix, :]
 
     return xs, ys
+end
+
+# this allows to use the current isokann implementation with a DataLoader
+# where (according to MLUtils practice) the ys have shape (dim x nkoop x npoints)
+# we therefore permute the last dims to adhere to the ISOKANN.jl standard
+using MLUtils
+function datasubsample(model, data::DataLoader, nx)
+    x, y = first(data)
+    y = permutedims(y, (1, 3, 2))
+    return (x, y)
 end
 
 
@@ -52,11 +62,11 @@ Works for points provided either as plain Array or as (xs, ys) data tuple
 subsample(model, data::Array, n) :: Matrix
 subsample(model, data::Tuple, n) :: Tuple
 """
-function subsample(model, xs::AbstractArray{<:Any, 2}, n)
+function subsample(model, xs::AbstractArray{<:Any,2}, n)
     xs[:, subsample_inds(model, xs, n)]
 end
 
-function subsample(model, ys::AbstractArray{<:Any, 3}, n)
+function subsample(model, ys::AbstractArray{<:Any,3}, n)
     xs = reshape(ys, size(ys, 1), :)
     subsample(model, xs, n)
 end
@@ -69,7 +79,7 @@ end
 
 
 
-function adddata(data, model, sim::IsoSimulation, ny, lastn = 1_000_000)
+function adddata(data, model, sim::IsoSimulation, ny, lastn=1_000_000)
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
@@ -84,7 +94,7 @@ end
 
 """ given an array of states, return a chi stratified subsample """
 function stratified_x0(model, ys, n)
-    ys = reshape(ys, size(ys,1), :)
+    ys = reshape(ys, size(ys, 1), :)
     ks = shiftscale(model(ys) |> vec)
 
     i = subsample_uniformgrid(ks, n)
@@ -94,8 +104,8 @@ end
 
 function datastats(data)
     xs, ys = data
-    ext = extrema(xs[1,:])
-    uni = length(unique(xs[1,:]))
+    ext = extrema(xs[1, :])
+    uni = length(unique(xs[1, :]))
     _, n, ks = size(ys)
     #println("\n Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
 end
@@ -108,7 +118,7 @@ function extractdata(data::AbstractArray, model, sim, path="out/data.pdb")
     ks = model(dd)
     i = sortperm(vec(ks))
     dd = dd[:, i]
-    i = uniqueidx(dd[1,:] |> vec)
+    i = uniqueidx(dd[1, :] |> vec)
     dd = dd[:, i]
     dd = standardform(dd)
     savecoords(sys, dd, path)
@@ -123,7 +133,7 @@ function testdata(ref=load_refiso())
 end
 
 function traindata(ref=load_refiso(); n=100, k=8, offset=500)
-    x,y = ref.data
+    x, y = ref.data
     shuffledata((x[:, offset:offset+n-1], y[:, offset:offset+n-1, 1:k]))
 end
 
@@ -138,7 +148,7 @@ end
 
 data_stratified(iso::IsoRun, nx, nk) = data_stratified(iso.model, iso.data, nx, nk)
 
-function data_from_trajectory(xs::Matrix, nx = size(xs,2)-1)
+function data_from_trajectory(xs::Matrix, nx=size(xs, 2) - 1)
     ys = reshape(xs[:, 2:nx+1], :, nx, 1)
     return xs[:, 1:nx], ys
 end
@@ -151,7 +161,7 @@ end
 
 function data_sliced(data::Tuple, slice)
     xs, ys = data
-    (xs[:,slice], ys[:,slice,:])
+    (xs[:, slice], ys[:, slice, :])
 end
 
 function shuffledata(data)
@@ -173,7 +183,7 @@ function iso_fixeddata(iso, data=iso.data)
     iso = deepcopy(iso)
     iso.data = data
     iso.minibatch = iso.nx
-    iso.nx = size(data[1],2)
+    iso.nx = size(data[1], 2)
     iso.nd = round(Int, iso.nd / (iso.nx / iso.minibatch))
     iso.nres = 0
     iso
@@ -196,8 +206,8 @@ function data_vs_loss(iso, log, data)
     ndata = size(iso.data[2], 2) * size(iso.data[2], 3)
     nd = []
     ls = []
-    for i in 1:length(log)
-        push!(nd, i/length(log) * ndata)
+    for i in eachindex(log)
+        push!(nd, i / length(log) * ndata)
         push!(ls, loss(log[i], data))
     end
     return nd, ls
@@ -207,8 +217,8 @@ function data_vs_testloss(iso, log, data)
     ndata = size(iso.data[2], 2) * size(iso.data[2], 3)
     is = []
     ls = []
-    for i in 1:length(log)
-        push!(is, i/length(log) * ndata)
+    for i in eachindex(log)
+        push!(is, i / length(log) * ndata)
         push!(ls, loss(log[i], data))
     end
     return is, ls

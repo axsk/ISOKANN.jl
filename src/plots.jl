@@ -44,9 +44,9 @@ function plot_learning(iso; subdata = nothing)
 
     p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss", xlabel="iter")
 
-    let td = filter(iso.loggers) do l isa(l, TrainlossLogger) end
-        if length(td) > 0 && length(td[1].losses) > 1
-            plot!(range(1, length(losses), length(td[1].losses)), td[1].losses, label = "validationloss")
+    for tl in filter(iso.loggers) do l isa(l, TrainlossLogger) end
+        if length(tl.losses) > 1
+            plot!(tl.xs, tl.losses, label = "validationloss")
         end
     end
 
