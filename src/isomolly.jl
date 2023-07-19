@@ -157,7 +157,7 @@ function saveall(iso::IsoRun, pathlength=300)
     JLD2.save("out/latest/iso.jld2", "iso", iso)
 end
 
-using LsqFit
+
 
 function estimate_K(x, Kx)
     @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1 - p[1]) * p[2])  # define the parametric inverse of K

@@ -4,17 +4,7 @@ module ISOKANN
 
 #using Startup           # precompiles most used packages
 
-module IsoForce
-
-include("forced/utils.jl")     # neural network convenience
-
-include("forced/langevin.jl")  # langevin process
-include("forced/control.jl")   # opt control
-
-include("humboldtsample.jl")  # adaptive sampling
-include("forced/isokann.jl")   # new implementation of isokann
-
-end
+include("forced/IsoForce.jl")
 
 using LinearAlgebra: norm
 include("humboldtsample.jl")  # adaptive sampling
@@ -42,6 +32,7 @@ include("molutils.jl")   # molecular utilities: dihedrals, rotation
 
 import StatsBase, Zygote, Optimisers, Flux, JLD2
 using ProgressMeter
+using LsqFit
 export IsoRun, run!, Adam, AdamRegularized
 include("isomolly.jl")   # ISOKANN for Molly systems
 
@@ -49,6 +40,7 @@ using Plots
 export plot_learning, scatter_ramachandran
 include("plots.jl")      # visualizations
 
+using JLD2
 using StatsBase: sample
 include("data.jl")       # tools for handling the data (sampling, slicing, ...)
 include("performance.jl") # performance metric loggers
@@ -64,6 +56,7 @@ include("dataloader.jl")
 
 using Zygote
 using OrdinaryDiffEq
+using SpecialFunctions: erf
 export reactionpath
 include("reactionpath.jl")
 

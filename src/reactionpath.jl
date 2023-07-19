@@ -74,7 +74,7 @@ end
 ## now come my attempts to fit the orthogonal speed to the "average χ-speed",
 ## which however does not extist .. :D
 
-using SpecialFunctions: erf
+
 
 # mean of the folded normal distribution
 # https://en.wikipedia.org/wiki/Folded_normal_distribution

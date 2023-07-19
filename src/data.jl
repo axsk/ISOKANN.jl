@@ -10,7 +10,7 @@
 
 DataTuple = Tuple{Matrix{T},Array{T,3}} where {T<:Number}
 
-using JLD2
+
 function load_refiso()
     load("isoreference-6440710-0.jld2", "iso")
 end
