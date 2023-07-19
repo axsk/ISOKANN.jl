@@ -1,10 +1,7 @@
 # the idea: take the derivative of the chi function as force field for an
 # "average transition path"
 
-using Zygote
-using OrdinaryDiffEq
 
-export reactionpath
 
 function reactionforce(sim, x, chi, direction=1, orth=0.01)
     # setcoords
@@ -14,9 +11,9 @@ function reactionforce(sim, x, chi, direction=1, orth=0.01)
 
     #@show norm(f_sys)
 
-    f_chi = Zygote.gradient(x->first(chi(x)), x)[1]
+    f_chi = Zygote.gradient(x -> first(chi(x)), x)[1]
     magn = norm(f_chi)
-    f_chi =  normalize(direction * f_chi)
+    f_chi = normalize(direction * f_chi)
 
     ratio = dot(f_sys, f_chi)
     f_orth = (f_sys - f_chi * ratio)
@@ -42,7 +39,7 @@ function energyminforce(sim, x)
 end
 
 function energyminimization(sim, x0; solver=Tsit5(), t=0.1, dt=0.0001, kwargs...)
-    OrdinaryDiffEq.solve(ODEProblem((x,p,t)->energyminforce(sim, x), x0, t; dt, kwargs...), solver)
+    OrdinaryDiffEq.solve(ODEProblem((x, p, t) -> energyminforce(sim, x), x0, t; dt, kwargs...), solver)
     return s.u[end]
 end
 
@@ -52,10 +49,10 @@ function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Euler(),
     t0 = chi(x0) |> first
     @show t0
 
-    bw = OrdinaryDiffEq.solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, -1, orth), x0, (0-extrapolate, t0)), solver; dt, kwargs...)
+    bw = OrdinaryDiffEq.solve(ODEProblem((x, p, t) -> reactionforce(sim, x, chi, -1, orth), x0, (0 - extrapolate, t0)), solver; dt, kwargs...)
     #@show bw.stats
 
-    fw = OrdinaryDiffEq.solve(ODEProblem((x,p,t)->reactionforce(sim, x, chi, 1, orth), x0, (t0, 1+extrapolate)), solver; dt, kwargs...)
+    fw = OrdinaryDiffEq.solve(ODEProblem((x, p, t) -> reactionforce(sim, x, chi, 1, orth), x0, (t0, 1 + extrapolate)), solver; dt, kwargs...)
     #@show fw.stats
 
     fw = reduce(hcat, fw.u)
@@ -82,14 +79,14 @@ using SpecialFunctions: erf
 # mean of the folded normal distribution
 # https://en.wikipedia.org/wiki/Folded_normal_distribution
 function folded_normal_mean(mu, sigma)
-    sigma * sqrt(2/pi) * exp(-mu^2/(2*sigma^2)) + mu * erf(mu/sqrt(2*sigma^2))
+    sigma * sqrt(2 / pi) * exp(-mu^2 / (2 * sigma^2)) + mu * erf(mu / sqrt(2 * sigma^2))
 end
 
 """ return the diagonal of the noise factor sigma of the brownian dynamics """
-function sigma(sys::Molly.System, temp, gamma = 1/u"s")
+function sigma(sys::Molly.System, temp, gamma=1 / u"s")
     k = Unitful.k
     mass = Molly.masses(sys)
-    σ = sqrt.(k * temp ./ mass *  gamma)
+    σ = sqrt.(k * temp ./ mass * gamma)
     repeat(σ, inner=3)
 end
 
@@ -98,6 +95,6 @@ function mean_speed(velocity, sys, temp)
     mu = norm(velocity)
     v = velocity ./ mu
     sig = sigma(sys, temp)
-    sig = norm(sig.*v)
+    sig = norm(sig .* v)
     return folded_normal_mean(mu, sigma)
 end

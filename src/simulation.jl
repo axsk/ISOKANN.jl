@@ -1,7 +1,6 @@
 ## Implementation of the Langevin dynamics using Molly as a backend
 
-using Molly
-export MollyLangevin, MollySDE, propagate, solve
+
 
 ## This is supposed to contain the (Molecular) system + integrator
 abstract type IsoSimulation end
@@ -26,8 +25,8 @@ end
 
 Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
     sys::S
-    temp::Float64 = 298. # 298 K = 25 °C
-    gamma::Float64 = 1.
+    temp::Float64 = 298.0 # 298 K = 25 °C
+    gamma::Float64 = 1.0
     dt::Float64 = 2e-3  # in ps
     T::Float64 = 2e-1 # in ps   # tuned as to take ~.1 sec computation time
     n_threads::Int = 1  # number of threads for the force computations
@@ -39,26 +38,26 @@ solve(ml; kwargs...) = reduce(hcat, getcoords.(_solve(ml; kwargs...)))
 
 function _solve(ml::MollyLangevin;
     u0=ml.sys.coords,
-    logevery = 1)
+    logevery=1)
 
-    sys = setcoords(ml.sys, u0) :: System
+    sys = setcoords(ml.sys, u0)::System
 
     # this seems to be necessary for multithreading, but expensive
     #sys.neighbor_finder = deepcopy(sys.neighbor_finder)
     #sys.loggers = loggers=(coords=CoordinateLogger(logevery))
     sys = System(sys;
-        neighbor_finder = deepcopy(sys.neighbor_finder),
+        neighbor_finder=deepcopy(sys.neighbor_finder),
         loggers=(coords=CoordinateLogger(logevery),)
-        )
+    )
 
     random_velocities!(sys, ml.temp * u"K")
     simulator = Langevin(
-        dt = ml.dt * u"ps",
-        temperature = ml.temp * u"K",
-        friction = ml.gamma * u"ps^-1",
+        dt=ml.dt * u"ps",
+        temperature=ml.temp * u"K",
+        friction=ml.gamma * u"ps^-1",
     )
     n_steps = round(Int, ml.T / ml.dt)
-    simulate!(sys, simulator, n_steps; n_threads = ml.n_threads)
+    simulate!(sys, simulator, n_steps; n_threads=ml.n_threads)
     return sys.loggers.coords.history
 end
 
@@ -70,9 +69,9 @@ end
 function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, nx, ny)
-    inds = [(i,j) for i in 1:nx, j in 1:ny]
-    Threads.@threads for (i,j) in inds
-        ys[:, i, j] = solve_end(ms; u0=x0[:,i])
+    inds = [(i, j) for i in 1:nx, j in 1:ny]
+    Threads.@threads for (i, j) in inds
+        ys[:, i, j] = solve_end(ms; u0=x0[:, i])
     end
     return ys
 end

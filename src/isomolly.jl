@@ -1,17 +1,13 @@
-import StatsBase, Zygote, Optimisers, Flux, JLD2
 
-using ProgressMeter
-
-export IsoRun, run!, Adam, AdamRegularized
 
 abstract type IsoRun end
 
-run(;kwargs...) = run!(IsoRun(;kwargs...))
+run(; kwargs...) = run!(IsoRun(; kwargs...))
 
 
-IsoRun(;kwargs...) = ISO_ACEMD6(;kwargs...)
+IsoRun(; kwargs...) = ISO_ACEMD6(; kwargs...)
 
-Base.@kwdef mutable struct ISO_ACEMD6 <: IsoRun # takes 10 min
+Base.@kwdef mutable struct ISO_ACEMD6{T} <: IsoRun # takes 10 min
     nd::Integer = 1000 # number of outer datasubsampling steps
     nx::Integer = 100  # size of subdata set
     np::Integer = 2    # number of poweriterations with the same subdata
@@ -26,7 +22,7 @@ Base.@kwdef mutable struct ISO_ACEMD6 <: IsoRun # takes 10 min
     opt = AdamRegularized()
     minibatch = Inf
 
-    data::Tuple = bootstrap(sim, ny, nk)
+    data::T = bootstrap(sim, ny, nk)
     losses = Float64[]
     loggers::Vector = Any[plotcallback(10)]
 end
@@ -37,10 +33,10 @@ AdamRegularized(adam=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.Weig
 
 optparms(iso::IsoRun) = optparms(iso.opt.layers[2].bias.rule)
 optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
-optparms(o::Optimisers.WeightDecay) = (;WeightDecay = o.gamma)
-optparms(o::Optimisers.Adam) = (;Adam = o.eta)
+optparms(o::Optimisers.WeightDecay) = (; WeightDecay=o.gamma)
+optparms(o::Optimisers.Adam) = (; Adam=o.eta)
 
-function run!(iso::IsoRun, showprogress=true)
+function run!(iso::IsoRun; showprogress=true)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, minibatch, loggers, nxmax) = iso
     #datastats(data)
@@ -49,15 +45,17 @@ function run!(iso::IsoRun, showprogress=true)
 
     p = Progress(nd, 1, offset=1)
 
+    t_samp = t_koop = t_train = 0.0
+
     for j in 1:nd
-        subdata = datasubsample(model, data, nx)
+        t_samp += @elapsed subdata = datasubsample(model, data, nx)
         # train model(xs) = target
         for i in 1:np
             xs, ys = subdata
-            ks = koopman(model, ys)
+            t_koop += @elapsed ks = koopman(model, ys)
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
-            for i in 1:nl
+            t_train += @elapsed for i in 1:nl
                 ls = learnbatch!(model, Float32.(xs), Float32.(target), opt, minibatch)
                 push!(losses, ls)
             end
@@ -67,7 +65,7 @@ function run!(iso::IsoRun, showprogress=true)
             log(logger; model, losses, subdata, data, j, iso)
         end
 
-        if nres > 0 && j%nres == 0 && (nxmax == 0 || size(data[1], 2) < nxmax)
+        if nres > 0 && j % nres == 0 && (nxmax == 0 || size(data[1], 2) < nxmax)
             data = adddata(data, model, sim, ny)
             #if size(data[1], 2) > 3000
             #    data = datasubsample(model, data, 1000)
@@ -77,29 +75,31 @@ function run!(iso::IsoRun, showprogress=true)
             #extractdata(data[1], model, sim.sys)
         end
 
-        showprogress && ProgressMeter.next!(p; showvalues = ()->[(:loss, losses[end]), (:n, length(losses)), (:data, size(data[2]))])
+        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, losses[end]), (:n, length(losses)), (:data, size(data[2]))])
     end
 
+    @show t_samp, t_koop, t_train
     return iso
 end
 
 # note there is also plot_callback in isokann.jl
 function plotcallback(secs=10)
     Flux.throttle(
-        function plotcallback(;iso, subdata, kwargs...)
+        function plotcallback(; iso, subdata, kwargs...)
             p = plot_learning(iso; subdata)
-            try display(p) catch e;
+            try
+                display(p)
+            catch e
                 @warn "could not print ($e)"
             end
-        end
-        , secs)
+        end, secs)
 end
 
 """ evluation of koopman by shiftscale(mean(model(data))) on the data """
 function koopman(model, ys)
     #ys = Array(ys)
-    cs = model(ys) :: AbstractArray{<:Number, 3}
-    ks = vec(StatsBase.mean(cs[1,:,:], dims=2)) :: AbstractVector
+    cs = model(ys)::AbstractArray{<:Number,3}
+    ks = vec(StatsBase.mean(cs[1, :, :], dims=2))::AbstractVector
     return ks
 end
 
@@ -109,14 +109,14 @@ shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
 """ batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
     ndata = length(target)
-    if ndata <= batchsize || batchsize==0
+    if ndata <= batchsize || batchsize == 0
         return learnstep!(model, xs, target, opt)
     end
 
     nbatches = ceil(Int, ndata / batchsize)
-    l = 0.
+    l = 0.0
     for batch in 1:nbatches
-        ind = ((batch-1)*batchsize+1):min(batch*batchsize, ndata)
+        ind = ((batch-1)*batchsize+1):min(batch * batchsize, ndata)
         l += learnstep!(model, xs[:, ind], target[ind], opt)
     end
     return l / nbatches  # this is only approx correct for uneven batches
@@ -124,10 +124,10 @@ end
 
 """ single supervised learning step """
 function learnstep!(model, xs, target, opt)
-    l, grad = let xs=xs  # `let` allows xs to not be boxed
+    l, grad = let xs = xs  # `let` allows xs to not be boxed
         Zygote.withgradient(model) do model
             # sum(abs2, (model(threadpairdists(xs))|>vec) .- target) / length(target)
-            sum(abs2, (model(xs)|>vec) .- target) / length(target)
+            sum(abs2, (model(xs) |> vec) .- target) / length(target)
         end
     end
     Optimisers.update!(opt, model, grad[1])
@@ -160,25 +160,25 @@ end
 using LsqFit
 
 function estimate_K(x, Kx)
-    @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1-p[1]) * p[2])  # define the parametric inverse of K
-    fit = curve_fit(Kinv, vec(x), vec(Kx), [.5, 1])     # lsq regression
+    @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1 - p[1]) * p[2])  # define the parametric inverse of K
+    fit = curve_fit(Kinv, vec(x), vec(Kx), [0.5, 1])     # lsq regression
     lambda, a = coef(fit)
 end
 
 """ compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
 function chi_exit_rate(x, Kx, tau)
     @. shiftscale(x, p) = p[1] * x + p[1]
-    l1, l2 = coef(curve_fit(shiftscale, vec(x), vex(Kx), [1, .5]))
-    a = - 1 / tau * log(l1)
+    l1, l2 = coef(curve_fit(shiftscale, vec(x), vex(Kx), [1, 0.5]))
+    a = -1 / tau * log(l1)
     b = a * l2 / (l1 - 1)
-    return a+b
+    return a + b
 end
 
 function gettarget(xs, ys, model)
     ks = koopman(model, ys)
     lambda, a = estimate_K(model(xs), ks)
     @show lambda, a
-    target = (ks .- ((1-lambda)*a)) ./ lambda
+    target = (ks .- ((1 - lambda) * a)) ./ lambda
 end
 
 function Base.show(io::IO, mime::MIME"text/plain", iso::IsoRun)
@@ -190,28 +190,28 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::IsoRun)
     println(io, " opt: $(optimizerstring(iso.opt))")
     println(io, " loggers: $(length(iso.loggers))")
     println(io, " data: $(size.(iso.data))")
-    length(iso.losses)>0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
+    length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
 end
 
 optimizerstring(opt) = typeof(opt)
 optimizerstring(opt::NamedTuple) = opt.layers[end-1].weight.rule
 
-function autotune!(iso::IsoRun, targets=[4,1,1,4])
+function autotune!(iso::IsoRun, targets=[4, 1, 1, 4])
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
-    tdata = @elapsed adddata(data, model, sim, ny)
+    tdata = nres > 0 ? (@elapsed adddata(data, model, sim, ny)) : 0
     tsubdata = @elapsed (subdata = datasubsample(model, data, nx))
     xs, ys = subdata
     ttarget = @elapsed target = shiftscale(koopman(model, ys))
     ttrain = @elapsed learnbatch!(model, xs, target, opt, Inf)
 
 
-    nl = round(Int, ttarget/ttrain   * targets[4]/targets[3])
-    np = max(1, round(Int, tsubdata/ttarget * targets[3]/targets[2]))
-    nres = round(Int, tdata/(tsubdata + np * ttarget + np*nl*ttrain) * sum(targets[2:end])/targets[1])
+    nl = ceil(Int, ttarget / ttrain * targets[4] / targets[3])
+    np = max(1, round(Int, tsubdata / ttarget * targets[3] / targets[2]))
+    nres = round(Int, tdata / (tsubdata + np * ttarget + np * nl * ttrain) * sum(targets[2:end]) / targets[1])
 
     iso.nl = nl
     iso.np = np
     iso.nres = nres
 
-    return (;tdata, tsubdata, ttarget, ttrain), (;nl, np, nres)
+    return (; tdata, tsubdata, ttarget, ttrain), (; nl, np, nres)
 end

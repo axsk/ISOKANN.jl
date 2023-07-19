@@ -1,4 +1,3 @@
-using LinearAlgebra: norm
 "
 humboldtsample(xs, ocp, n, branch)
 
@@ -6,9 +5,9 @@ given a list of points `xs`, propagate each into `branch` trajectories according
 and subsamble `n` of the resulting points uniformly over their chi value.
 Returns a list of approximately equi-chi-distant start points"
 function humboldtsample(xs, ocp, n, branch)
-     # this is only used in old isokann.jl
+    # this is only used in old isokann.jl
     ocp = deepcopy(ocp)
-    ocp.forcing = 0.
+    ocp.forcing = 0.0
     nxs = copy(xs)
     for x in xs
         for i in 1:branch
@@ -17,7 +16,7 @@ function humboldtsample(xs, ocp, n, branch)
         end
     end
 
-    ys = map(x->ocp.chi(x)[1], nxs)
+    ys = map(x -> ocp.chi(x)[1], nxs)
     is = subsample_uniformgrid(vec(ys), n)
 
     return nxs[is]
@@ -35,12 +34,12 @@ given a list of values `ys`, return `n`` indices `is` such that `ys[is]` are app
 picking the closest points to a randomly perturbed grid in [0,1]."
 function subsample_uniformgrid(ys, n; keepedges=true)
     if n <= 2
-        keepedges=false  # TODO: maybe we should warn here?
+        keepedges = false  # TODO: maybe we should warn here?
     end
     keepedges && (n = n - 2)
-    needles = (rand(n)  .+ (0:n-1)) ./ n
+    needles = (rand(n) .+ (0:n-1)) ./ n
     keepedges && (needles = [0; needles; 1])
-    pickclosest(ys, needles) :: Vector{Int}
+    pickclosest(ys, needles)::Vector{Int}
 end
 
 pickclosest(hs::AbstractVector, ns::AbstractVector) = pickclosestloop(hs, ns)
@@ -86,7 +85,7 @@ function _pickclosestloop(hs::AbstractVector, ns::AbstractVector)
     for n in ns
         di = abs(hs[i] - n)
         while true
-            j = findnext(avl, i+1)
+            j = findnext(avl, i + 1)
             if !isnothing(j) && ((dj = abs(hs[j] - n)) <= di)
                 di = dj
                 i = j

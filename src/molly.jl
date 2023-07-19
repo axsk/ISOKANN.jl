@@ -1,10 +1,5 @@
 ## Interface to the Molly.System
 
-using Molly: Molly, System
-using Unitful
-using StaticArrays
-
-export PDB_5XER, PDB_6MRR, PDB_ACEMD
 
 dim(sys::System) = length(sys.atoms) * 3
 defaultmodel(sys::System) = pairnet(sys::System)
@@ -13,9 +8,9 @@ defaultmodel(sys::System) = pairnet(sys::System)
 function rotationhandles(sys::Molly.System)
     # TODO: fix this ugly if-elseif recognition
     if dim(sys) == 22 # PDB_ACEMD
-        return (2,11,19)
+        return (2, 11, 19)
     elseif dim(sys) == 1234 # some other poweriteration
-        return (1,2,3)
+        return (1, 2, 3)
     else
         error("No rotation handles known for this molecule")
     end
@@ -56,7 +51,7 @@ getcoords(sys::System) = getcoords(sys.coords)
 function getcoords(coords::AbstractArray)
     x0 = Molly.ustrip_vec(coords)
     x0 = reduce(vcat, x0)
-    return x0 :: AbstractVector
+    return x0::AbstractVector
 end
 
 """ convert normal vector of coords to SVectors of unitful system coords """
@@ -74,21 +69,21 @@ end
 setcoords(sys::System, coords) = setcoords(sys, vec_to_coords(centercoords(coords) .+ 1.36, sys))
 setcoords(sys::System, coords::Array{<:SVector{3}}) = System(sys;
     coords=coords,
-    velocities = copy(sys.velocities),
+    velocities=copy(sys.velocities)
     #    neighbor_finder = deepcopy(sys.neighbor_finder),
 )
 
 
 ## Save to pdb files
 
-function savecoords(sys::System, coords::AbstractVector, path; append = false)
+function savecoords(sys::System, coords::AbstractVector, path; append=false)
     append || rm(path, force=true)
     writer = Molly.StructureWriter(0, path)
     sys = setcoords(sys, coords)
     Molly.append_model!(writer, sys)
 end
 
-function savecoords(sys::System, data::AbstractMatrix, path; append = false)
+function savecoords(sys::System, data::AbstractMatrix, path; append=false)
     append || rm(path, force=true)
     for x in eachcol(data)
         savecoords(sys, x, path, append=true)
@@ -124,10 +119,10 @@ function PDB_5XER()
 end
 
 """ Peptide Dialanine """
-function PDB_ACEMD(;kwargs...)
+function PDB_ACEMD(; kwargs...)
     ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
-        rename_terminal_res = false, # this is important,
+        rename_terminal_res=false, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
         ; kwargs...
     )
@@ -135,10 +130,10 @@ function PDB_ACEMD(;kwargs...)
 end
 
 """ Peptide Dialanine """
-function PDB_1UAO(;rename_terminal_res=true,kwargs...)
+function PDB_1UAO(; rename_terminal_res=true, kwargs...)
     ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "1uao av.pdb"), ff,
-        ;rename_terminal_res, # this is important,
+        ; rename_terminal_res, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
         kwargs...
     )

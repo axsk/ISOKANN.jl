@@ -1,4 +1,4 @@
-using StatsBase: sample
+
 
 # in this file we aim at comparing different data collection techniques
 # a) stratified chi sampling

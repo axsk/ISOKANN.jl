@@ -1,5 +1,4 @@
 
-import ChainRulesCore
 
 
 # Take an array of shape (i,j...) where the i=3*n vectors are the flattened coords of n 3d points.
@@ -9,15 +8,15 @@ Assumes each col of x to be a flattened representation of multiple 3d coords.
 Returns the flattened pairwise distances as columns."
 function flatpairdists(x)
     d, s... = size(x)
-    c = div(d,3)
+    c = div(d, 3)
     b = reshape(x, 3, c, :)
     p = simplepairdists(b)
-    return reshape(p, c*c, s...)
+    return reshape(p, c * c, s...)
 end
 
 function simplepairdists(x)
-        p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2,1,3))
-        return p
+    p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
+    return p
 end
 
 
@@ -37,7 +36,7 @@ function pairdistkernel(out::AbstractMatrix, x::AbstractMatrix)
     @assert size(x, 1) == 3
     n, k = size(out)
     @views for i in 1:n, j in i:k
-        out[i,j] = out[j,i] = ((x[1,i]-x[1,j])^2 + (x[2,i]-x[2,j])^2 + (x[3,i]-x[3,j])^2)
+        out[i, j] = out[j, i] = ((x[1, i] - x[1, j])^2 + (x[2, i] - x[2, j])^2 + (x[3, i] - x[3, j])^2)
     end
 end
 

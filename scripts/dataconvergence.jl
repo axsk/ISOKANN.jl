@@ -28,7 +28,7 @@ using Random
 function addslurm(nworkers=1, ncores=4)
     ps = addprocs(SlurmManager(nworkers),
         exeflags="-t $ncores",
-        env=["OPENBLAS_NUM_THREADS"=>"$(round(Int, ncores/2))"],
+        env=["OPENBLAS_NUM_THREADS" => "$(round(Int, ncores/2))"],
         cpus_per_task="$ncores",
         partition="big",
         #constraint="Gold6338",
@@ -36,46 +36,46 @@ function addslurm(nworkers=1, ncores=4)
 end
 
 function experiment(
-    iso = IsoRun(
+    iso=IsoRun(
         sim=MollyLangevin(
             sys=PDB_ACEMD(),
             dt=2e-3,
             T=2e-1,
-            gamma=10.,
-            temp=200.),
+            gamma=10.0,
+            temp=200.0),
         loggers=[],)
-    )
+)
 
 
     @time refiso, chidata = reference_chi(iso)  # 1400 sec
     @time traj, trajdata = reference_pi(iso)    # 66 sec
 
-    isos = iso_matrix(;iso, refiso, traj)
+    isos = iso_matrix(; iso, refiso, traj)
 
     ##ps = addslurm(32,4)
     # find a way to run @everywhere here, eval?
 
-    isos = @time pmap(i->(;i..., iso = run!(i.iso)), isos)
+    isos = @time pmap(i -> (; i..., iso=run!(i.iso)), isos)
     ##rmprocs(ps)
 
     @save "dataconvergence.jld2" refiso chidata traj trajdata isos
 
-    return (;isos, refiso, chidata, traj, trajdata)
+    return (; isos, refiso, chidata, traj, trajdata)
 end
 
 function expl_expl_tradeoff(;
-        iso = IsoRun(
-            sim=MollyLangevin(
-                sys=PDB_ACEMD(),
-                dt=2e-3,
-                T=2e-1,
-                gamma=10.,
-                temp=200.),
-            loggers=[],),
-        nk=[1,2,4,8,16,32],
-        maxdata = 15_000,
-        iters=20,
-    )
+    iso=IsoRun(
+        sim=MollyLangevin(
+            sys=PDB_ACEMD(),
+            dt=2e-3,
+            T=2e-1,
+            gamma=10.0,
+            temp=200.0),
+        loggers=[],),
+    nk=[1, 2, 4, 8, 16, 32],
+    maxdata=15_000,
+    iters=20
+)
 
     Random.seed!(1337)
 
@@ -83,13 +83,13 @@ function expl_expl_tradeoff(;
     @time refiso, chidata = reference_chi(iso; nd=30_000, nx=200, nk=1000)
 
     println("generating the iso matrix")
-    isos = iso_matrix(;iso, refiso, iso_adapt=false, iso_traj=false,
+    isos = iso_matrix(; iso, refiso, iso_adapt=false, iso_traj=false,
         nk, maxdata, iters)
 
     println("running experiments")
-    isos = @time pmap(i->(;i..., iso = run!(i.iso)), isos)
+    isos = @time pmap(i -> (; i..., iso=run!(i.iso)), isos)
 
-    return (;isos, refiso, chidata)
+    return (; isos, refiso, chidata)
 end
 
 
@@ -97,11 +97,11 @@ end
 
 """ reference solution used for later chi-strat sampling """
 function reference_chi(iso; nd=30_000, nx=200, nk=1_000)
-    iso = deepcopyset(iso, nd = nd)
+    iso = deepcopyset(iso, nd=nd)
 
     @time run!(iso)
 
-    liso = size(iso.data[1],2)
+    liso = size(iso.data[1], 2)
     liso < nx && @warn("iso has not enough samples to generate data ($liso < $nx)")
 
     xs = ISOKANN.stratified_x0(iso.model, iso.data[1], nx)
@@ -122,46 +122,46 @@ function reference_pi(sim, nd=10_000, nx=200, nk=1)
     xs = traj[:, inds]
     ys = @time ISOKANN.propagate(sim, xs, nk)
 
-    trajdata = (xs,ys)
+    trajdata = (xs, ys)
 
     return traj, trajdata
 end
 
 function iso_matrix(;
-        mindata = 100,
-        maxdata = 16_000,
-        nx = [10,20,50,100,200,400,800,1600,3200,6400,12800, 24560],
-        nk = [1,2,4],
-        iters = 5,
-        iso = nothing,
-        refiso = nothing,
-        traj = nothing,
-        iso_adapt = true,
-        iso_traj = true
-    )
+    mindata=100,
+    maxdata=16_000,
+    nx=[10, 20, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 24560],
+    nk=[1, 2, 4],
+    iters=5,
+    iso=nothing,
+    refiso=nothing,
+    traj=nothing,
+    iso_adapt=true,
+    iso_traj=true
+)
     isos = []
 
     for nx in nx, nk in nk, i in 1:iters
-        mindata <= nx*nk <= maxdata || continue
+        mindata <= nx * nk <= maxdata || continue
 
         if iso_adapt
-            push!(isos, (;type=:adapt, nx, nk,
-                iso = iso_adapt(iso, nx, nk)))
+            push!(isos, (; type=:adapt, nx, nk,
+                iso=iso_adapt(iso, nx, nk)))
         end
 
         if iso_traj && nk == 1
-            push!(isos, (;type=:traj, nx, nk,
-                iso = iso_traj(iso, nx)))
+            push!(isos, (; type=:traj, nx, nk,
+                iso=iso_traj(iso, nx)))
         end
 
         if !isnothing(refiso)
-            push!(isos, (;type=:chi, nx, nk,
-                iso = iso_chi(iso, nx, nk; refiso)))
+            push!(isos, (; type=:chi, nx, nk,
+                iso=iso_chi(iso, nx, nk; refiso)))
         end
 
         if !isnothing(traj)
-            push!(isos, (;type=:pi, nx, nk,
-                iso = iso_pi(iso, nx, nk; traj)))
+            push!(isos, (; type=:pi, nx, nk,
+                iso=iso_pi(iso, nx, nk; traj)))
         end
     end
     return isos
@@ -171,17 +171,17 @@ end
 """ sample chi-strat adaptively during training """
 function iso_adapt(iso, nx, nk)
     # adjust resample size to resample up to nxmax=nx after 1/2 of the training
-    ny = max(ceil(Int, nx / (iso.nd/iso.nres*(2/3))),2)
+    ny = max(ceil(Int, nx / (iso.nd / iso.nres * (2 / 3))), 2)
     return deepcopyset(iso;
-        nxmax = nx,
-        data = ISOKANN.bootstrap(iso.sim, ny, nk),
-        ny = ny)
+        nxmax=nx,
+        data=ISOKANN.bootstrap(iso.sim, ny, nk),
+        ny=ny)
 end
 
 """ sample and train on trajectory data of length `nx` """
 function iso_traj(iso, nx;)
     traj = ISOKANN.trajdata(iso.sim, nx)
-    data = ISOKANN.data_from_trajectory(traj, nx)
+    data = ISOKANN.data_from_trajectory(traj, nx)  # TODO: nx should be handled here, not inside data_from_traj
     return deepcopyset(iso;
         nres=0, data)
 end
@@ -191,7 +191,7 @@ function iso_chi(iso, nx, nk; refiso)
     xs = ISOKANN.stratified_x0(refiso.model, refiso.data[2], nx)
     ys = ISOKANN.propagate(iso.sim, xs, nk)
     return deepcopyset(iso;
-        nres=0, data = (xs, ys))
+        nres=0, data=(xs, ys))
 end
 
 """ trainingsdata is subsampled from a reference ergodic trajectory """
@@ -200,13 +200,13 @@ function iso_pi(iso, nx, nk; traj)
     xs = traj[:, inds]
     ys = ISOKANN.propagate(iso.sim, xs, nk)
     return deepcopyset(iso;
-        nres=0, data = (xs, ys))
+        nres=0, data=(xs, ys))
 end
 
 """ create a deepcopy of the object and set the kwargs fields """
 function deepcopyset(obj; kwargs...)
     obj = deepcopy(obj)
-    for (k,v) in kwargs
+    for (k, v) in kwargs
         setfield!(obj, k, v)
     end
     return obj
@@ -217,11 +217,11 @@ using StatsBase: mean, median
 function plot_dataconvergence(isos, testdata)
     plot()
     ind = 1
-    for ((type, nk), is) in sort((pairs(group(x->(x.type, x.nk), isos))))
+    for ((type, nk), is) in sort((pairs(group(x -> (x.type, x.nk), isos))))
         #nk > 2 && continue
-        d = group(i->size(i.iso.data[1],2) .* nk,
-                i->ISOKANN.loss(i.iso.model, testdata),
-                is)
+        d = group(i -> size(i.iso.data[1], 2) .* nk,
+            i -> ISOKANN.loss(i.iso.model, testdata),
+            is)
         d = sortkeys(d)
         @show length.(d), type, nk
 
@@ -239,7 +239,7 @@ end
 
 function scatter_dataconvergence(isos, testdata)
     plot()
-    for ((type, nk), isos) in pairs(group(x->(x.type, x.nk), isos))
+    for ((type, nk), isos) in pairs(group(x -> (x.type, x.nk), isos))
 
 
         xs = [datasize(i.iso) for i in isos]
@@ -252,15 +252,15 @@ end
 
 function datasize(iso)
     s = size(iso.data[2])
-    s[2]*s[3]
+    s[2] * s[3]
 end
 
 function plot_isos2(isos)
     plot()
-    for (type, isos) in pairs(group(kv -> kv[1].type, kv->kv[2], pairs(isos)))
-        for (k, isos) in pairs(group(i->i.nk, isos))
+    for (type, isos) in pairs(group(kv -> kv[1].type, kv -> kv[2], pairs(isos)))
+        for (k, isos) in pairs(group(i -> i.nk, isos))
             @show k
-            d = group(i->size(i.data[1],2) .* k, i->
+            d = group(i -> size(i.data[1], 2) .* k, i ->
                     i.loggers[1].losses[end],
                 isos)
             d = sortkeys(d)
