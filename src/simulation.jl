@@ -40,24 +40,24 @@ function _solve(ml::MollyLangevin;
     u0=ml.sys.coords,
     logevery=1)
 
-    sys = setcoords(ml.sys, u0)::System
+    sys = setcoords(ml.sys, u0)::Molly.System
 
     # this seems to be necessary for multithreading, but expensive
     #sys.neighbor_finder = deepcopy(sys.neighbor_finder)
     #sys.loggers = loggers=(coords=CoordinateLogger(logevery))
-    sys = System(sys;
+    sys = Molly.System(sys;
         neighbor_finder=deepcopy(sys.neighbor_finder),
-        loggers=(coords=CoordinateLogger(logevery),)
+        loggers=(coords=Molly.CoordinateLogger(logevery),)
     )
 
-    random_velocities!(sys, ml.temp * u"K")
-    simulator = Langevin(
+    Molly.random_velocities!(sys, ml.temp * u"K")
+    simulator = Molly.Langevin(
         dt=ml.dt * u"ps",
         temperature=ml.temp * u"K",
         friction=ml.gamma * u"ps^-1",
     )
     n_steps = round(Int, ml.T / ml.dt)
-    simulate!(sys, simulator, n_steps; n_threads=ml.n_threads)
+    Molly.simulate!(sys, simulator, n_steps; n_threads=ml.n_threads)
     return sys.loggers.coords.history
 end
 

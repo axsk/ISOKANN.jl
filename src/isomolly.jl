@@ -43,7 +43,7 @@ function run!(iso::IsoRun; showprogress=true)
 
     local subdata
 
-    p = Progress(nd, 1, offset=1)
+    p = ProgressMeter.Progress(nd, 1, offset=1)
 
     t_samp = t_koop = t_train = 0.0
 
@@ -161,14 +161,14 @@ end
 
 function estimate_K(x, Kx)
     @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1 - p[1]) * p[2])  # define the parametric inverse of K
-    fit = curve_fit(Kinv, vec(x), vec(Kx), [0.5, 1])     # lsq regression
-    lambda, a = coef(fit)
+    fit = LsqFit.curve_fit(Kinv, vec(x), vec(Kx), [0.5, 1])     # lsq regression
+    lambda, a = LsqFit.coef(fit)
 end
 
 """ compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
 function chi_exit_rate(x, Kx, tau)
     @. shiftscale(x, p) = p[1] * x + p[1]
-    l1, l2 = coef(curve_fit(shiftscale, vec(x), vex(Kx), [1, 0.5]))
+    l1, l2 = LsqFit.coef(LsqFit.curve_fit(shiftscale, vec(x), vex(Kx), [1, 0.5]))
     a = -1 / tau * log(l1)
     b = a * l2 / (l1 - 1)
     return a + b

@@ -43,11 +43,7 @@ function isostep!(model, opt, data::Tuple{<:Matrix, <:Tensor})
     return loss
 end
 
-" basic dataset type for fixed data "
-struct StaticData
-    data
-end
-getdata!(d::StaticData, model) = d.data
+getdata!(data::Tuple{<:Matrix, <:Tensor}, model) = data
 
 "dataset type handling chi-stratified subsampling and traindata-subsampling"
 mutable struct ChiStratData

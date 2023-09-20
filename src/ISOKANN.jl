@@ -4,61 +4,54 @@ module ISOKANN
 
 #using Startup           # precompiles most used packages
 
-include("forced/IsoForce.jl")
 
-using LinearAlgebra: norm
-include("humboldtsample.jl")  # adaptive sampling
+#include("forced/IsoForce.jl")
+
+using LinearAlgebra: norm, dot, cross
+using StatsBase: mean, sample, mean_and_std
+using Molly: Molly, System
+using StaticArrays: SVector
+using StatsBase: sample
+using CUDA: CuArray, CuMatrix
+using NNlibCUDA: batched_adjoint, batched_mul
+using Unitful: @u_str, unit
+import ProgressMeter
+using SpecialFunctions: erf
+using Plots: plot, plot!, scatter, scatter!
 
 import ChainRulesCore
-include("pairdists.jl")  # pair distances
-
 import Flux
-export pairnet, pairnetn
-include("models.jl")     # the neural network models/architectures
-
-using Molly: Molly, System
-using Unitful
-using StaticArrays
-export PDB_5XER, PDB_6MRR, PDB_ACEMD
-include("molly.jl")      # interface to work with Molly Systems
-
-using Molly
-export MollyLangevin, MollySDE, propagate, solve
-include("simulation.jl") # Langeving dynamic simulator (MollySystem+Integrator)
-
-using LinearAlgebra
-using StatsBase: mean
-include("molutils.jl")   # molecular utilities: dihedrals, rotation
-
 import StatsBase, Zygote, Optimisers, Flux, JLD2
-using ProgressMeter
-using LsqFit
+import LsqFit
+import JLD2
+import Flux
+import NNlib
+import MLUtils
+import Zygote
+import OrdinaryDiffEq
+
+export pairnet, pairnetn
+export PDB_5XER, PDB_6MRR, PDB_ACEMD
+export MollyLangevin, MollySDE, propagate, solve
 export IsoRun, run!, Adam, AdamRegularized
-include("isomolly.jl")   # ISOKANN for Molly systems
-
-using Plots
 export plot_learning, scatter_ramachandran
-include("plots.jl")      # visualizations
-
-using JLD2
-using StatsBase: sample
-include("data.jl")       # tools for handling the data (sampling, slicing, ...)
-include("performance.jl") # performance metric loggers
-include("benchmarks.jl") # benchmark runs, deprecated by scripts/*
-
-using CUDA
-using Flux
-using NNlib, NNlibCUDA
-include("cuda.jl")       # fixes for cuda
-
-using MLUtils
-include("dataloader.jl")
-
-using Zygote
-using OrdinaryDiffEq
-using SpecialFunctions: erf
 export reactionpath
+
+include("humboldtsample.jl")  # adaptive sampling
+include("pairdists.jl")       # pair distances
+include("models.jl")          # the neural network models/architectures
+include("molly.jl")           # interface to work with Molly Systems
+include("simulation.jl")      # Langeving dynamic simulator (MollySystem+Integrator)
+include("molutils.jl")        # molecular utilities: dihedrals, rotation
+include("isomolly.jl")        # ISOKANN for Molly systems
+include("plots.jl")           # visualizations
+include("data.jl")            # tools for handling the data (sampling, slicing, ...)
+include("performance.jl")     # performance metric loggers
+include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
+include("cuda.jl")            # fixes for cuda
 include("reactionpath.jl")
+
+#include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx
 

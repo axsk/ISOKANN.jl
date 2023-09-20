@@ -13,8 +13,7 @@ using Test
         using Flux
         using CUDA
         CUDA.allowscalar(false)
-        iso = ISOKANN.IsoRun()
-        iso.loggers = []
+        iso = ISOKANN.IsoRun(loggers=[])
         ISOKANN.gpu!(iso)
         ISOKANN.run!(iso)
     end
@@ -22,14 +21,14 @@ using Test
     @testset "IsoForce" begin
         ISOKANN.IsoForce.isokann(usecontrol=true)
     end
-#=
-    @testset "IsoForce (deprecated)" begin
-        using ISOKANN.IsoForce: test_GirsanovSDE, test_optcontrol, isokann, Doublewell
-        test_GirsanovSDE()
-        test_optcontrol()
+    #=
+        @testset "IsoForce (deprecated)" begin
+            using ISOKANN.IsoForce: test_GirsanovSDE, test_optcontrol, isokann, Doublewell
+            test_GirsanovSDE()
+            test_optcontrol()
 
-        @test_broken @time isokann()
-        @test_broken @time isokann(dynamics = Doublewell(dim=2))
-    end
-=#
+            @test_broken @time isokann()
+            @test_broken @time isokann(dynamics = Doublewell(dim=2))
+        end
+    =#
 end
