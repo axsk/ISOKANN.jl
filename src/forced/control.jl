@@ -102,7 +102,7 @@ end
 " convenience wrapper for obtaining X[end] and the Girsanov Weight"
 function girsanovsample(cde, x0)
     u0 = vcat(x0, 0)
-    sol=solve(cde; u0=u0)
+    sol=StochasticDiffEq.solve(cde; u0=u0)
     x = sol[end][1:end-1]
     w = exp(-sol[end][end])
     return x::Vector{Float64}, w::Float64
