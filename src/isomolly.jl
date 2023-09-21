@@ -123,15 +123,19 @@ function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, bat
 end
 
 """ single supervised learning step """
-function learnstep!(model, xs, target, opt)
+function learnstep!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
     l, grad = let xs = xs  # `let` allows xs to not be boxed
         Zygote.withgradient(model) do model
-            # sum(abs2, (model(threadpairdists(xs))|>vec) .- target) / length(target)
-            sum(abs2, (model(xs) |> vec) .- target) / length(target)
+            sum(abs2, model(xs) .- target) / size(target, 2)
         end
     end
     Optimisers.update!(opt, model, grad[1])
     return l
+end
+
+function learnstep!(model, xs, target::AbstractVector, opt)
+    vmodel(xs) = vec(model(xs))
+    learnstep!(vmodel, xs, vec(target), opt)
 end
 
 
