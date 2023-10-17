@@ -139,3 +139,77 @@ function PDB_1UAO(; rename_terminal_res=true, kwargs...)
     )
     return sys
 end
+
+
+"""
+    OverdampedLangevin(; <keyword arguments>)
+
+Simulates the overdamped Langevin equation using the Euler-Maruyama method.
+
+# Arguments
+- `dt::S`: the time step of the simulation.
+- `temperature::K`: the equilibrium temperature of the simulation.
+- `friction::F`: the friction coefficient of the simulation.
+- `remove_CM_motion=1`: remove the center of mass motion every this number of steps,
+    set to `false` or `0` to not remove center of mass motion.
+"""
+struct OverdampedLangevinGirsanov{S, K, F, Fct}
+    dt::S
+    temperature::K
+    friction::F
+    remove_CM_motion::Int
+    g::Float64
+    w::Fct
+end
+
+function OverdampedLangevinGirsanov(; dt, temperature, friction, w, remove_CM_motion=1, G=0.)
+    return OverdampedLangevinGirsanov(dt, temperature, friction, w, Int(remove_CM_motion), G)
+end
+
+function simulate!(sys,
+                    sim::OverdampedLangevinGirsanov,
+                    n_steps::Integer;
+                    n_threads::Integer=Threads.nthreads(),
+                    run_loggers=true,
+                    rng=Random.GLOBAL_RNG)
+    sys.coords = wrap_coords.(sys.coords, (sys.boundary,))
+    !iszero(sim.remove_CM_motion) && remove_CM_motion!(sys)
+    neighbors = find_neighbors(sys, sys.neighbor_finder; n_threads=n_threads)
+    run_loggers!(sys, neighbors, 0, run_loggers; n_threads=n_threads)
+
+    for step_n in 1:n_steps
+        old_coords = copy(sys.coords)
+
+        dt = sim.dt
+        γ = sim.friction
+        m = sim.masses
+        k = sys.k
+        T = sim.temperature
+
+        F = forces(sys, neighbors; n_threads=n_threads)
+        w = sim.w(sys.coords, sys.time)
+
+        v = random_velocities(sys, T; rng=rng)
+        dB = @. v / sqrt(k * T / m) * sqrt(dt)
+
+        o = @. sqrt(2 * k * T / (γ * m))
+
+        b = @. (F / (γ * m))
+        u = @. o * w
+
+        sys.coords += @. (b + o * u) * dt + o * dB
+        sim.g += dot(u, @. u * (dt / 2) + dB)
+
+        apply_constraints!(sys, old_coords, sim.dt)
+        sys.coords = wrap_coords.(sys.coords, (sys.boundary,))
+        if !iszero(sim.remove_CM_motion) && step_n % sim.remove_CM_motion == 0
+            remove_CM_motion!(sys)
+        end
+
+        neighbors = find_neighbors(sys, sys.neighbor_finder, neighbors, step_n;
+                                   n_threads=n_threads)
+
+        run_loggers!(sys, neighbors, step_n, run_loggers; n_threads=n_threads)
+    end
+    return sys
+end

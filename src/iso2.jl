@@ -1,9 +1,17 @@
-function isokann2(model, opt, dataset, n)
+import StatsBase
+using ISOKANN
+using LinearAlgebra: pinv, eigen, norm, diag, I
+using Plots
+include("isosimple.jl")
+include("forced/langevin.jl")
+
+function isokann2(model, opt, dataset, n, subsample=100)
     losses = Float64[]
     global target
     for i in 1:n
         xs, ys = getdata!(dataset, model)
-        batch = rand(1:size(xs, 2), 100)
+        nx = size(xs, 2)
+        batch = nx > subsample ? rand(1:size(xs, 2), subsample) : 1:nx
         xs = xs[:, batch]
         ys = ys[:, batch, :]
 
@@ -13,39 +21,32 @@ function isokann2(model, opt, dataset, n)
         ks = StatsBase.mean(cs[:, :, :], dims=3)[:,:,1]
 
         target = Kinv(model(xs), ks)
-        
+
         #target = K_isa(ks)
         #target = target .- mean(target, dims=1) .+ .1
 
-        target = target ./ norm.(eachrow(target), 1) .* size(target, 2) 
+        target = target ./ norm.(eachrow(target), 1) .* size(target, 2)
         target = real.(target)
-#=
-        @show sum(target[1,:]), sum(cxs[1,:])
-        for i in 1:size(target, 1)
-            @show dp = target[i, :]' * cxs[i, :]
-            if dp < 0
-                println("flippin $i")
-                target[i,:] .*= -1
-            end
-        end
-        @show sum(target[1,:]), sum(cxs[1,:])
-        =#
 
-        @show crit = cxs * target'
-        #@show crit = 1 ./[norm(cxs[i,:]-target[j,:]) for i in 1:size(target,1), j in 1:size(target,1)]
+        crit = cxs * target'
+        display(crit)
         P  = stableperm(crit)
-        target = P*target
-        #display(cov(target, cxs; dims=2))
+        display(cxs * (P * target)')
+        target = P * target
 
-        
-        # debug
-        if rand() > .9 && false
-            scatter(vec(xs), target') 
+
+        debug = true
+        if debug && rand() > 0.9
+            if size(xs, 1) == 2
+                vis2d(xs, target)
+            elseif size(xs, 1) ==
+                   scatter(vec(xs), target')
             plot!(vec(xs), cxs') |> display
-            scatter(cxs', target')|> display
+            end
+            #scatter(cxs', target')|> display
         end
 
-        
+
         for j in 1:20
             loss   = learnstep!(model, xs, target, opt)  # Neural Network update
             push!(losses, loss)
@@ -54,18 +55,27 @@ function isokann2(model, opt, dataset, n)
     losses
 end
 
+function vis2d(xs, fxs)
+    plot()
+    for f in eachrow(fxs)
+        scatter!(eachrow(xs)..., marker_z=f)
+    end
+    plot!()
+end
+
 # there are more stable versions using QR or SVD for the application of the pseudoinv
-function Kinv(chi::Matrix, kchi::Matrix, indirect=false)
-    if indirect 
+function Kinv(chi::Matrix, kchi::Matrix, direct=true)
+    if direct
+        Kinv = chi * pinv(kchi)
+        e = eigen(Kinv)
+        display(e)
+        #@show e
+        return inv(e.vectors) * Kinv * kchi
+    else
         K = kchi*pinv(chi)
         e = eigen(K)
         # display(e)
         return inv(e.vectors) * inv(K) * kchi
-    else
-        Kinv = chi * pinv(kchi)
-        e = eigen(Kinv)
-        # display(e)
-        return inv(e.vectors) * Kinv * kchi
     end
 end
 
@@ -79,6 +89,19 @@ function stableA(A)
     end
     A[p,:]
 end
+
+# adjust only for the sign
+function stablesign(A)
+    n = size(A, 1)
+    P = collect(Int, I(n))
+    for i in 1:n
+        P[i, i] *= sign(A[i, i])
+    end
+    return P
+end
+
+
+
 
 function stableperm(A)
     n = size(A,1)
@@ -129,7 +152,17 @@ function doublewelldata(nx, ny)
     return xs, ys
 end
 
-function iso2(;n=1, nx=10, ny=10, nd=2, sys=Doublewell(), lr=1e-3, decay=1e-3)
+function test_dw(; kwargs...)
+    iso2(nd=2, sys=Doublewell(); kwargs...)
+end
+
+function test_tw(; kwargs...)
+    iso2(nd=3, sys=Triplewell(); kwargs...)
+end
+
+import Flux
+
+function iso2(; n=1, nx=10, ny=10, nd=2, sys=Doublewell(), lr=1e-3, decay=1e-5)
     global s, model, xs, ys, opt, loss
     s = sys
     xs = randx0(sys, nx)
@@ -149,17 +182,18 @@ function iso2(;n=1, nx=10, ny=10, nd=2, sys=Doublewell(), lr=1e-3, decay=1e-3)
 end
 
 function vismodel(model, dim)
-    if dim == 1 
+    if dim == 1
         plot(model(collect(-1.5:.1:1.5)')')
     elseif dim == 2
         plot()
         grd = -2:.1:2
-        for i in 1:3
+        for i in 1paks = ["IJulia", "Plots", "LaTeXStrings", "Cubature", "StatsBase", "Molly", "StaticArrays", "Unitful", "Bio3DView", "KernelDensity", "Measurements", "Zygote"]
+            Pkg.add(paks):3
             m = [model([x,y])[i] for x in grd, y in grd]
-            m = m .- mean(m)
-            m = m ./ std(m)
-            contour!(grd, grd, m) |> display
+            m = m .- StatsBase.mean(m)
+            m = m ./ StatsBase.std(m)
+            contour!(grd, grd, m, color=i) |> display
         end
-        
+
     end
 end

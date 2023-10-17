@@ -134,8 +134,13 @@ function learnstep!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
 end
 
 function learnstep!(model, xs, target::AbstractVector, opt)
-    vmodel(xs) = vec(model(xs))
-    learnstep!(vmodel, xs, vec(target), opt)
+    l, grad = let xs = xs  # `let` allows xs to not be boxed
+     Zygote.withgradient(model) do model
+            sum(abs2, vec(model(xs) .- target)) / size(target, 2)
+        end
+    end
+    Optimisers.update!(opt, model, grad[1])
+    return l
 end
 
 
