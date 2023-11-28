@@ -13,7 +13,7 @@ using Molly: Molly, System
 using StaticArrays: SVector
 using StatsBase: sample
 using CUDA: CuArray, CuMatrix
-using NNlibCUDA: batched_adjoint, batched_mul
+using NNlib: batched_adjoint, batched_mul
 using Unitful: @u_str, unit
 import ProgressMeter
 using SpecialFunctions: erf

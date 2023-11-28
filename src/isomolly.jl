@@ -56,7 +56,8 @@ function run!(iso::IsoRun; showprogress=true)
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
             t_train += @elapsed for i in 1:nl
-                ls = learnbatch!(model, Float32.(xs), Float32.(target), opt, minibatch)
+                #ls = learnbatch!(model, Float32.(xs), Float32.(target), opt, minibatch)
+                ls = learnstep!(model, xs, target, opt)
                 push!(losses, ls)
             end
         end
@@ -66,9 +67,9 @@ function run!(iso::IsoRun; showprogress=true)
         end
 
         if nres > 0 && j % nres == 0 && (nxmax == 0 || size(data[1], 2) < nxmax)
-            data = adddata(data, model, sim, ny)
+            t_samp += @elapsed data = adddata(data, model, sim, ny)
             #if size(data[1], 2) > 3000
-            #    data = datasubsample(model, data, 1000)
+            #    data = datasubsample(model, data, 1000)  # keep the data small
             #end
             iso.data = data
 
@@ -133,22 +134,10 @@ function learnstep!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
     return l
 end
 
-function learnstep!(model, xs, target::AbstractVector, opt)
-    l, grad = let xs = xs  # `let` allows xs to not be boxed
-     Zygote.withgradient(model) do model
-            sum(abs2, vec(model(xs) .- target)) / size(target, 2)
-        end
-    end
-    Optimisers.update!(opt, model, grad[1])
-    return l
-end
-
+learnstep!(model, xs, target::AbstractVector, opt) = learnstep!(model, xs, target', opt)
 
 ## DATA MANGLING
 # TODO: better interface
-
-
-
 
 # default setups
 
