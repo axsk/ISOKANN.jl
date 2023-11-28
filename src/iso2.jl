@@ -1,26 +1,42 @@
-### unforunately, this is rarther dirty
-# we use the sde integrator from forced/langevin
-# the getdata! protocol from isosimple
-
+# test implementation of ISOKANN 2.0
 
 import StatsBase
+import Flux
 using ISOKANN
 using LinearAlgebra: pinv, eigen, norm, diag, I
 using Plots
-include("isosimple.jl")
-include("forced/langevin.jl")
+include("isosimple.jl")  # for the learnstep! function
+include("forced/langevin.jl")  # for the simulators
 
-struct IsoData2{T}
-    xs::Array{T,2}
-    ys::Array{T,3}
+""" iso2(; kwargs...)
+ISOKANN 2.0 under construction. Uses the pseudoinverse, normalization, and permutation stabilization.
+- `n`: number of steps
+- `nx`: number of sampling points
+- `ny`: number of koopman samples
+- `nd`: number of dimensions of the chi function / number of metastabilities
+- `sys`: system to simulate (needs to support randx0, dim, propagate)
+"""
+function iso2(; n=1, nx=10, ny=10, nd=2, sys=Doublewell(), lr=1e-3, decay=1e-5)
+    global s, model, xs, ys, opt, loss
+    s = sys
+    xs = randx0(sys, nx)
+    if dim(sys) == 1
+        xs = sort(xs, dims=2)
+    end
+    ys = propagate(sys, xs, ny)
+
+    model = Flux.Chain(
+        Flux.Dense(dim(sys),5, Flux.sigmoid),
+        Flux.Dense(5,5,Flux.sigmoid),
+        #Flux.Dense(30,10,Flux.sigmoid),
+        Flux.Dense(5,nd))
+
+    opt = Flux.setup(Flux.AdamW(lr, (0.9, 0.999), decay), model)
+    loss = isostep(model, opt, (xs, ys), n)
 end
 
-MyIsoData = IsoData2
-
-numobs(d::MyIsoData) = size(d.xs, 2)
-getobs(d::MyIsoData, idx) = (d.xs[:, idx], d.ys[:, idx, :])
-
-""" train the model on a given batch of trajectory data `(xs, ys)` with
+""" isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
+train the model on a given batch of trajectory data `(xs, ys)` with
 - n outer iterations, i.e. reevaluating Koopman
 - J inner iterations, i.e. updating the neural network on fixed data
 """
@@ -28,6 +44,19 @@ function isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
     losses = Float64[]
     global target
     for i in 1:nkoop
+        target = isotarget(model, xs, ys)
+        for j in 1:nupdate
+            loss = learnstep!(model, xs, target, opt)  # Neural Network update
+            push!(losses, loss)
+        end
+    end
+    losses
+end
+
+""" isotarget(model, xs, ys)
+compute the isokann target function for the given model and data
+"""
+function isotarget(model, xs, ys)
         chi = model(xs)
 
         cs = model(ys)::AbstractArray{<:Number,3}
@@ -60,33 +89,20 @@ function isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
             #scatter(chi', target') |> display # the χ-χ' scatter plot
         end
 
-        for j in 1:nupdate
-            loss   = learnstep!(model, xs, target, opt)  # Neural Network update
-            push!(losses, loss)
-        end
-    end
-    losses
+    return target
 end
 
-function vis2d(xs, fxs)
-    plot()
-    for f in eachrow(fxs)
-        scatter!(eachrow(xs)..., marker_z=f)
-    end
-    plot!()
-end
 
 # there are more stable versions using QR or SVD for the application of the pseudoinv
 function Kinv(chi::Matrix, kchi::Matrix, direct=true, eigenvecs=true)
     if direct
         Kinv = chi * pinv(kchi)
         e = eigen(Kinv)
-        display(e)
-        #@show e
+        #display(e)
         T = eigenvecs ? inv(e.vectors) : I
         return T * Kinv * kchi
     else
-        K = kchi*pinv(chi)
+        K = kchi * pinv(chi)
         e = eigen(K)
         # display(e)
         T = eigenvecs ? inv(e.vectors) : I
@@ -94,7 +110,7 @@ function Kinv(chi::Matrix, kchi::Matrix, direct=true, eigenvecs=true)
     end
 end
 
-
+### Permutation - stabilization
 using Combinatorics
 
 function stableA(A)
@@ -115,9 +131,6 @@ function stablesign(A)
     return P
 end
 
-
-
-
 function stableperm(A)
     n = size(A,1)
     p = argmax(permutations(1:n, n)) do p
@@ -130,7 +143,9 @@ function stableperm(A)
     P
 end
 
-function K_isa(ks)
+### Inner simplex approch
+
+functio  K_isa(ks)
     A = innersimplexalgorithm(ks')'
     #A = stableA(A)
     A * ks
@@ -160,6 +175,8 @@ function indexmap(X)
     return ind
 end
 
+### Examples
+
 function doublewelldata(nx, ny)
     d = Doublewell()
     xs = randx0(d, nx)
@@ -175,26 +192,7 @@ function test_tw(; kwargs...)
     iso2(nd=3, sys=Triplewell(); kwargs...)
 end
 
-import Flux
-
-function iso2(; n=1, nx=10, ny=10, nd=2, sys=Doublewell(), lr=1e-3, decay=1e-5)
-    global s, model, xs, ys, opt, loss
-    s = sys
-    xs = randx0(sys, nx)
-    if dim(sys) == 1
-        xs = sort(xs, dims=2)
-    end
-    ys = propagate(sys, xs, ny)
-
-    model = Flux.Chain(
-        Flux.Dense(dim(sys),5, Flux.sigmoid),
-        Flux.Dense(5,5,Flux.sigmoid),
-        #Flux.Dense(30,10,Flux.sigmoid),
-        Flux.Dense(5,nd))
-
-    opt = Flux.setup(Flux.AdamW(lr, (0.9, 0.999), decay), model)
-    loss = isostep(model, opt, (xs, ys), n)
-end
+### Visualization
 
 function vismodel(model, dim)
     if dim == 1
@@ -213,3 +211,20 @@ function vismodel(model, dim)
 
     end
 end
+
+function vis2d(xs, fxs)
+    plot()
+    for f in eachrow(fxs)
+        scatter!(eachrow(xs)..., marker_z=f)  # probably should use contour here, see `vismodel`
+    end
+    plot!()
+end
+
+### Attempt to use Flux.jl data interface for data loading
+struct IsoData{T}
+    xs::Array{T,2}
+    ys::Array{T,3}
+end
+
+numobs(d::IsoData) = size(d.xs, 2)
+getobs(d::IsoData, idx) = (d.xs[:, idx], d.ys[:, idx, :])
