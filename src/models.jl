@@ -4,8 +4,8 @@
 
 
 " Neural Network model for molecules, using pairwise distances as first layer "
-function pairnet(sys)
-    pairnetlin(div(dim(sys), 3), 3)
+function pairnet(sys::MollyLangevin, layers=3)
+    pairnetlin(div(dim(sys), 3), layers)
 end
 
 function normalnet(sim)
