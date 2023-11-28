@@ -20,9 +20,6 @@ function iso2(; n=1, nx=10, ny=10, nd=2, sys=Doublewell(), lr=1e-3, decay=1e-5)
     global s, model, xs, ys, opt, loss
     s = sys
     xs = randx0(sys, nx)
-    if dim(sys) == 1
-        xs = sort(xs, dims=2)
-    end
     ys = propagate(sys, xs, ny)
 
     model = Flux.Chain(
@@ -37,8 +34,8 @@ end
 
 """ isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
 train the model on a given batch of trajectory data `(xs, ys)` with
-- n outer iterations, i.e. reevaluating Koopman
-- J inner iterations, i.e. updating the neural network on fixed data
+- nkoop outer iterations, i.e. reevaluating Koopman
+- nupdate inner iterations, i.e. updating the neural network on fixed data
 """
 function isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
     losses = Float64[]
