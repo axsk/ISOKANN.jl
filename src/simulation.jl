@@ -23,7 +23,7 @@ end
 
 ## Langevin simulation, containing the system and integration parameters
 
-Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
+Base.@kwdef mutable struct MollyLangevin{S<:Molly.System} <: IsoSimulation
     sys::S
     temp::Float64 = 298.0 # 298 K = 25 °C
     gamma::Float64 = 1.0

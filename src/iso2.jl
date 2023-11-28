@@ -1,3 +1,8 @@
+### unforunately, this is rarther dirty
+# we use the sde integrator from forced/langevin
+# the getdata! protocol from isosimple
+
+
 import StatsBase
 using ISOKANN
 using LinearAlgebra: pinv, eigen, norm, diag, I
@@ -5,49 +10,57 @@ using Plots
 include("isosimple.jl")
 include("forced/langevin.jl")
 
-function isokann2(model, opt, dataset, n, subsample=100)
+struct IsoData2{T}
+    xs::Array{T,2}
+    ys::Array{T,3}
+end
+
+MyIsoData = IsoData2
+
+numobs(d::MyIsoData) = size(d.xs, 2)
+getobs(d::MyIsoData, idx) = (d.xs[:, idx], d.ys[:, idx, :])
+
+""" train the model on a given batch of trajectory data `(xs, ys)` with
+- n outer iterations, i.e. reevaluating Koopman
+- J inner iterations, i.e. updating the neural network on fixed data
+"""
+function isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
     losses = Float64[]
     global target
-    for i in 1:n
-        xs, ys = getdata!(dataset, model)
-        nx = size(xs, 2)
-        batch = nx > subsample ? rand(1:size(xs, 2), subsample) : 1:nx
-        xs = xs[:, batch]
-        ys = ys[:, batch, :]
-
-        cxs = model(xs)
+    for i in 1:nkoop
+        chi = model(xs)
 
         cs = model(ys)::AbstractArray{<:Number,3}
         ks = StatsBase.mean(cs[:, :, :], dims=3)[:,:,1]
 
-        target = Kinv(model(xs), ks)
+        target = Kinv(chi, ks)
 
         #target = K_isa(ks)
         #target = target .- mean(target, dims=1) .+ .1
 
+        # normalize target
         target = target ./ norm.(eachrow(target), 1) .* size(target, 2)
         target = real.(target)
 
-        crit = cxs * target'
+        # stabilization of permutationn
+        crit = chi * target'
         display(crit)
         P  = stableperm(crit)
-        display(cxs * (P * target)')
+        display(chi * (P * target)')
         target = P * target
 
-
         debug = true
-        if debug && rand() > 0.9
-            if size(xs, 1) == 2
-                vis2d(xs, target)
-            elseif size(xs, 1) ==
-                   scatter(vec(xs), target')
-            plot!(vec(xs), cxs') |> display
+        if rand() > (1 - debug)
+            if size(xs, 1) == 1  # 1D state space
+                scatter(vec(xs), target')  # scatter training points
+                plot!(vec(xs), chi') |> display  # plot current network evaluations
+            elseif size(xs, 1) == 2  # 2D state space
+                vis2d(xs, target) |> display
             end
-            #scatter(cxs', target')|> display
+            #scatter(chi', target') |> display # the χ-χ' scatter plot
         end
 
-
-        for j in 1:20
+        for j in 1:nupdate
             loss   = learnstep!(model, xs, target, opt)  # Neural Network update
             push!(losses, loss)
         end
@@ -64,18 +77,20 @@ function vis2d(xs, fxs)
 end
 
 # there are more stable versions using QR or SVD for the application of the pseudoinv
-function Kinv(chi::Matrix, kchi::Matrix, direct=true)
+function Kinv(chi::Matrix, kchi::Matrix, direct=true, eigenvecs=true)
     if direct
         Kinv = chi * pinv(kchi)
         e = eigen(Kinv)
         display(e)
         #@show e
-        return inv(e.vectors) * Kinv * kchi
+        T = eigenvecs ? inv(e.vectors) : I
+        return T * Kinv * kchi
     else
         K = kchi*pinv(chi)
         e = eigen(K)
         # display(e)
-        return inv(e.vectors) * inv(K) * kchi
+        T = eigenvecs ? inv(e.vectors) : I
+        return T * inv(K) * kchi
     end
 end
 
@@ -178,7 +193,7 @@ function iso2(; n=1, nx=10, ny=10, nd=2, sys=Doublewell(), lr=1e-3, decay=1e-5)
         Flux.Dense(5,nd))
 
     opt = Flux.setup(Flux.AdamW(lr, (0.9, 0.999), decay), model)
-    loss = isokann2(model, opt, (xs,ys), n)
+    loss = isostep(model, opt, (xs, ys), n)
 end
 
 function vismodel(model, dim)
@@ -187,8 +202,9 @@ function vismodel(model, dim)
     elseif dim == 2
         plot()
         grd = -2:.1:2
-        for i in 1paks = ["IJulia", "Plots", "LaTeXStrings", "Cubature", "StatsBase", "Molly", "StaticArrays", "Unitful", "Bio3DView", "KernelDensity", "Measurements", "Zygote"]
-            Pkg.add(paks):3
+        for i in 1:3
+            #paks = ["IJulia", "Plots", "LaTeXStrings", "Cubature", "StatsBase", "Molly", "StaticArrays", "Unitful", "Bio3DView", "KernelDensity", "Measurements", "Zygote"]
+            #Pkg.add(paks):3
             m = [model([x,y])[i] for x in grd, y in grd]
             m = m .- StatsBase.mean(m)
             m = m ./ StatsBase.std(m)
