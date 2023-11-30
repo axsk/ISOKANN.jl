@@ -1,9 +1,8 @@
 # a simple rewrite of the the top layer api
 # functionally equivalent (up to the plots, loggers, ...) to isomolly.jl
 
-using ISOKANN: learnstep!, datasubsample, adddata, shiftscale, koopman
 using ProgressMeter
-using ISOKANN: koopman, shiftscale, learnstep!
+using ISOKANN: koopman, shiftscale, learnstep!, ISOKANN
 Tensor = Array{<:Any, 3}
 
 """

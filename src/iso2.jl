@@ -1,5 +1,7 @@
 # test implementation of ISOKANN 2.0
 
+# for a simple demonstration try `test_dw()` and `test_tw()`
+
 import StatsBase
 import Flux
 using ISOKANN: inputdim, outputdim
@@ -23,7 +25,7 @@ function iso2(; n=1000, nx=100, ny=10, nd=2, sys=Doublewell(), lr=1e-2, decay=1e
     xs = randx0(sys, nx)
     ys = propagate(sys, xs, ny)
 
-    nl = Flux.relu
+    nl = Flux.sigmoid
     model = Flux.Chain(
         Flux.Dense(dim(sys), 5, nl),
         Flux.Dense(5, 10, nl),
@@ -32,7 +34,6 @@ function iso2(; n=1000, nx=100, ny=10, nd=2, sys=Doublewell(), lr=1e-2, decay=1e
 
     opt = Flux.setup(Flux.AdamW(lr, (0.9, 0.999), decay), model)
     loss = isosteps(model, opt, (xs, ys), n)
-    vismodel(model)
 end
 
 """ isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
@@ -55,9 +56,10 @@ end
 
 """ isotarget(model, xs, ys)
 compute the isokann target function for the given model and data"""
-isotarget(model, xs, ys) = isotarget_pseudoinv(model, xs, ys)
+#isotarget(model, xs, ys) = isotarget_pseudoinv(model, xs, ys)
+isotarget(model, xs, ys) = isotarget_isa(model, xs, ys)
 
-function isotarget_pseudoinv(model, xs, ys; normalize=true, permute=true, direct=true, eigenvecs=true, debug=0.01)
+function isotarget_pseudoinv(model, xs, ys; normalize=true, permute=true, direct=true, eigenvecs=true, debug=false)
     chi = model(xs)
 
     cs = model(ys)::AbstractArray{<:Number,3}
@@ -83,10 +85,17 @@ function isotarget_pseudoinv(model, xs, ys; normalize=true, permute=true, direct
     return target
 end
 
-function isotarget_isa(model, xs, ys)
+function isotarget_isa(model, xs, ys; permute=true)
     cs = model(ys)
     ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
-    target = K_isa(cs)
+    target = K_isa(ks)
+
+    if permute
+        A = model(xs) * target'  # matrix of the inner products
+        P = stableperm(A)  # permutation matrix to maximize diagonal
+        target = P * target
+    end
+
     return target
 end
 
@@ -95,6 +104,7 @@ function Kinv(chi::Matrix, kchi::Matrix; direct=true, eigenvecs=true)
     if direct
         Kinv = chi * pinv(kchi)
         e = eigen(Kinv)
+        @show 1 ./ e.values
         T = eigenvecs ? inv(e.vectors) : I
         return T * Kinv * kchi
     else
@@ -108,24 +118,7 @@ end
 ### Permutation - stabilization
 using Combinatorics
 
-function stableA(A)
-    n = size(A, 1)
-    p = argmax(permutations(1:n, n)) do p
-        sum(diag(A[p, :]))
-    end
-    A[p, :]
-end
-
-# adjust only for the sign
-function stablesign(A)
-    n = size(A, 1)
-    P = collect(Int, I(n))
-    for i in 1:n
-        P[i, i] *= sign(A[i, i])
-    end
-    return P
-end
-
+# return the permutation matrix that maximizes the diagonal including possible sign changes
 function stableperm(A)
     n = size(A, 1)
     p = argmax(permutations(1:n, n)) do p
@@ -181,10 +174,12 @@ end
 
 function test_dw(; kwargs...)
     iso2(nd=2, sys=Doublewell(); kwargs...)
+    vismodel(model)
 end
 
 function test_tw(; kwargs...)
     iso2(nd=3, sys=Triplewell(); kwargs...)
+    vismodel(model)
 end
 
 ### Visualization
@@ -196,7 +191,7 @@ function plot_training(xs, chi, target)
         scatter(xs[s], target[:, s]')
         plot!(xs[s], chi[:, s]')
     elseif size(xs, 1) == 2
-        vis2d(xs, target)
+        vis2d_scatter(xs, target)
     end
     plot!()
 end
@@ -214,8 +209,6 @@ function vismodel(model, grd=-2:0.1:2)
     end
 end
 
-
-
 function vis2d_scatter(xs, fxs)
     plot()
     for (i, f) in enumerate(eachrow(fxs))
@@ -224,11 +217,3 @@ function vis2d_scatter(xs, fxs)
     plot!()
 end
 
-### Attempt to use Flux.jl data interface for data loading
-struct IsoData{T}
-    xs::Array{T,2}
-    ys::Array{T,3}
-end
-
-numobs(d::IsoData) = size(d.xs, 2)
-getobs(d::IsoData, idx) = (d.xs[:, idx], d.ys[:, idx, :])

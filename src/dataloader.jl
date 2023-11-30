@@ -7,3 +7,12 @@ function datasubsample(model, data::DataLoader, nx)
     y = permutedims(y, (1, 3, 2))
     return (x, y)
 end
+
+### Attempt to use Flux.jl data interface for data loading
+struct IsoData{T}
+    xs::Array{T,2}
+    ys::Array{T,3}
+end
+
+numobs(d::IsoData) = size(d.xs, 2)
+getobs(d::IsoData, idx) = (d.xs[:, idx], d.ys[:, idx, :])
