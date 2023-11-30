@@ -1,6 +1,11 @@
 
 # Neural Network model for mol
 
+inputdim(model::Flux.Chain) = inputdim(model.layers[1])
+inputdim(model::Flux.Dense) = size(model.weight, 2)
+
+outputdim(model::Flux.Chain) = outputdim(model.layers[end])
+outputdim(model::Flux.Dense) = size(model.weight, 1)
 
 function featureinds(sim::IsoSimulation)
     if dim(sim) == 8751
