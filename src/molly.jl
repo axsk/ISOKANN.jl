@@ -140,6 +140,13 @@ function PDB_1UAO(; rename_terminal_res=true, kwargs...)
     return sys
 end
 
+function PDB_diala_water()
+    ff_dir = joinpath(dirname(pathof(Molly)), "..", "data", "force_fields")
+    ff = Molly.MolecularForceField(joinpath.(ff_dir, ["ff99SBildn.xml", "tip3p_standard.xml"])...)
+    sys = Molly.System(joinpath(@__DIR__, "..", "data", "dipeptide_equil.pdb"), ff; rename_terminal_res=false)
+    return sys
+end
+
 
 """
     OverdampedLangevin(; <keyword arguments>)

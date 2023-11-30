@@ -2,7 +2,7 @@
 
 import StatsBase
 import Flux
-using ISOKANN
+import ISOKANN
 using LinearAlgebra: pinv, eigen, norm, diag, I
 using Plots
 include("isosimple.jl")  # for the learnstep! function
@@ -75,7 +75,7 @@ function isotarget(model, xs, ys)
         display(chi * (P * target)')
         target = P * target
 
-        debug = true
+    debug = 0.1
         if rand() > (1 - debug)
             if size(xs, 1) == 1  # 1D state space
                 scatter(vec(xs), target')  # scatter training points
@@ -142,7 +142,7 @@ end
 
 ### Inner simplex approch
 
-functio  K_isa(ks)
+function K_isa(ks)
     A = innersimplexalgorithm(ks')'
     #A = stableA(A)
     A * ks

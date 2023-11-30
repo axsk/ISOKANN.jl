@@ -51,7 +51,7 @@ function plot_learning(iso; subdata=nothing)
     xs, ys = data
     # TODO: make this more appealing
     p2 = if isa(iso.sim, IsoSimulation)
-        scatter_ramachandran(reshape(xs, 66, :), model)
+        scatter_ramachandran(xs[1:66, :], model)
     else
         plot(model(xs) |> vec, label="", ylabel="χ", xlabel="frame")
     end

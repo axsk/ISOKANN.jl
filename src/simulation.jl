@@ -32,8 +32,6 @@ Base.@kwdef mutable struct MollyLangevin{S<:Molly.System} <: IsoSimulation
     n_threads::Int = 1  # number of threads for the force computations
 end
 
-
-
 solve(ml; kwargs...) = reduce(hcat, getcoords.(_solve(ml; kwargs...)))
 
 function _solve(ml::MollyLangevin;
@@ -42,11 +40,8 @@ function _solve(ml::MollyLangevin;
 
     sys = setcoords(ml.sys, u0)::Molly.System
 
-    # this seems to be necessary for multithreading, but expensive
-    #sys.neighbor_finder = deepcopy(sys.neighbor_finder)
-    #sys.loggers = loggers=(coords=CoordinateLogger(logevery))
     sys = Molly.System(sys;
-        neighbor_finder=deepcopy(sys.neighbor_finder),
+        neighbor_finder=deepcopy(sys.neighbor_finder), # this seems to be necessary for multithreading, but expensive
         loggers=(coords=Molly.CoordinateLogger(logevery),)
     )
 
@@ -57,7 +52,7 @@ function _solve(ml::MollyLangevin;
         friction=ml.gamma * u"ps^-1",
     )
     n_steps = round(Int, ml.T / ml.dt)
-    Molly.simulate!(sys, simulator, n_steps; n_threads=ml.n_threads)
+    Molly.simulate!(sys, simulator, n_steps; n_threads=ml.n_threads, run_loggers=:skipzero)
     return sys.loggers.coords.history
 end
 
