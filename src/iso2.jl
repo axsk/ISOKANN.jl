@@ -165,8 +165,8 @@ end
 
 ### Examples
 
-function doublewelldata(nx, ny)
-    d = Doublewell()
+function isodata(diffusion, nx, ny)
+    d = diffusion
     xs = randx0(d, nx)
     ys = propagate(d, xs, ny)
     return xs, ys
@@ -196,7 +196,7 @@ function plot_training(xs, chi, target)
     plot!()
 end
 
-function vismodel(model, grd=-2:0.1:2)
+function vismodel(model, grd=-2:0.03:2; xs=nothing, ys=nothing, markeralpha=0.1, markersize=1, float=0.01, kwargs...)
     dim = inputdim(model)
     if dim == 1
         plot(grd, model(collect(grd)')')
@@ -205,6 +205,11 @@ function vismodel(model, grd=-2:0.1:2)
         for i in 1:outputdim(model)
             surface!(p, grd, grd, (x, y) -> model([x, y])[i])
         end
+        if !isnothing(ys)
+            yy = reshape(ys, 2, :)
+            scatter!(eachrow(yy)..., maximum(model(yy), dims=1) .+ float |> vec; markeralpha, markersize, markercolor=:blue, kwargs...)
+        end
+        !isnothing(xs) && scatter!(eachrow(xs)..., maximum(model(xs), dims=1) .+ float |> vec; markeralpha, markersize, markercolor=:red, kwargs...)
         plot!()
     end
 end
