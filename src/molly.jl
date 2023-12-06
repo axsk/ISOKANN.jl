@@ -149,9 +149,13 @@ end
 
 
 """
-    OverdampedLangevin(; <keyword arguments>)
+    OverdampedLangevinGirsanov(; <keyword arguments>)
 
-Simulates the overdamped Langevin equation using the Euler-Maruyama method.
+Simulates the overdamped Langevin equation using the Euler-Maruyama method with an auxilliary control w/u
+with σ = sqrt(2KT/(mγ))
+dX = (-∇U(X)/(γm) + σu) dt + σ dW
+
+where u is the control function, such that u(x,t) = σ .* w(x,t)
 
 # Arguments
 - `dt::S`: the time step of the simulation.
@@ -159,14 +163,15 @@ Simulates the overdamped Langevin equation using the Euler-Maruyama method.
 - `friction::F`: the friction coefficient of the simulation.
 - `remove_CM_motion=1`: remove the center of mass motion every this number of steps,
     set to `false` or `0` to not remove center of mass motion.
+- `w::Function`: the control function, such that u(x,t) = σ .* w(x,t)
 """
 struct OverdampedLangevinGirsanov{S, K, F, Fct}
     dt::S
     temperature::K
     friction::F
     remove_CM_motion::Int
-    g::Float64
-    w::Fct
+    g::Float64  # the Girsanov integral
+    w::Fct  # control function in the form w = uσ
 end
 
 function OverdampedLangevinGirsanov(; dt, temperature, friction, w, remove_CM_motion=1, G=0.)
@@ -196,15 +201,18 @@ function simulate!(sys,
         F = forces(sys, neighbors; n_threads=n_threads)
         w = sim.w(sys.coords, sys.time)
 
+        # we reconstruct dB from the Boltzmann velocities
+        # this takes care of units and the correct type
+        # but maybe sampling ourselves works just as well and is cleaner?
         v = random_velocities(sys, T; rng=rng)
         dB = @. v / sqrt(k * T / m) * sqrt(dt)
 
-        o = @. sqrt(2 * k * T / (γ * m))
+        σ = @. sqrt(2 * k * T / (γ * m))
 
         b = @. (F / (γ * m))
-        u = @. o * w
+        u = @. σ * w
 
-        sys.coords += @. (b + o * u) * dt + o * dB
+        sys.coords += @. (b + σ * u) * dt + σ * dB
         sim.g += dot(u, @. u * (dt / 2) + dB)
 
         apply_constraints!(sys, old_coords, sim.dt)
