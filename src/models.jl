@@ -34,10 +34,10 @@ end
 " Neural Network model for molecules, using pairwise distances as first layer "
 function pairnet(sim::IsoSimulation, layers=3)
     n = div(length(featureinds(sim)), 3)^2
-    pairnet(n, layers, featurizer(sim))
+    pairnet(n; layers, features=featurizer(sim))
 end
 
-function pairnet(n=22, layers=3, features=identity, lastactivation=identity)
+function pairnet(n=22; layers=3, features=identity, lastactivation=identity, nout=1)
     nn = Flux.Chain(
         x -> Float32.(x),
         features,
@@ -46,8 +46,11 @@ function pairnet(n=22, layers=3, features=identity, lastactivation=identity)
             round(Int, n^((l - 1) / layers)),
             Flux.sigmoid)
          for l in layers:-1:2]...,
-        Flux.Dense(round(Int, n^(1 / layers)), 1, lastactivation),
+        Flux.Dense(round(Int, n^(1 / layers)), nout, lastactivation),
     )
     return nn
 end
 
+function growmodel(m, n)
+    Flux.Chain(m.layers[1:end-1]..., Flux.Dense(ISOKANN.inputdim(m.layers[end]), n))
+end
