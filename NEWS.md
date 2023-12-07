@@ -1,5 +1,9 @@
 Let us try to keep a rough log of the changes we did.
 
+07.12.23
+- isokann was working, we had beautiful muller brown plots
+- i changed a lot afterwards to glue it to the dipeptide, should test if mb is still converging
+
 22.2.23
 - fix the ominous u0 bug where all trajectories always started in the same point
 - added a chifix plot

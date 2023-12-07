@@ -36,7 +36,7 @@ mueller_brown = mueller_brown_2d_man
     σ::Float64 = 2.0
 end
 
-integrator(m::MuellerBrown) = EM()
+integrator(m::MuellerBrown) = StochasticDiffEq.EM()
 maxt(m::MuellerBrown) = m.T
 dt(m::MuellerBrown) = 0.0001
 dim(::MuellerBrown) = 2
