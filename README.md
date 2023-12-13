@@ -1,5 +1,7 @@
 # ISOKANN
 
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://axsk.github.io/VoronoiGraph.jl/dev)
+
 This should be the reference implementation for ISOKANN.
 Currently things are still fluctuating, so we have different implementations
 
