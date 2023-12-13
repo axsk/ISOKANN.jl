@@ -1,5 +1,5 @@
 using Parameters
-import StochasticDiffEq: StochasticDiffEq, SROCK2  # does this incur invalidations?
+import StochasticDiffEq  # does this incur invalidations?
 import ForwardDiff
 
 abstract type AbstractLangevin end
@@ -38,7 +38,7 @@ end
 maxt(d::AbstractLangevin) = maxt(d.potential)
 maxt(d) = 1.0
 
-integrator(d::AbstractLangevin) = SROCK2()
+integrator(d::AbstractLangevin) = StochasticDiffEq.SROCK2()
 
 dt(d::AbstractLangevin) = dt(d.potential)
 dt(d) = 0.01

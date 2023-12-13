@@ -43,7 +43,15 @@ function energyminimization(sim, x0; solver=Tsit5(), t=0.1, dt=0.0001, kwargs...
     return s.u[end]
 end
 
+""" compute the reactionpath for the simulation `sim` starting in `x0` along the gradient of the function provided by `chi`
 
+Optional arguments:
+extrapolate: walk beyond the interval limits
+orth: factor for the force orthogonal to the `chi` gradient
+solver: the ODE solver to use
+dt: the timestep size
+kwargs...: Keyword arguments passed to the `solve` method
+"""
 function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Euler(), dt=0.0001, kwargs...)
 
     t0 = chi(x0) |> first

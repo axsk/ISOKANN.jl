@@ -21,8 +21,21 @@ function savecoords(sim::IsoSimulation, data::AbstractArray, path; kwargs...)
 end
 
 
-## Langevin simulation, containing the system and integration parameters
+"""
+    struct MollyLangevin{S<:Molly.System} <: IsoSimulation
 
+The `MollyLangevin` struct represents a Langevin dynamics simulation for the Molly package.
+    It contains the system as well as the integration parameters.
+
+## Fields
+- `sys::S`: The system to be simulated.
+- `temp::Float64`: The temperature of the simulation in Kelvin. Default is 298.0 K.
+- `gamma::Float64`: The friction coefficient for the Langevin dynamics. Default is 1.0.
+- `dt::Float64`: The time step size in picoseconds. Default is 2e-3 ps.
+- `T::Float64`: The total simulation time in picoseconds. Default is 2e-1 ps.
+- `n_threads::Int`: The number of threads for force computations. Default is 1.
+
+"""
 Base.@kwdef mutable struct MollyLangevin{S<:Molly.System} <: IsoSimulation
     sys::S
     temp::Float64 = 298.0 # 298 K = 25 °C
@@ -32,6 +45,7 @@ Base.@kwdef mutable struct MollyLangevin{S<:Molly.System} <: IsoSimulation
     n_threads::Int = 1  # number of threads for the force computations
 end
 
+""" sample a single trajectory for the given system """
 solve(ml; kwargs...) = reduce(hcat, getcoords.(_solve(ml; kwargs...)))
 
 function _solve(ml::MollyLangevin;
@@ -61,6 +75,21 @@ function solve_end(ml::MollyLangevin; u0)
     getcoords(_solve(ml; u0, logevery=n_steps)[end])
 end
 
+
+"""
+    propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
+
+Burst simulation of the MollyLangeving system `ms`.
+Propagates `ny` samples for each initial position provided in the columns of `x0`.
+
+# Arguments
+- `ms::MollyLangevin`: The MollyLangevin solver object.
+- `x0::AbstractMatrix`: The initial positions matrix.
+- `ny`: The number of trajectories per initial condition.
+
+# Returns
+- `ys`: A 3-dimensional array of size `(dim(ms), nx, ny)` containing the propagated solutions.
+"""
 function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, nx, ny)

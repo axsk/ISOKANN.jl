@@ -31,7 +31,7 @@ import Zygote
 import OrdinaryDiffEq
 
 export pairnet, pairnetn
-export PDB_5XER, PDB_6MRR, PDB_ACEMD
+export PDB_ACEMD, PDB_1UAO, PDB_diala_water
 export MollyLangevin, MollySDE, propagate, solve
 export IsoRun, run!, Adam, AdamRegularized
 export plot_learning, scatter_ramachandran
@@ -39,7 +39,7 @@ export reactionpath
 
 include("humboldtsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
-include("simulation.jl")      # Langeving dynamic simulator (MollySystem+Integrator)
+include("simulation.jl")      # Langevin dynamic simulator (MollySystem+Integrator)
 include("models.jl")          # the neural network models/architectures
 include("molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation

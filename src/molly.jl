@@ -118,7 +118,7 @@ function PDB_5XER()
     return sys
 end
 
-""" Peptide Dialanine """
+""" Create a Molly system for the alanine dipeptide without solvent """
 function PDB_ACEMD(; kwargs...)
     ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
@@ -129,7 +129,7 @@ function PDB_ACEMD(; kwargs...)
     return sys
 end
 
-""" Peptide Dialanine """
+""" Create a Molly system for the small Chignolin protein """
 function PDB_1UAO(; rename_terminal_res=true, kwargs...)
     ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
     sys = System(joinpath(@__DIR__, "..", "data", "1uao av.pdb"), ff,
@@ -140,6 +140,7 @@ function PDB_1UAO(; rename_terminal_res=true, kwargs...)
     return sys
 end
 
+""" Create a Molly system for the alanine dipeptide with water """
 function PDB_diala_water()
     ff_dir = joinpath(dirname(pathof(Molly)), "..", "data", "force_fields")
     ff = Molly.MolecularForceField(joinpath.(ff_dir, ["ff99SBildn.xml", "tip3p_standard.xml"])...)

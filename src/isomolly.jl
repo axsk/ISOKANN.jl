@@ -1,4 +1,3 @@
-run(; kwargs...) = run!(IsoRun(; kwargs...))
 
 """
     struct IsoRun{T}
@@ -50,7 +49,7 @@ optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
 optparms(o::Optimisers.WeightDecay) = (; WeightDecay=o.gamma)
 optparms(o::Optimisers.Adam) = (; Adam=o.eta)
 
-# 
+""" run the given `IsoRun` object """
 function run!(iso::IsoRun; showprogress=true)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, loggers, nxmax) = iso
