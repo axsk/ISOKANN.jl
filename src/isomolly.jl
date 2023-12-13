@@ -1,13 +1,28 @@
-
-
-abstract type IsoRun end
-
 run(; kwargs...) = run!(IsoRun(; kwargs...))
 
+"""
+    struct IsoRun{T}
 
-IsoRun(; kwargs...) = ISO_ACEMD6(; kwargs...)
+The `IsoRun` struct represents a configuration for running the Isomolly algorithm.
 
-Base.@kwdef mutable struct ISO_ACEMD6{T} <: IsoRun # takes 10 min
+# Fields
+- `nd::Integer`: Number of outer data subsampling steps.
+- `nx::Integer`: Size of subdata set.
+- `np::Integer`: Number of power iterations with the same subdata.
+- `nl::Integer`: Number of weight updates with the same power iteration step.
+- `nres::Integer`: Resample new data every n outer steps.
+- `ny::Integer`: Number of new points to sample.
+- `nk::Integer`: Number of Koopman points to sample.
+- `nxmax::Integer`: Maximal number of x data points.
+- `sim`: Simulation object.
+- `model`: Model object.
+- `opt`: Optimization algorithm.
+- `data::T`: Data object.
+- `losses`: Vector to store loss values.
+- `loggers::Vector`: Vector of loggers.
+
+"""
+Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     nd::Integer = 1000 # number of outer datasubsampling steps
     nx::Integer = 100  # size of subdata set
     np::Integer = 2    # number of poweriterations with the same subdata
@@ -20,7 +35,6 @@ Base.@kwdef mutable struct ISO_ACEMD6{T} <: IsoRun # takes 10 min
     sim = MollyLangevin(sys=PDB_ACEMD())
     model = pairnet(sim)
     opt = AdamRegularized()
-    minibatch = Inf
 
     data::T = bootstrap(sim, ny, nk)
     losses = Float64[]
@@ -36,9 +50,10 @@ optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
 optparms(o::Optimisers.WeightDecay) = (; WeightDecay=o.gamma)
 optparms(o::Optimisers.Adam) = (; Adam=o.eta)
 
+# 
 function run!(iso::IsoRun; showprogress=true)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
-    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, minibatch, loggers, nxmax) = iso
+    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, loggers, nxmax) = iso
     #datastats(data)
 
     local subdata
@@ -56,7 +71,6 @@ function run!(iso::IsoRun; showprogress=true)
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
             t_train += @elapsed for i in 1:nl
-                #ls = learnbatch!(model, Float32.(xs), Float32.(target), opt, minibatch)
                 ls = learnstep!(model, xs, target, opt)
                 push!(losses, ls)
             end
@@ -182,7 +196,7 @@ end
 function Base.show(io::IO, mime::MIME"text/plain", iso::IsoRun)
     println(io, typeof(iso), ":")
     show(io, mime, iso.sim)
-    println(io, " nd=$(iso.nd), np=$(iso.np), nl=$(iso.nl), nres=$(iso.nres), minibatch=$(iso.minibatch)")
+    println(io, " nd=$(iso.nd), np=$(iso.np), nl=$(iso.nl), nres=$(iso.nres)")
     println(io, " nx=$(iso.nx), ny=$(iso.ny), nk=$(iso.nk)")
     println(io, " model: $(iso.model.layers)")
     println(io, " opt: $(optimizerstring(iso.opt))")
