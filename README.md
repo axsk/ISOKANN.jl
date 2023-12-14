@@ -1,6 +1,6 @@
 # ISOKANN
 
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://axsk.github.io/VoronoiGraph.jl/dev)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://axsk.github.io/ISOKANN.jl/dev)
 
 This should be the reference implementation for ISOKANN.
 Currently things are still fluctuating, so we have different implementations
@@ -22,7 +22,7 @@ run!(iso)       # run it for iso.nd steps
 plot_learning(iso) # plot the training overview
 
 # scatter plot of all initial points colored in  corresponding chi value
-scatter_ramachandran(iso.data[1], iso.model) 
+scatter_ramachandran(iso.data[1], iso.model)
 
 # estimate the eigenvalue, i.e. the metastability
 eigenvalue(iso.model, iso.data[1])
