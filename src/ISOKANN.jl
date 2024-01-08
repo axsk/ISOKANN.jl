@@ -30,10 +30,10 @@ import MLUtils
 import Zygote
 import OrdinaryDiffEq
 
-export pairnet, pairnetn
+export pairnet#, pairnetn
 export PDB_ACEMD, PDB_1UAO, PDB_diala_water
-export MollyLangevin, MollySDE, propagate, solve
-export IsoRun, run!, Adam, AdamRegularized
+export MollyLangevin, propagate, solve#, MollySDE
+export IsoRun, run!, AdamRegularized#, Adam
 export plot_learning, scatter_ramachandran
 export reactionpath
 
@@ -43,9 +43,9 @@ include("simulation.jl")      # Langevin dynamic simulator (MollySystem+Integrat
 include("models.jl")          # the neural network models/architectures
 include("molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
+include("data.jl")            # tools for handling the data (sampling, slicing, ...)
 include("isomolly.jl")        # ISOKANN for Molly systems
 include("plots.jl")           # visualizations
-include("data.jl")            # tools for handling the data (sampling, slicing, ...)
 include("loggers.jl")     # performance metric loggers
 include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
 include("cuda.jl")            # fixes for cuda

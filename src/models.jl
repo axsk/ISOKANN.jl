@@ -1,6 +1,9 @@
 
 # Neural Network model for mol
 
+Regularized(opt, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), opt)
+AdamRegularized(adam=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
+
 """ obtain the input dimension of a Flux model """
 inputdim(model::Flux.Chain) = inputdim(model.layers[1])
 inputdim(model::Flux.Dense) = size(model.weight, 2)

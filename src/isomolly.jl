@@ -21,6 +21,7 @@ The `IsoRun` struct represents a configuration for running the Isomolly algorith
 - `loggers::Vector`: Vector of loggers.
 
 """
+
 Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     nd::Int64 = 1000 # number of outer datasubsampling steps
     nx::Int64 = 100  # size of subdata set
@@ -34,15 +35,10 @@ Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     sim = MollyLangevin(sys=PDB_ACEMD())
     model = pairnet(sim)
     opt = AdamRegularized()
-
     data::T = bootstrap(sim, ny, nk)
     losses = Float64[]
     loggers::Vector = Any[plotcallback(10)]
 end
-
-Regularized(opt, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), opt)
-
-AdamRegularized(adam=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
 
 optparms(iso::IsoRun) = optparms(iso.opt.layers[2].bias.rule)
 optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
@@ -154,8 +150,8 @@ learnstep!(model, xs, target::AbstractVector, opt) = learnstep!(model, xs, targe
 
 # default setups
 
-IsoBench() = @time IsoRun1(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
-IsoLong() = IsoRun1(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
+IsoBench() = @time IsoRu(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
+IsoLong() = IsoRun(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
 
 function saveall(iso::IsoRun, pathlength=300)
     mkpath("out/latest")
@@ -179,7 +175,7 @@ end
 """ compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
 function chi_exit_rate(x, Kx, tau)
     @. shiftscale(x, p) = p[1] * x + p[1]
-    l1, l2 = LsqFit.coef(LsqFit.curve_fit(shiftscale, vec(x), vex(Kx), [1, 0.5]))
+    l1, l2 = LsqFit.coef(LsqFit.curve_fit(shiftscale, vec(x), vec(Kx), [1, 0.5]))
     a = -1 / tau * log(l1)
     b = a * l2 / (l1 - 1)
     return a + b

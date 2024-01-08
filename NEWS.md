@@ -1,5 +1,9 @@
 Let us try to keep a rough log of the changes we did.
 
+08.01.24
+- updated adaptive sampling to work in higher dimensions
+- cleaned up the repo
+
 07.12.23
 - isokann was working, we had beautiful muller brown plots
 - i changed a lot afterwards to glue it to the dipeptide, should test if mb is still converging

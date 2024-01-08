@@ -62,7 +62,7 @@ function getdata!(d::ChiStratData, model)
         d.data = ISOKANN.adddata(d.data, model, d.sim, d.n_generate)
     end
     if (d.i_resample) > 0 && (i%d.i_resample == 0) # subsample data
-        d.subdata = ISOKANN.datasubsample(model, d.data, n_resample)
+        d.subdata = ISOKANN.datasubsample(model, d.data, d.n_resample)
     end
     return d.subdata
 end

@@ -20,7 +20,7 @@ function isotraj(;traj,ref, reps=6)
     [
         IsoRun(
                 nres=0,
-                data=data_trajectory(traj, nx),
+            data=data_from_trajectory(traj, nx),
                 loggers=[TrainlossLogger(data=testdata(ref)), plotcallback(5)],
                 opt=AdamRegularized(1e-3, 1e-4),
                 nd=1000,

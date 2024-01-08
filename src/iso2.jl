@@ -101,6 +101,7 @@ function isotarget_pseudoinv(model, xs, ys; normalize=true, permute=true, direct
 end
 
 function isotarget_isa(model, xs, ys; permute=true)
+    chi = model(xs)
     cs = model(ys)
     ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
     target = PCCAPlus.innersimplexalgorithm(ks')' * ks
@@ -178,9 +179,9 @@ function vismodel(model, grd=-2:0.03:2; xs=nothing, ys=nothing, float=0.01, kwar
         end
         if !isnothing(ys)
             yy = reshape(ys, 2, :)
-            scatter!(eachrow(yy)..., maximum(model(yy), dims=1) .+ float |> vec; markeralpha, markersize, markercolor=:blue, defargs..., kwargs...)
+            scatter!(eachrow(yy)..., maximum(model(yy), dims=1) .+ float |> vec; markercolor=:blue, defargs..., kwargs...)
         end
-        !isnothing(xs) && scatter!(eachrow(xs)..., maximum(model(xs), dims=1) .+ float |> vec; markeralpha, markersize, markercolor=:red, kwargs...)
+        !isnothing(xs) && scatter!(eachrow(xs)..., maximum(model(xs), dims=1) .+ float |> vec; markercolor=:red, kwargs...)
         plot!(; kwargs...)
     end
 end
