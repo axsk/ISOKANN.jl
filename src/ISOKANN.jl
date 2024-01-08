@@ -12,7 +12,7 @@ using StatsBase: mean, sample, mean_and_std
 using Molly: Molly, System
 using StaticArrays: SVector
 using StatsBase: sample
-using CUDA: CuArray, CuMatrix
+using CUDA: CuArray, CuMatrix, cu
 using NNlib: batched_adjoint, batched_mul
 using Unitful: @u_str, unit
 import ProgressMeter
@@ -37,7 +37,7 @@ export IsoRun, run!, Adam, AdamRegularized
 export plot_learning, scatter_ramachandran
 export reactionpath
 
-include("humboldtsample.jl")  # adaptive sampling
+include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
 include("simulation.jl")      # Langevin dynamic simulator (MollySystem+Integrator)
 include("models.jl")          # the neural network models/architectures
@@ -46,7 +46,7 @@ include("molutils.jl")        # molecular utilities: dihedrals, rotation
 include("isomolly.jl")        # ISOKANN for Molly systems
 include("plots.jl")           # visualizations
 include("data.jl")            # tools for handling the data (sampling, slicing, ...)
-include("performance.jl")     # performance metric loggers
+include("loggers.jl")     # performance metric loggers
 include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
 include("cuda.jl")            # fixes for cuda
 include("reactionpath.jl")
