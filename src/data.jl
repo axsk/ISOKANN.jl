@@ -10,9 +10,9 @@
 
 DataTuple = Tuple{Matrix{T},Array{T,3}} where {T<:Number}
 
-
+import JLD2
 function load_refiso()
-    load("isoreference-6440710-0.jld2", "iso")
+    JLD2.load("isoreference-6440710-0.jld2", "iso")
 end
 
 """ compute initial data by propagating the molecules initial state
@@ -70,27 +70,49 @@ function subsample(model, data::Tuple, n)
 end
 
 
+"""
+    adddata(data::D, model, sim, ny, lastn=1_000_000)::D
 
-function adddata(data, model, sim::IsoSimulation, ny, lastn=1_000_000)
+Generate new data for ISOKANN by adaptive subsampling using the chi-stratified/-uniform method.
+
+1. Adaptively subsample `ny` points from `data` uniformly along their `model` values.
+2. propagate according to the simulation `model`.
+3. return the newly obtained data concatenated to the input data
+
+The subsamples are taken only from the `lastn` last datapoints in `data`.
+If `renormalize` is true, rescale the `model` values to the interval [0,1] before subsampling.
+
+# Examples
+```julia-repl
+julia> (xs, ys) = adddata((xs,ys), chi, mollysim)
+```
+"""
+function adddata(data, model, sim::IsoSimulation, ny; lastn=1_000_000, renormalize=false)
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
-    x0 = stratified_x0(model, ys[:, firstind:end, :], ny)
+    x0 = stratified_x0(model, ys[:, firstind:end, :], ny; renormalize)
     ys = propagate(sim, x0, nk)
-    ndata = centercoords(x0), centercoords(ys)
+    ndata = centercoords(x0), centercoords(ys)  # TODO: this does not really belong here
     data = hcat.(data, ndata)
-
-    datastats(data)
     return data
 end
 
-""" given an array of states, return a chi stratified subsample """
-function stratified_x0(model, ys, n)
-    ys = reshape(ys, size(ys, 1), :)
-    ks = shiftscale(model(ys) |> vec)
+""" 
+    stratified_x0(model, ys, n; renormalize=false)
+Given an array of states `ys`, return `n` `model`-stratified subsamples.
 
-    i = subsample_uniformgrid(ks, n)
-    xs = ys[:, i]
+If the model returns multiple chi-value, subsample along each dimension.
+If `renormalize` is true, rescale the `model` values to the interval [0,1] before subsampling.
+"""
+function stratified_x0(model, ys, n; renormalize=false)
+    ys = reshape(ys, size(ys, 1), :)
+    ks = shiftscale(model(ys))
+    inds = mapreduce(vcat, eachrow(ks)) do row
+        row = renormalize ? shiftscale(row) : row
+        subsample_uniformgrid(row, n)
+    end
+    xs = ys[:, inds]
     return xs
 end
 
@@ -104,7 +126,7 @@ end
 
 
 """ save data into a pdb file sorted by model evaluation """
-function extractdata(data::AbstractArray, model, sim, path="out/data.pdb")
+function extractdata(data::AbstractArray, model, sys, path="out/data.pdb")
     dd = data
     dd = reshape(dd, size(dd, 1), :)
     ks = model(dd)
@@ -147,7 +169,7 @@ end
 
 function data_stationary(trajdata, nx, nk)
     xs, ys = trajdata
-    i = sample(1:length(traj), nx, replace=false)
+    i = sample(1:size(xs, 2), nx, replace=false)
     return xs[:, i], ys[:, i, 1:nk]
 end
 
@@ -156,10 +178,11 @@ function data_sliced(data::Tuple, slice)
     (xs[:, slice], ys[:, slice, :])
 end
 
+import Random
 function shuffledata(data)
     xs, ys = data
     n = size(xs, 2)
-    i = randperm(n)
+    i = Random.randperm(n)
     return xs[:, i], ys[:, i, :]
 end
 
