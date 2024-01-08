@@ -195,7 +195,7 @@ function simulate!(sys,
 
         dt = sim.dt
         γ = sim.friction
-        m = sim.masses
+        m = Molly.masses(sys)
         k = sys.k
         T = sim.temperature
 

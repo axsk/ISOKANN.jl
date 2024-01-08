@@ -19,7 +19,7 @@ using Test
     end
 
     @testset "IsoForce" begin
-        ISOKANN.IsoForce.isokann(usecontrol=true)
+        @test_broken ISOKANN.IsoForce.isokann(usecontrol=true)  # broken since IsoForce is not included in ISOKANN any more
     end
     #=
         @testset "IsoForce (deprecated)" begin

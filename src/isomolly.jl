@@ -5,14 +5,14 @@
 The `IsoRun` struct represents a configuration for running the Isomolly algorithm.
 
 # Fields
-- `nd::Integer`: Number of outer data subsampling steps.
-- `nx::Integer`: Size of subdata set.
-- `np::Integer`: Number of power iterations with the same subdata.
-- `nl::Integer`: Number of weight updates with the same power iteration step.
-- `nres::Integer`: Resample new data every n outer steps.
-- `ny::Integer`: Number of new points to sample.
-- `nk::Integer`: Number of Koopman points to sample.
-- `nxmax::Integer`: Maximal number of x data points.
+- `nd::Int64`: Number of outer data subsampling steps.
+- `nx::Int64`: Size of subdata set.
+- `np::Int64`: Number of power iterations with the same subdata.
+- `nl::Int64`: Number of weight updates with the same power iteration step.
+- `nres::Int64`: Resample new data every n outer steps.
+- `ny::Int64`: Number of new points to sample.
+- `nk::Int64`: Number of Koopman points to sample.
+- `nxmax::Int64`: Maximal number of x data points.
 - `sim`: Simulation object.
 - `model`: Model object.
 - `opt`: Optimization algorithm.
@@ -22,15 +22,15 @@ The `IsoRun` struct represents a configuration for running the Isomolly algorith
 
 """
 Base.@kwdef mutable struct IsoRun{T} # takes 10 min
-    nd::Integer = 1000 # number of outer datasubsampling steps
-    nx::Integer = 100  # size of subdata set
-    np::Integer = 2    # number of poweriterations with the same subdata
-    nl::Integer = 5    # number of weight updates  with the same poweriteration step
+    nd::Int64 = 1000 # number of outer datasubsampling steps
+    nx::Int64 = 100  # size of subdata set
+    np::Int64 = 2    # number of poweriterations with the same subdata
+    nl::Int64 = 5    # number of weight updates  with the same poweriteration step
 
-    nres::Integer = 50  # resample new data every n outer steps
-    ny::Integer = 8     # number of new points to sample
-    nk::Integer = 8     # number of koopman points to sample
-    nxmax::Integer = 0  # maximal number of x data points
+    nres::Int64 = 50  # resample new data every n outer steps
+    ny::Int64 = 8     # number of new points to sample
+    nk::Int64 = 8     # number of koopman points to sample
+    nxmax::Int64 = 0  # maximal number of x data points
     sim = MollyLangevin(sys=PDB_ACEMD())
     model = pairnet(sim)
     opt = AdamRegularized()

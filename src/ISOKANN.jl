@@ -51,6 +51,10 @@ include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
 include("cuda.jl")            # fixes for cuda
 include("reactionpath.jl")
 
+include("isosimple.jl")
+include("iso2.jl")
+include("potentials.jl")
+
 #include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx
