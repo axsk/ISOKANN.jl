@@ -37,7 +37,7 @@ Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     opt = AdamRegularized()
     data::T = bootstrap(sim, ny, nk)
     losses = Float64[]
-    loggers::Vector = Any[plotcallback(10)]
+    loggers::Vector = Any[]
 end
 
 optparms(iso::IsoRun) = optparms(iso.opt.layers[2].bias.rule)
@@ -93,7 +93,7 @@ function run!(iso::IsoRun; showprogress=true)
 end
 
 # note there is also plot_callback in isokann.jl
-function plotcallback(secs=10)
+function autoplot(secs=10)
     Flux.throttle(
         function plotcallback(; iso, subdata, kwargs...)
             p = plot_learning(iso; subdata)
@@ -150,8 +150,8 @@ learnstep!(model, xs, target::AbstractVector, opt) = learnstep!(model, xs, targe
 
 # default setups
 
-IsoBench() = @time IsoRu(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
-IsoLong() = IsoRun(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=Adam(1e-5))
+IsoBench() = @time IsoRun(nd=1, nx=100, np=1, nl=300, nres=Inf, ny=100)
+IsoLong() = IsoRun(nd=1_000_000, nx=200, np=10, nl=10, nres=200, ny=8, opt=AdamRegularized(1e-5))
 
 function saveall(iso::IsoRun, pathlength=300)
     mkpath("out/latest")

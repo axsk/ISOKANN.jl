@@ -98,7 +98,7 @@ function adddata(data, model, sim::IsoSimulation, ny; lastn=1_000_000, renormali
     return data
 end
 
-""" 
+"""
     stratified_x0(model, ys, n; renormalize=false)
 Given an array of states `ys`, return `n` `model`-stratified subsamples.
 

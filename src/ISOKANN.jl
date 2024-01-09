@@ -43,8 +43,8 @@ include("simulation.jl")      # Langevin dynamic simulator (MollySystem+Integrat
 include("models.jl")          # the neural network models/architectures
 include("molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
-include("data.jl")            # tools for handling the data (sampling, slicing, ...)
 include("isomolly.jl")        # ISOKANN for Molly systems
+include("data.jl")            # tools for handling the data (sampling, slicing, ...)
 include("plots.jl")           # visualizations
 include("loggers.jl")     # performance metric loggers
 include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*

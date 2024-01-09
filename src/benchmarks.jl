@@ -4,7 +4,7 @@ function isobenchmarks(;ref, reps=6)
             IsoRun(
                 nres=0,
                 data=data_stratified(ref.model, ref.data, nx,nk),
-                loggers=[TrainlossLogger(data=testdata(ref)), plotcallback(5)],
+                loggers=[TrainlossLogger(data=testdata(ref)), autoplot(5)],
                 opt=AdamRegularized(1e-3, 1e-4),
                 nd=1000,
                 nx=nx);
@@ -21,7 +21,7 @@ function isotraj(;traj,ref, reps=6)
         IsoRun(
                 nres=0,
             data=data_from_trajectory(traj, nx),
-                loggers=[TrainlossLogger(data=testdata(ref)), plotcallback(5)],
+            loggers=[TrainlossLogger(data=testdata(ref)), autoplot(5)],
                 opt=AdamRegularized(1e-3, 1e-4),
                 nd=1000,
                 nx=nx)

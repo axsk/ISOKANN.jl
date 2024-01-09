@@ -1,7 +1,7 @@
 # the idea: take the derivative of the chi function as force field for an
 # "average transition path"
 
-
+using LinearAlgebra: normalize
 
 function reactionforce(sim, x, chi, direction=1, orth=0.01)
     # setcoords
@@ -38,8 +38,10 @@ function energyminforce(sim, x)
     return v / norm(v)
 end
 
-function energyminimization(sim, x0; solver=Tsit5(), t=0.1, dt=0.0001, kwargs...)
-    OrdinaryDiffEq.solve(ODEProblem((x, p, t) -> energyminforce(sim, x), x0, t; dt, kwargs...), solver)
+using OrdinaryDiffEq: ODEProblem
+
+function energyminimization(sim, x0; solver=OrdinaryDiffEq.Tsit5(), t=0.1, dt=0.0001, kwargs...)
+    s = OrdinaryDiffEq.solve(ODEProblem((x, p, t) -> energyminforce(sim, x), x0, t; dt, kwargs...), solver)
     return s.u[end]
 end
 
@@ -52,7 +54,7 @@ solver: the ODE solver to use
 dt: the timestep size
 kwargs...: Keyword arguments passed to the `solve` method
 """
-function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Euler(), dt=0.0001, kwargs...)
+function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=OrdinaryDiffEq.Euler(), dt=0.0001, kwargs...)
 
     t0 = chi(x0) |> first
     @show t0

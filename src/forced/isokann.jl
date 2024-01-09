@@ -14,12 +14,13 @@ defaultmodel(dynamics::AbstractLangevin, layers=[5,5]) = fluxnet([dim(dynamics);
 #isokann(Doublewell(), throttle=3, poweriter=100000, learniter=100, opt=Optimisers.Adam(0.001), dt=0.001, nx=10, nkoop=10, keepedges=true);
 
 function isokann(;dynamics=Doublewell(), model=defaultmodel(dynamics),
-                 nx::Int=10, nkoop::Int=10, poweriter::Int=100, learniter::Int=10, dt::Float64=0.01, T=1, alg=SROCK2(),
-                 opt=Optimisers.Adam(0.01), keepedges::Bool=true,
-                 throttle=1, callback = plot_callback,
-                 usecontrol::Bool=true,
-                 resample::Symbol=:humboldt
-                 )
+    nx::Int=10, nkoop::Int=10, poweriter::Int=100, learniter::Int=10, dt::Float64=0.01, T=1,
+    alg=StochasticDiffEq.SROCK2(),
+    opt=Optimisers.Adam(0.01), keepedges::Bool=true,
+    throttle=1, callback=plot_callback,
+    usecontrol::Bool=true,
+    resample::Symbol=:humboldt
+)
 
     callback_throttled = Flux.throttle(callback, throttle, leading=true, trailing=false)
 
@@ -39,7 +40,7 @@ function isokann(;dynamics=Doublewell(), model=defaultmodel(dynamics),
 
         # evaluate koopman
         ys, ws = girsanovbatch(cde, xs, nkoop) :: Tuple{Array{Float64, 3},  Array{Float64, 2}}
-        
+
         cs = model(ys)
         ks, std = vec.(StatsBase.mean_and_std(cs[1,:,:].*ws, 2))
 
@@ -130,7 +131,7 @@ function plot_mean_loss(rs)
 end
 
 function batch_analysis(;nbatch = 10, kwargs...)
-    rs = [OptImpSampling.isokann(throttle=Inf, resample=:rand, poweriter=100, learniter=100, nx=10, nkoop=10, usecontrol=true) for i in 1:nbatch]
+    rs = [isokann(throttle=Inf, resample=:rand, poweriter=100, learniter=100, nx=10, nkoop=10, usecontrol=true) for i in 1:nbatch]
     plot_mean_loss(rs)
 end
 

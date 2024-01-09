@@ -33,16 +33,16 @@ mueller_brown = mueller_brown_2d_man
 
 # Extends AbstractLangevin from forced/langevin.jl
 @with_kw struct MuellerBrown <: AbstractLangevin
-    T::Float64 = 0.01
-    σ::Float64 = 2.0
+    tmax::Float64 = 0.01
+    sigma::Float64 = 2.0
 end
 
 integrator(m::MuellerBrown) = StochasticDiffEq.EM()
-maxt(m::MuellerBrown) = m.T
+tmax(m::MuellerBrown) = m.tmax
 dt(m::MuellerBrown) = 0.0001
 dim(::MuellerBrown) = 2
 potential(d::MuellerBrown, x) = mueller_brown(x)
-sigma(l::MuellerBrown, x) = l.σ
+sigma(l::MuellerBrown, x) = l.sigma
 support(l::MuellerBrown) = repeat([-1.5 1.5], outer=[dim(l)])::Matrix{Float64}
 randx0(l::MuellerBrown, n) = reduce(hcat, [randx0(l) for i in 1:n])
 function randx0(l::MuellerBrown)

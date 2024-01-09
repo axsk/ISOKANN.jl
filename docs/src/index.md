@@ -6,7 +6,7 @@ Documentation for ISOKANN.jl
 CurrentModule = ISOKANN
 ```
 
-# Main entry points
+## Main entry points
 
 ```@docs
 IsoRun
@@ -15,7 +15,7 @@ MollyLangevin
 propagate
 ```
 
-# Public API
+## Public API
 
 ```@autodocs
 Modules = [ISOKANN]
@@ -23,10 +23,10 @@ Private = false
 Order = [:function]
 ```
 
-# Internal API
+## Internal API
 
 ```@autodocs
 Modules = [ISOKANN]
-Private = false
+Public = false
 Order = [:function]
 ```

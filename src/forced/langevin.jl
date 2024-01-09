@@ -5,7 +5,7 @@ import ForwardDiff
 abstract type AbstractLangevin end
 # interface methods: potential(l), sigma(l), dim(l)
 
-function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=maxt(l); dt=dt(l), alg=integrator(l), kwargs...)
+function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=tmax(l); dt=dt(l), alg=integrator(l), kwargs...)
     drift(x,p,t) = force(l, x)
     noise(x,p,t) = sigma(l, x)
     StochasticDiffEq.SDEProblem(drift, noise, x0, T, alg=alg, dt=dt; kwargs...)
@@ -32,11 +32,11 @@ end
 @with_kw struct Diffusion{T} <: AbstractLangevin
     potential::T
     dim::Int64=1
-    σ::Vector{Float64}=[1.]
+    sigma::Vector{Float64} = [1.0]
 end
 
-maxt(d::AbstractLangevin) = maxt(d.potential)
-maxt(d) = 1.0
+tmax(d::AbstractLangevin) = tmax(d.potential)
+tmax(d) = 1.0
 
 integrator(d::AbstractLangevin) = StochasticDiffEq.SROCK2()
 
@@ -44,7 +44,7 @@ dt(d::AbstractLangevin) = dt(d.potential)
 dt(d) = 0.01
 
 potential(d::Diffusion, x) = d.potential(x)
-sigma(l::Diffusion, x) = l.σ
+sigma(l::Diffusion, x) = l.sigma
 dim(l::Diffusion) = l.dim
 support(l::Diffusion) = repeat([-1.5 1.5], outer=[dim(l)]) :: Matrix{Float64}
 

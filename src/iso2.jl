@@ -14,7 +14,7 @@ include("forced/langevin.jl")  # for the simulators
 """
     iso2(; n=1000, nx=100, ny=10, nd=2, sys=Doublewell(), lr=1e-2, decay=1e-5)
 
-ISOKANN 2.0 under construction. 
+ISOKANN 2.0 under construction.
 
 ## Arguments
 - `n`: Number of iterations (default: 1000)
@@ -113,7 +113,7 @@ end
 ### Permutation - stabilization
 using Combinatorics
 
-# 
+#
 
 """
     fixperm(new, old)
@@ -138,7 +138,7 @@ function test_fixperm(n=3)
     old = rand(n, n)
     @show old
     new = old[shuffle(1:n), :]
-    new = fixstable(new, old)
+    new = fixperm(new, old)
     @show new
     norm(new - old) < 1e-9
 end

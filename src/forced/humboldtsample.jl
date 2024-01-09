@@ -1,3 +1,5 @@
+using ISOKANN: subsample_uniformgrid
+
 "
 humboldtsample(xs, ocp, n, branch)
 
@@ -11,19 +13,18 @@ function humboldtsample(xs, ocp, n, branch)
     nxs = copy(xs)
     for x in xs
         for i in 1:branch
-            s = msolve(ocp, x)[end][1:end-1]
+            s, _ = girsanovsample(ocp, x)
             push!(nxs, s)
         end
     end
-
     ys = map(x -> ocp.chi(x)[1], nxs)
-    is = subsample_uniformgrid(vec(ys), n)
+    is = ISOKANN.subsample_uniformgrid(vec(ys), n)
 
     return nxs[is]
 end
 
 function humboldtsample(xs, ys::AbstractVector, n; keepedges=true)
     # this is used from isonew.jl
-    i = subsample_uniformgrid(ys, n; keepedges)
+    i = ISOKANN.subsample_uniformgrid(ys, n; keepedges)
     return xs[:, i]
 end

@@ -12,10 +12,12 @@ using Test
     @testset "IsoRun GPU" begin
         using Flux
         using CUDA
-        CUDA.allowscalar(false)
-        iso = ISOKANN.IsoRun(loggers=[])
-        ISOKANN.gpu!(iso)
-        ISOKANN.run!(iso)
+        if CUDA.functional()
+            CUDA.allowscalar(false)
+            iso = ISOKANN.IsoRun(loggers=[])
+            ISOKANN.gpu!(iso)
+            ISOKANN.run!(iso)
+        end
     end
 
     @testset "IsoForce" begin
