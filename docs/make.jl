@@ -1,5 +1,5 @@
 using Documenter
-using ISOKANN
+@time @time_imports using ISOKANN
 
 makedocs(
     sitename="ISOKANN",

@@ -61,6 +61,12 @@ function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; targetargs=(;))
     (; losses, target)
 end
 
+ISO2_METHOD = :isa
+ISO2_NORMALIZE = true
+ISO2_PERMUTE = true
+ISO2_DIRECT = false
+ISO2_EIGENVECS = true
+
 """ isotarget(model, xs, ys, method=:inv, kwargs...)
 compute the isokann target function for the given model and data.
 optional arguments:
@@ -70,13 +76,18 @@ optional arguments:
 - `direct`: use the direct method instead of the inverse method (:inv only)
 - `eigenvecs`: use the eigenvecs of the schur decomposition instead of the identity matrix (:inv only)
 """
-function isotarget(model, xs, ys; method=:inv, kwargs...)
+function isotarget(model, xs, ys; method=:isa, kwargs...)
     method == :inv && return isotarget_pseudoinv(model, xs, ys; kwargs...)
     method == :isa && return isotarget_isa(model, xs, ys; kwargs...)
     error("unknown method $method")
 end
 
-function isotarget_pseudoinv(model, xs, ys; normalize=true, permute=true, direct=false, eigenvecs=true, debug=false)
+function isotarget_pseudoinv(model, xs, ys;
+    normalize=ISO2_NORMALIZE,
+    permute=ISO2_PERMUTE,
+    direct=ISO2_DIRECT,
+    eigenvecs=ISO2_EIGENVECS
+)
     chi = model(xs)
 
     cs = model(ys)::AbstractArray{<:Number,3}
@@ -100,12 +111,15 @@ function isotarget_pseudoinv(model, xs, ys; normalize=true, permute=true, direct
     return target
 end
 
-function isotarget_isa(model, xs, ys; permute=true)
+# we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
+# which in turn assumes that the first column is equal to one.
+myisa(X) = inv(X[PCCAPlus.indexmap(X), :])
+
+function isotarget_isa(model, xs, ys; permute=ISO2_PERMUTE)
     chi = model(xs)
     cs = model(ys)
     ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
-    target = PCCAPlus.innersimplexalgorithm(ks')' * ks
-
+    target = myisa(ks')' * ks
     permute && (target = fixperm(target, chi))
     return target
 end
@@ -205,30 +219,54 @@ end
 function diala2data()
     iso = ISOKANN.IsoRun(nd=3000, loggers=[])
     ISOKANN.run!(iso)
-    data = iso.data
+    iso
 end
 
 """ ISOKANN 2 dialanine experiment
 generates data from 1d ISOKANN and trains a 3d ISOKANN on it
 The kwargs are passed on to `isotarget`
 """
-function diala2(; data=diala2data(), kwargs...)
+function diala2(; data=nothing, nd=3000, kwargs...)
+    if isnothing(data)
+        iso = run!(IsoRun(nd=nd, loggers=[]))
+        data = iso.data
+    end
+
+    sim = MollyLangevin(sys=PDB_ACEMD())
     model = ISOKANN.pairnet(66, nout=3)
     opt = Flux.setup(Flux.AdamW(1e-3, (0.9, 0.999), 1e-4), model)
-    up = isosteps(model, opt, data, 1000, targetargs=kwargs)
+    losses = Float64[]
 
-    p1 = visualize_diala(model, data[1])
-    p2 = scatter(eachrow(up.target)...)
-    p3 = plot(up.losses)
-    plot(p1, p2, p3) |> display
-    (; data, model, opt, up...)
+    return (; data, model, sim, opt, losses)
 end
 
-function visualize_diala(mm, xs; kwargs...)
+function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, kwargs...)
+    (; data, model, sim, opt, losses) = iso
+    local target
+    for _ in 1:epochs
+        l, target = isosteps(model, opt, data, nkoop, targetargs=kwargs)
+        data = adddata(data, model, sim, ny)
+        append!(losses, l)
+        vis_training(; model, data, target, losses) |> display
+    end
+
+    (; data, model, sim, opt, losses, target)
+end
+
+function vis_training(; model, data, target, losses, others...)
+    p1 = visualize_diala(model, data[1],)
+    p2 = scatter(eachrow(target)..., markersize=0.1)
+    p3 = plot(losses, yaxis=:log)
+    plot(p1, p2, p3)
+end
+
+
+function visualize_diala(mm, xs; markersize, kwargs...)
     p1, p2 = ISOKANN.phi(xs), ISOKANN.psi(xs)
     plot()
     for chi in eachrow(mm(xs))
-        scatter!(p1, p2, chi; kwargs)
+        @show markersize = max.(chi .* 3, 0.01)
+        scatter!(p1, p2, chi; kwargs..., markersize, markerstrokewidth=0)
     end
     plot!()
 end

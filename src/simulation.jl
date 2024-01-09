@@ -12,7 +12,7 @@ rotationhandles(sim::IsoSimulation) = rotationhandles(sim.sys)
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::IsoSimulation)
     #print(io, isa(sim, MollySDE) ? "Overdamped Langevin" : "Langevin")
-    println(io, " system with $(div(dim(sim.sys),3)) atoms")
+    println(io, " System with $(div(dim(sim.sys),3)) atoms")
     println(io, " dt=$(sim.dt), T=$(sim.T), temp=$(sim.temp), gamma=$(sim.gamma)")
 end
 

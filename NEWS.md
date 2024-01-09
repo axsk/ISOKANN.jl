@@ -2,6 +2,7 @@ Let us try to keep a rough log of the changes we did.
 
 09.01.24
 - data: cleanup, refactor and streamline the api
+- iso2: enable strat. sampling for diala2, fix ISA usage (no feasiblize! as it assumes first component to be constant 1)
 
 08.01.24
 - updated adaptive sampling to work in higher dimensions
