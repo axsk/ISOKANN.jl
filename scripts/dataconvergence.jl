@@ -104,7 +104,7 @@ function reference_chi(iso; nd=30_000, nx=200, nk=1_000)
     liso = size(iso.data[1], 2)
     liso < nx && @warn("iso has not enough samples to generate data ($liso < $nx)")
 
-    xs = ISOKANN.stratified_x0(iso.model, iso.data[1], nx)
+    xs = ISOKANN.subsample(iso.model, iso.data[1], nx)
     println("Computing reference_chi->propagate()")
     ys = @time ISOKANN.propagate(iso.sim, xs, nk)
 
@@ -116,7 +116,7 @@ end
 """ reference trajectory computation """
 reference_pi(iso::IsoRun, args...) = reference_pi(iso.sim, args...)
 function reference_pi(sim, nd=10_000, nx=200, nk=1)
-    traj = @time ISOKANN.trajdata(sim, nd)
+    traj = @time ISOKANN.trajectory(sim, nd)
 
     inds = sample(1:size(traj, 2), nx, replace=false)
     xs = traj[:, inds]
@@ -180,7 +180,7 @@ end
 
 """ sample and train on trajectory data of length `nx` """
 function iso_traj(iso, nx;)
-    traj = ISOKANN.trajdata(iso.sim, nx)
+    traj = ISOKANN.trajectory(iso.sim, nx)
     data = ISOKANN.data_from_trajectory(traj, nx)  # TODO: nx should be handled here, not inside data_from_traj
     return deepcopyset(iso;
         nres=0, data)
@@ -188,7 +188,7 @@ end
 
 """ trainingsdata is subsampled from a reference iso chi approximation """
 function iso_chi(iso, nx, nk; refiso)
-    xs = ISOKANN.stratified_x0(refiso.model, refiso.data[2], nx)
+    xs = ISOKANN.subsample(refiso.model, refiso.data[2], nx)
     ys = ISOKANN.propagate(iso.sim, xs, nk)
     return deepcopyset(iso;
         nres=0, data=(xs, ys))
@@ -402,7 +402,7 @@ end
 
 
 function generate_data_traj(sim, nx, warmup = 32)
-    xs = ISOKANN.trajdata(sim, nx+warmup)
+    xs = ISOKANN.trajectory(sim, nx+warmup)
     return ISOKANN.data_from_trajectory(xs[:, warmup+1:end]) :: ISOKANN.DataTuple
 end
 

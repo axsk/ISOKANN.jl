@@ -1,5 +1,8 @@
 Let us try to keep a rough log of the changes we did.
 
+09.01.24
+- data: cleanup, refactor and streamline the api
+
 08.01.24
 - updated adaptive sampling to work in higher dimensions
 - cleaned up the repo

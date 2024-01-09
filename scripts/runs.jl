@@ -48,27 +48,5 @@ function isodefault(id=id)
     return iso
 end
 
-global _REFISO = nothing
-
-function referenceiso()
-    global _REFISO
-    if isnothing(_REFISO)
-        _REFISO = load("isoreference-6440710-0.jld2", "iso")
-    end
-    return _REFISO
-end
-
-function testdata(ref=referenceiso())
-    tdata = data_sliced(shuffledata(data_sliced(ref.data, 1000:2000)), 1:500)
-    return tdata
-end
-
-function traindata(ref=referenceiso())
-    x,y = ref.data
-    shuffledata((x[:, 500:999], y[:, 500:999, 1:8]))
-end
-
-
-
 
 nx=100; nk=1;

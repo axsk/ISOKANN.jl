@@ -47,3 +47,32 @@ function plotbenchmark(isos; plotargs...)
     end
     plot!(xaxis=:log, yaxis=:log)
 end
+
+
+function data_stratified(model, data::Tuple, nx, nk)
+    xs, ys = subsample(model, data, nx)
+    return xs, ys[:, :, 1:nk]
+end
+
+# see also scripts/runs.jl
+
+import JLD2
+
+global _REFISO = nothing
+function referenceiso()
+    global _REFISO
+    if isnothing(_REFISO)
+        _REFISO = JLD2.load("isoreference-6440710-0.jld2", "iso")
+    end
+    return _REFISO
+end
+
+function traindata(ref=referenceiso(); n=100, k=8, offset=500)
+    x, y = ref.data
+    shuffledata((x[:, offset:offset+n-1], y[:, offset:offset+n-1, 1:k]))
+end
+
+function testdata(ref=referenceiso())
+    tdata = data_sliced(shuffledata(data_sliced(ref.data, 1000:2000)), 1:500)
+    return tdata
+end

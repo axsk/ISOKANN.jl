@@ -58,7 +58,7 @@ function run!(iso::IsoRun; showprogress=true)
     t_samp = t_koop = t_train = 0.0
 
     for j in 1:nd
-        t_samp += @elapsed subdata = datasubsample(model, data, nx)
+        t_samp += @elapsed subdata = subsample(model, data, nx)
         # train model(xs) = target
         for i in 1:np
             xs, ys = subdata
@@ -157,7 +157,7 @@ function saveall(iso::IsoRun, pathlength=300)
     mkpath("out/latest")
     (; model, losses, data, sim) = iso
     xs, ys = data
-    zs = standardform(stratified_x0(model, xs, pathlength))
+    zs = standardform(subsample(model, xs, pathlength))
     savecoords(sim, zs, "out/latest/path.pdb")
     savefig(plot_learning(iso), "out/latest/learning.png")
 
@@ -206,7 +206,7 @@ optimizerstring(opt::NamedTuple) = opt.layers[end-1].weight.rule
 function autotune!(iso::IsoRun, targets=[4, 1, 1, 4])
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
     tdata = nres > 0 ? (@elapsed adddata(data, model, sim, ny)) : 0
-    tsubdata = @elapsed (subdata = datasubsample(model, data, nx))
+    tsubdata = @elapsed (subdata = subsample(model, data, nx))
     xs, ys = subdata
     ttarget = @elapsed target = shiftscale(koopman(model, ys))
     ttrain = @elapsed learnbatch!(model, xs, target, opt, Inf)
