@@ -1,4 +1,5 @@
 using Documenter
+using InteractiveUtils: @time_imports
 @time @time_imports using ISOKANN
 
 makedocs(
