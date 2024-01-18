@@ -48,11 +48,11 @@ train the model on a given batch of trajectory data `(xs, ys)` with
 - nkoop: outer iterations, i.e. reevaluating Koopman
 - nupdate: inner iterations, i.e. updating the neural network on fixed data
 """
-function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; targetargs=(;))
+function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; transform=TransformISA())
     losses = Float64[]
     local target
     for i in 1:nkoop
-        target = isotarget(model, xs, ys; targetargs...)
+        target = isotarget(model, xs, ys, transform)
         for j in 1:nupdate
             loss = ISOKANN.learnstep!(model, xs, target, opt)  # Neural Network update
             push!(losses, loss)
@@ -61,33 +61,28 @@ function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; targetargs=(;))
     (; losses, target)
 end
 
-ISO2_METHOD = :isa
-ISO2_NORMALIZE = true
-ISO2_PERMUTE = true
-ISO2_DIRECT = false
-ISO2_EIGENVECS = true
 
-""" isotarget(model, xs, ys, method=:inv, kwargs...)
-compute the isokann target function for the given model and data.
-optional arguments:
-- `method`: `:inv` or `:isa` for the pseudoinverse or inner simplex algorithm
-- `normalize`: normalize the target function to have unit norm (:inv only)
-- `permute`: permute the target function to match the chi function
-- `direct`: use the direct method instead of the inverse method (:inv only)
-- `eigenvecs`: use the eigenvecs of the schur decomposition instead of the identity matrix (:inv only)
+### ISOKANN target transformations
+
 """
-function isotarget(model, xs, ys; method=:isa, kwargs...)
-    method == :inv && return isotarget_pseudoinv(model, xs, ys; kwargs...)
-    method == :isa && return isotarget_isa(model, xs, ys; kwargs...)
-    error("unknown method $method")
+    TransformPseudoInv(normalize, direct, eigenvecs, permute)
+
+Compute the target by approximately inverting the action of K with the Moore-Penrose pseudoinverse.
+
+If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi)))`.
+`eigenvecs` specifies whether to use the eigenvectors of the schur matrix.
+`normalize` specifies whether to renormalize the resulting target vectors.
+`permute` specifies whether to permute the target for stability.
+"""
+@with_kw struct TransformPseudoInv
+    normalize::Bool = true
+    direct::Bool = true
+    eigenvecs::Bool = true
+    permute::Bool = true
 end
 
-function isotarget_pseudoinv(model, xs, ys;
-    normalize=ISO2_NORMALIZE,
-    permute=ISO2_PERMUTE,
-    direct=ISO2_DIRECT,
-    eigenvecs=ISO2_EIGENVECS
-)
+function isotarget(model, xs, ys, t::TransformPseudoInv)
+    (normalize, direct, eigenvecs, permute) = t
     chi = model(xs)
 
     cs = model(ys)::AbstractArray{<:Number,3}
@@ -111,23 +106,31 @@ function isotarget_pseudoinv(model, xs, ys;
     return target
 end
 
+
+""" TransformISA(permute)
+
+Compute the target via the inner simplex algorithm (without feasiblization routine).
+`permute` specifies whether to apply the stabilizing permutation """
+@with_kw struct TransformISA
+    permute::Bool = true
+end
+
 # we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
 # which in turn assumes that the first column is equal to one.
 myisa(X) = inv(X[PCCAPlus.indexmap(X), :])
 
-function isotarget_isa(model, xs, ys; permute=ISO2_PERMUTE)
+function isotarget(model, xs, ys, t::TransformISA)
     chi = model(xs)
     cs = model(ys)
     ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
     target = myisa(ks')' * ks
-    permute && (target = fixperm(target, chi))
+    t.permute && (target = fixperm(target, chi))
     return target
 end
 
-### Permutation - stabilization
-using Combinatorics
 
-#
+### Permutation - stabilization
+import Combinatorics
 
 """
     fixperm(new, old)
@@ -141,7 +144,7 @@ Permutes the rows of `new` such as to minimize L1 distance to `old`.
 function fixperm(new, old)
     # TODO: use the hungarian algorithm for larger systems
     n = size(new, 1)
-    p = argmin(permutations(1:n)) do p
+    p = argmin(Combinatorics.permutations(1:n)) do p
         norm(new[p, :] - old, 1)
     end
     new[p, :]
@@ -156,6 +159,7 @@ function test_fixperm(n=3)
     @show new
     norm(new - old) < 1e-9
 end
+
 
 ### Examples with the Double and Triplewell
 
@@ -175,6 +179,7 @@ function test_tw(; kwargs...)
     iso2(nd=3, sys=Triplewell(); kwargs...)
     vismodel(model)
 end
+
 
 ### Visualization
 
@@ -224,27 +229,26 @@ end
 
 """ ISOKANN 2 dialanine experiment
 generates data from 1d ISOKANN and trains a 3d ISOKANN on it
-The kwargs are passed on to `isotarget`
 """
-function diala2(; data=nothing, nd=3000, kwargs...)
+function diala2(; data=nothing, nd=3000)
     if isnothing(data)
         iso = run!(IsoRun(nd=nd, loggers=[]))
         data = iso.data
     end
 
     sim = MollyLangevin(sys=PDB_ACEMD())
-    model = ISOKANN.pairnet(66, nout=3)
+    model = ISOKANN.pairnet(66^2, features=flatpairdists, nout=3)
     opt = Flux.setup(Flux.AdamW(1e-3, (0.9, 0.999), 1e-4), model)
     losses = Float64[]
 
     return (; data, model, sim, opt, losses)
 end
 
-function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, kwargs...)
+function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, nupdate=10)
     (; data, model, sim, opt, losses) = iso
     local target
     for _ in 1:epochs
-        l, target = isosteps(model, opt, data, nkoop, targetargs=kwargs)
+        l, target = isosteps(model, opt, data, nkoop, nupdate)
         data = adddata(data, model, sim, ny)
         append!(losses, l)
         vis_training(; model, data, target, losses) |> display
@@ -255,17 +259,16 @@ end
 
 function vis_training(; model, data, target, losses, others...)
     p1 = visualize_diala(model, data[1],)
-    p2 = scatter(eachrow(target)..., markersize=0.1)
-    p3 = plot(losses, yaxis=:log)
-    plot(p1, p2, p3)
+    p2 = scatter(eachrow(target)..., markersize=1)
+    #p3 = plot(losses, yaxis=:log)
+    plot(p1, p2)#, p3)
 end
 
-
-function visualize_diala(mm, xs; markersize, kwargs...)
+function visualize_diala(mm, xs; kwargs...)
     p1, p2 = ISOKANN.phi(xs), ISOKANN.psi(xs)
     plot()
     for chi in eachrow(mm(xs))
-        @show markersize = max.(chi .* 3, 0.01)
+        markersize = max.(chi .* 3, 0.01)
         scatter!(p1, p2, chi; kwargs..., markersize, markerstrokewidth=0)
     end
     plot!()
