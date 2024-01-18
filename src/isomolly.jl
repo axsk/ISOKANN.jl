@@ -2,7 +2,27 @@
 """
     struct IsoRun{T}
 
-The `IsoRun` struct represents a configuration for running the Isomolly algorithm.
+The `IsoRun` struct represents a configuration for running the ISOKANN algorithm with adaptive sampling.
+
+The whole algorithm consists of three nested loop
+
+1. `nd` iterations of the data loop where `nx` points are subsampled (via stratified χ-subsampling)  from the pool of all available data
+2. `np` iterations of the power iteration where the training target is determined with the current model and subdata
+3. `nl` iterations of the SGD updates to the neural network model to learn the current target
+
+On initialization it samples `ny` starting positions with `nk` Koopman samples each. 
+Furthermore if `nres` > 0 it samples `ny` new data points adaptively starting from χ-sampled positions every `nres` steps in the data loop.
+
+The `sim` field takes any simulation object that implements the data sampling interface (mainly the `propagate` method, see data.jl),
+usually a `MollyLangevin` simulation.
+
+`model` and `opt` store the neural network model and the optimizert (defaulting to a `pairnet` and `AdamRegularized`).
+
+`data` contains the training data and is by default constructed using the `bootstrap` method.
+
+The vector `losses` keeps track of the training loss and `loggers` allows to pass in logging functions which are executed in the power iteration loop.
+
+To start the actual training call the `run!` method.
 
 # Fields
 - `nd::Int64`: Number of outer data subsampling steps.
@@ -21,7 +41,6 @@ The `IsoRun` struct represents a configuration for running the Isomolly algorith
 - `loggers::Vector`: Vector of loggers.
 
 """
-
 Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     nd::Int64 = 1000 # number of outer datasubsampling steps
     nx::Int64 = 100  # size of subdata set
@@ -92,6 +111,8 @@ function run!(iso::IsoRun; showprogress=true)
     return iso
 end
 
+log(f::Function; kwargs) == f(; kwargs...)
+
 # note there is also plot_callback in isokann.jl
 function autoplot(secs=10)
     Flux.throttle(
@@ -116,7 +137,7 @@ end
 """ empirical shift-scale operation """
 shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
 
-""" batched supervised learning for a given batchsize """
+""" DEPRECATED - batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
     ndata = length(target)
     if ndata <= batchsize || batchsize == 0

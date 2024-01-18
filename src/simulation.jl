@@ -82,6 +82,9 @@ end
 Burst simulation of the MollyLangeving system `ms`.
 Propagates `ny` samples for each initial position provided in the columns of `x0`.
 
+`propagate` is the main interface facilitating sampling of a system.
+TODO: specify the actual interface required for a simulation to be runnable by ISOKANN.
+
 # Arguments
 - `ms::MollyLangevin`: The MollyLangevin solver object.
 - `x0::AbstractMatrix`: The initial positions matrix.

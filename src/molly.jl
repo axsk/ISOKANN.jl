@@ -156,7 +156,8 @@ Simulates the overdamped Langevin equation using the Euler-Maruyama method with 
 with σ = sqrt(2KT/(mγ))
 dX = (-∇U(X)/(γm) + σu) dt + σ dW
 
-where u is the control function, such that u(x,t) = σ .* w(x,t)
+where u is the control function, such that u(x,t) = σ .* w(x,t).
+The accumulated Girsanov reweighting is stored in the field `g`
 
 # Arguments
 - `dt::S`: the time step of the simulation.
@@ -172,7 +173,7 @@ struct OverdampedLangevinGirsanov{S, K, F, Fct}
     friction::F
     remove_CM_motion::Int
     g::Float64  # the Girsanov integral
-    w::Fct  # control function in the form w = uσ
+    w::Fct
 end
 
 function OverdampedLangevinGirsanov(; dt, temperature, friction, w, remove_CM_motion=1, G=0.)

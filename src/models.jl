@@ -21,6 +21,10 @@ function featureinds(sim::IsoSimulation)
     end
 end
 
+""" convenience wrapper returning the provided model with the default AdamW optimiser """
+model_with_opt(model, learnrate=1e-2, decay=1e-5) =
+    (; model, opt=Flux.setup(Flux.AdamW(learnrate, (0.9, 0.999), decay), model))
+
 """ given an array of arbitrary shape, select the rows `inds` in the first dimension """
 function selectrows(x, inds)
     d, s... = size(x)

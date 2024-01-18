@@ -20,7 +20,6 @@ propagate
 ```@autodocs
 Modules = [ISOKANN]
 Private = false
-Order = [:function]
 ```
 
 ## Internal API
@@ -28,5 +27,4 @@ Order = [:function]
 ```@autodocs
 Modules = [ISOKANN]
 Public = false
-Order = [:function]
 ```

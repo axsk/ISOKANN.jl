@@ -29,7 +29,7 @@ end
 Returns `n` indices of `xs` such that `model(xs[inds])` is approximately uniformly distributed.
 """
 function subsample_inds(model, xs, n)
-    reduce(vcat, eachrow(model(xs))) do row
+    mapreduce(vcat, eachrow(model(xs))) do row
         subsample_uniformgrid(shiftscale(row), n)
     end::Vector{Int}
 end
@@ -38,7 +38,7 @@ end
     subsample(model, data::Array, n) :: Matrix
     subsample(model, data::Tuple, n) :: Tuple
 
-Subsample `n`` points of `data` uniformly in `model`.
+Subsample `n` points of `data` uniformly in `model`.
 If `model` returns multiple values per sample, subsample along each dimension.
 """
 subsample(model, xs::AbstractArray{<:Any,2}, n) =
