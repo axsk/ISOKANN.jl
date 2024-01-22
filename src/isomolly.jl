@@ -111,7 +111,7 @@ function run!(iso::IsoRun; showprogress=true)
     return iso
 end
 
-log(f::Function; kwargs) == f(; kwargs...)
+log(f::Function; kwargs) = f(; kwargs...)
 
 # note there is also plot_callback in isokann.jl
 function autoplot(secs=10)
