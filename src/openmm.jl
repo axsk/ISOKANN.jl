@@ -36,33 +36,29 @@ end
 
 # producing nans with nthreads = 1, crashing for nthreads > 1
 function propagate_threaded(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=1)
-    zs = repeat(x0, outer=[1, ny])
+    xs = repeat(x0, outer=[1, ny])
     dim, nx = size(x0)
 
-    zs = PyReverseDims(reinterpret(Tuple{Float64,Float64,Float64}, zs))
+    xs = PyReverseDims(reinterpret(Tuple{Float64,Float64,Float64}, xs))
     steps = s.steps
     sim = s.pysim
     n = nx * ny
 
     py"""
-
     def singlerun(i):
-        s = copy.copy($sim)  # TODO: this is not enough
-        s.context = copy.copy(s.context)
-        s.context.reinitialize()
-        s.context.setPositions($zs[i] * nanometer)
-        s.step($steps)
-        z = s.context.getState(getPositions=True).getPositions().value_in_unit(nanometer)
-        return z
+        x = $xs[i]
+        sim = $sim
+        steps = $steps
+        c = Context(sim.system, copy.copy(sim.integrator))
+        c.setPositions(x)
+        c.setVelocitiesToTemperature(sim.integrator.getTemperature())
+        c.getIntegrator().step(steps)
+        return c.getState(getPositions=True).getPositions().value_in_unit(nanometer)
 
-    out = Parallel(n_jobs=$nthreads, prefer="threads")(
-        delayed(singlerun)(i) for i in range($n))
+    out = Parallel(n_jobs=$nthreads, prefer="threads")(delayed(singlerun)(i) for i in range($n))
     """
 
-    zs = py"out"
-    zs = reinterpret(Float64, permutedims(zs))
-    zs = reshape(zs, dim, nx, ny)
-
+    zs = reshape(reinterpret(Float64, permutedims(py"out")), dim, nx, ny)
     return zs
 end
 
@@ -103,7 +99,7 @@ function openmm_examplesys(;
     simulation.context.setPositions(pdb.positions)
     simulation.minimizeEnergy()
     """
-    # 
+    #
     # simulation.reporters.append(PDBReporter('output.pdb', 1000))
     # simulation.reporters.append(StateDataReporter(stdout, 1000, step=True,
     #        potentialEnergy=True, temperature=True))
