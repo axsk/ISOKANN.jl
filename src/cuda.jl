@@ -2,14 +2,19 @@
 
 pickclosest(haystack::CuArray, needles::AbstractVector) = pickclosest(collect(haystack), needles)
 
+""" gpu!(iso::IsoRun)
+
+move the model and data of the given `IsoRun` to the GPU for CUDA support
+"""
 function gpu!(iso::IsoRun)
     iso.model = Flux.gpu(iso.model)
     iso.data = Flux.gpu(iso.data)
     return
 end
 
-propagate(ms::MollyLangevin, x0::CuMatrix, ny) = propagate(ms, collect(x0), ny)
 
+""" Fallback to simulate MD dynamics on the CPU """
+propagate(ms::MollyLangevin, x0::CuMatrix, ny) = propagate(ms, collect(x0), ny)
 
 
 # given an (i,j,k) sized array compute the pairwise dists between j points in i dimensions,
