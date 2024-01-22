@@ -34,6 +34,7 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny)
     return ys
 end
 
+# producing nans with nthreads = 1, crashing for nthreads > 1
 function propagate_threaded(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=1)
     zs = repeat(x0, outer=[1, ny])
     dim, nx = size(x0)
@@ -48,6 +49,7 @@ function propagate_threaded(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthread
     def singlerun(i):
         s = copy.copy($sim)  # TODO: this is not enough
         s.context = copy.copy(s.context)
+        s.context.reinitialize()
         s.context.setPositions($zs[i] * nanometer)
         s.step($steps)
         z = s.context.getState(getPositions=True).getPositions().value_in_unit(nanometer)

@@ -2,7 +2,7 @@
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://axsk.github.io/ISOKANN.jl/dev)
 
-This should be the reference implementation for ISOKANN.
+Implementation of the ISOKANN algorithm. For a reference see our paper https://doi.org/10.1063/5.0140764 .
 Currently things are still fluctuating, so we have different implementations
 
 - forced/isokann.jl - ISOKANN with adaptive sampling and optimal control for overdamped Langevin systems
