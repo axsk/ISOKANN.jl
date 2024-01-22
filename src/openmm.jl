@@ -13,7 +13,13 @@ from openmm.app import *
 from openmm import *
 from openmm.unit import *
 from sys import stdout
+import itertools
+
+def unpack(out):
+    return list(itertools.chain.from_iterable(out))
 """
+# still allocating, but 4x as fast as anything else i could find
+mypyvec(out) = reinterpret(Float64, pycall(py"unpack", Vector{Tuple{Float64,Float64,Float64}}, out))
 
 nanometer = py"nanometer"
 
@@ -57,9 +63,11 @@ function propagate_threaded(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthread
 
     out = Parallel(n_jobs=$nthreads, prefer="threads")(delayed(singlerun)(i) for i in range($n))
     """
+    return reshape(mypyvec(py"out"o), dim, nx, ny)
 
-    zs = reshape(reinterpret(Float64, permutedims(py"out")), dim, nx, ny)
-    return zs
+
+    #zs = reshape(reinterpret(Float64, permutedims(py"out")), dim, nx, ny)
+    #return zs
 end
 
 function propagate(s::OpenMMSimulation, x0)
