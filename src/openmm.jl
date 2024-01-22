@@ -1,12 +1,56 @@
 
 using PyCall
-import ISOKANN: propagate
+#import ISOKANN: propagate
+
+###
+
+""" A Simulation wrapping the Python OpenMM Simulation object """
+struct OpenMMSimulation
+    pysim::PyObject
+    steps::Int
+end
+
+""" Basic construction of a OpenMM Simulation, following the OpenMM documentation example """
+function OpenMMSimulation(;
+    pdb="$(ENV["HOME"])/.julia/conda/3/share/openmm/examples/input.pdb",
+    forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
+    temp=300,
+    friction=1,
+    step=0.004,
+    steps=1)
+
+    pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step)::PyObject
+    return OpenMMSimulation(pysim, steps)
+end
+
+""" multi-threaded propagation of an `OpenMMSimulation` """
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=1)
+    dim, nx = size(x0)
+    xs = repeat(x0, outer=[1, ny])
+    xs = permutedims(reinterpret(Tuple{Float64,Float64,Float64}, xs))
+    ys = @pycall py"threadedrun"(xs, s.pysim, s.steps, nthreads)::PyArray
+    return reshape(ys, dim, nx, ny)
+end
+
+getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)
+setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
+
+function getcoords(sim::PyObject)
+    py"$sim.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer).flatten()"
+end
+
+function setcoords(sim::PyObject, coords)
+    sim.context.setPositions(reinterpret(Tuple{Float64,Float64,Float64}, coords))
+end
+
+### PYTHON CODE
 
 # install / load OpenMM
 pyimport_conda("openmm", "openmm", "conda-forge")
 pyimport_conda("joblib", "joblib")
 
 py"""
+
 from joblib import Parallel, delayed
 from openmm.app import *
 from openmm import *
@@ -35,75 +79,11 @@ def defaultsystem(pdb, forcefields, temp, friction, step):
     simulation = Simulation(pdb.topology, system, integrator)
     simulation.context.setPositions(pdb.positions)
     simulation.minimizeEnergy()
-    # simulation.reporters.append(PDBReporter('output.pdb', 1000))
-    # simulation.reporters.append(StateDataReporter(stdout, 1000, step=True,
-    #        potentialEnergy=True, temperature=True))
-    # simulation.step(10000)
     return simulation
+
 """
 
-###
-
-""" A Simulation wrapping the Python OpenMM Simulation object """
-struct OpenMMSimulation
-    pysim::PyObject
-    steps::Int
-end
-
-""" Basic construction of a OpenMM Simulation, following the OpenMM documentation example """
-function openmm_system(;
-    temp=300,
-    friction=1,
-    step=0.004,
-    pdb="/home/htc/bzfsikor/.julia/conda/3/share/openmm/examples/input.pdb",
-    forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
-    steps=1)
-
-    pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step)::PyObject
-    return OpenMMSimulation(pysim, steps)
-end
-
-###
-
-""" multi-threaded propagation of an `OpenMMSimulation` """
-function propagate_threaded(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=1)
-    dim, nx = size(x0)
-    xs = repeat(x0, outer=[1, ny])
-    xs = permutedims(reinterpret(Tuple{Float64,Float64,Float64}, xs))
-    ys = @pycall py"threadedrun"(xs, s.pysim, s.steps, nthreads)::PyArray
-    return reshape(ys, dim, nx, ny)
-end
-
-### "classic" propagation. broken, probably due to missing velocity/integrator reinitialization
-
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny)
-    dim, nx = size(x0)
-    ys = zeros(dim, nx, ny)
-    for i in 1:nx, j in 1:ny
-        ys[:, i, j] = propagate(s, x0[:, i])
-    end
-    return ys
-end
-
-function propagate(s::OpenMMSimulation, x0)
-    setcoords(s.pysim, x0)
-    s.pysim.step(s.steps)
-    getcoords(s.pysim)
-end
-
-
-function getcoords(sim::PyObject)
-    py"$sim.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer).flatten()"
-end
-
-function setcoords(sim::PyObject, coords)
-    sim.context.setPositions(reinterpret(Tuple{Float64,Float64,Float64}, coords))
-end
-
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)
-setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
-
-###
+### TESTS
 
 function test_getsetcoords(sim)
     x = getcoords(sim)
@@ -113,7 +93,7 @@ function test_getsetcoords(sim)
 end
 
 function test_openmm()
-    sim = openmm_system()
+    sim = OpenMMSimulation()
     x0 = stack([getcoords(sim) for _ in 1:2])
-    propagate_threaded(sim, x0, 3, nthreads=2)
+    propagate(sim, x0, 3, nthreads=2)
 end
