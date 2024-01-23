@@ -2,7 +2,7 @@ using ISOKANN
 #using Flux
 using Test
 
-@testset "ISOKANN.jl" begin
+@testset "ISOKANN.jl" verbose = true begin
 
     @testset "IsoRun CPU" begin
         iso = ISOKANN.IsoRun()
@@ -39,7 +39,7 @@ using Test
         end
     =#
 
-    @testset "iso2" begin
+    @testset "iso2" verbose = true begin
 
         @testset "iso2 Doublewell" begin
             iso2(nd=2, sim=Doublewell())
@@ -63,7 +63,13 @@ using Test
     end
 
     @testset "iso2 OpenMM" begin
-        sim = ISOKANN.OpenMM.OpenMMSimulation2()
+        sim = ISOKANN.OpenMM.OpenMMSimulation()
+        exp = iso2(; sim, nx=20, ny=5, n=100, lr=1e-3)
+        @test true
+    end
+
+    @testset "iso2 Molly" begin
+        sim = MollyLangevin(sys=PDB_ACEMD())
         exp = iso2(; sim, nx=20, ny=5, n=100, lr=1e-3)
         @test true
     end

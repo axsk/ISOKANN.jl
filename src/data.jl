@@ -17,8 +17,9 @@ DataTuple = Tuple{Matrix{T},Array{T,3}} where {T<:Number}
 compute initial data by propagating the molecules initial state
 to obtain the xs and propagating them further for the ys """
 function bootstrap(sim::IsoSimulation, nx, ny)
-    x0 = reshape(getcoords(sim), :, 1)
-    xs = reshape(propagate(sim, x0, nx), :, nx)
+    #x0 = reshape(getcoords(sim), :, 1)
+    #xs = reshape(propagate(sim, x0, nx), :, nx)
+    xs = randx0(sim, nx)
     ys = propagate(sim, xs, ny)
     centercoords(xs), centercoords(ys)  # TODO: centercoords shouldn't be here
 end

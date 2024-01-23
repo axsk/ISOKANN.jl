@@ -12,14 +12,7 @@ inputdim(model::Flux.Dense) = size(model.weight, 2)
 outputdim(model::Flux.Chain) = outputdim(model.layers[end])
 outputdim(model::Flux.Dense) = size(model.weight, 1)
 
-# TODO: make this dispatch on the simulation or system
-function featureinds(sim::IsoSimulation)
-    if dim(sim) == 8751
-        1:66
-    else
-        1:dim(sim)
-    end
-end
+
 
 """ convenience wrapper returning the provided model with the default AdamW optimiser """
 model_with_opt(model, learnrate=1e-2, decay=1e-5) =
