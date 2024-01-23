@@ -2,7 +2,7 @@ module OpenMM
 
 using PyCall
 
-import ..ISOKANN: propagate, ISOKANN, featureinds, featurizer
+import ..ISOKANN: ISOKANN, propagate, dim, randx0, featurizer, defaultmodel
 
 ###
 
@@ -14,17 +14,22 @@ struct OpenMMSimulation2
 end
 
 """ generate `n` random inintial points for the simulation `mm` """
-function ISOKANN.randx0(mm::OpenMMSimulation2, n)
+function randx0(mm::OpenMMSimulation2, n)
     x0 = stack([getcoords(mm.pysim)])
     return reshape(propagate(mm, x0, n), :, n)
 end
 
-function ISOKANN.dim(mm::OpenMMSimulation2)
+function dim(mm::OpenMMSimulation2)
     return mm.pysim.system.getNumParticles() * 3
 end
 
-function ISOKANN.featureinds(sim::OpenMMSimulation2)
-    return vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
+function featurizer(sim::OpenMMSimulation2)
+    ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
+    n, features = ISOKANN.pairdistfeatures(ix)
+end
+
+function defaultmodel(sim::OpenMMSimulation2; nout)
+    ISOKANN.pairnet(sim; nout)
 end
 
 """ Basic construction of a OpenMM Simulation, following the OpenMM documentation example """
@@ -50,7 +55,7 @@ function propagate(s::OpenMMSimulation2, x0::AbstractMatrix, ny; nthreads=1)
     return reshape(ys, dim, nx, ny)
 end
 
-ISOKANN.getcoords(sim::OpenMMSimulation2) = getcoords(sim.pysim)
+getcoords(sim::OpenMMSimulation2) = getcoords(sim.pysim)
 setcoords(sim::OpenMMSimulation2, coords) = setcoords(sim.pysim, coords)
 
 function getcoords(sim::PyObject)
@@ -61,45 +66,49 @@ function setcoords(sim::PyObject, coords)
     sim.context.setPositions(reinterpret(Tuple{Float64,Float64,Float64}, coords))
 end
 
+
 ### PYTHON CODE
 
-# install / load OpenMM
-pyimport_conda("openmm", "openmm", "conda-forge")
-pyimport_conda("joblib", "joblib")
+function __init__()
+    # install / load OpenMM
+    pyimport_conda("openmm", "openmm", "conda-forge")
+    pyimport_conda("joblib", "joblib")
 
-py"""
+    py"""
 
-from joblib import Parallel, delayed
-from openmm.app import *
-from openmm import *
-from openmm.unit import *
-from sys import stdout
-import numpy as np
+    from joblib import Parallel, delayed
+    from openmm.app import *
+    from openmm import *
+    from openmm.unit import *
+    from sys import stdout
+    import numpy as np
 
-def threadedrun(xs, sim, steps, nthreads):
-    def singlerun(i):
-        c = Context(sim.system, copy.copy(sim.integrator))
-        c.setPositions(xs[i])
-        c.setVelocitiesToTemperature(sim.integrator.getTemperature())
-        c.getIntegrator().step(steps)
-        return c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
+    def threadedrun(xs, sim, steps, nthreads):
+        def singlerun(i):
+            c = Context(sim.system, copy.copy(sim.integrator))
+            c.setPositions(xs[i])
+            c.setVelocitiesToTemperature(sim.integrator.getTemperature())
+            c.getIntegrator().step(steps)
+            return c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
 
-    out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
-    return np.array(out).flatten()
+        out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
+        return np.array(out).flatten()
 
-# from the OpenMM documentation
-def defaultsystem(pdb, forcefields, temp, friction, step):
-    pdb = PDBFile(pdb)
-    forcefield = ForceField(*forcefields)
-    system = forcefield.createSystem(pdb.topology, nonbondedMethod=PME,
-            nonbondedCutoff=1*nanometer, constraints=HBonds)
-    integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
-    simulation = Simulation(pdb.topology, system, integrator)
-    simulation.context.setPositions(pdb.positions)
-    simulation.minimizeEnergy()
-    return simulation
+    # from the OpenMM documentation
+    def defaultsystem(pdb, forcefields, temp, friction, step):
+        pdb = PDBFile(pdb)
+        forcefield = ForceField(*forcefields)
+        system = forcefield.createSystem(pdb.topology, nonbondedMethod=PME,
+                nonbondedCutoff=1*nanometer, constraints=HBonds)
+        integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
+        simulation = Simulation(pdb.topology, system, integrator)
+        simulation.context.setPositions(pdb.positions)
+        simulation.minimizeEnergy()
+        return simulation
 
-"""
+    """
+end
+
 
 ### TESTS
 

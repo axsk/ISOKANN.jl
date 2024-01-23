@@ -35,8 +35,8 @@ end
 
 """ returns a function `features(x)` which map the system coordinates to its features for the Flux model """
 
-function pairdistfeatures(sim)
-    pairdistfeatures(featureinds(sim))
+function featurizer(sim)
+    dim(sim), identity
 end
 
 function pairdistfeatures(inds::AbstractVector)
@@ -51,7 +51,7 @@ end
 
 " A `pairnet()` model with using the simulation's `featureinds()` particles pairwise positions as input for the first layer"
 function pairnet(sim; kwargs...)
-    n, features = pairdistfeatures(sim)
+    n, features = featurizer(sim)
     pairnet(n; features, kwargs...)
 end
 
@@ -62,7 +62,7 @@ end
 function pairnet(n::Int=22; layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1)
     float32(x) = Float32.(x)
     nn = Flux.Chain(
-        float32,
+        #float32,
         features,
         [Flux.Dense(
             round(Int, n^(l / layers)),
@@ -78,4 +78,13 @@ end
 """ Given a model and return a copy with its last layer replaced with given output dimension `n` """
 function growmodel(m, n)
     Flux.Chain(m.layers[1:end-1]..., Flux.Dense(ISOKANN.inputdim(m.layers[end]), n))
+end
+
+# Used by AbstractLangevin
+function smallnet(nin, nout, activation=nl = Flux.sigmoid, lastactivation=identity)
+    model = Flux.Chain(
+        Flux.Dense(nin, 5, activation),
+        Flux.Dense(5, 10, activation),
+        Flux.Dense(10, 5, activation),
+        Flux.Dense(5, nout, lastactivation))
 end

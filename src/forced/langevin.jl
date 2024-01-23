@@ -68,4 +68,6 @@ triplewell(x,y) = (3/4 * exp(-x^2 - (y-1/3)^2)
 triplewell(x) = triplewell(x...)
 
 
-Triplewell() = Diffusion(;potential=triplewell, dim=2, σ=[1.,1.])
+Triplewell() = Diffusion(; potential=triplewell, dim=2, sigma=[1.0, 1.0])
+
+defaultmodel(sim::AbstractLangevin; nout) = smallnet(dim(sim), nout)

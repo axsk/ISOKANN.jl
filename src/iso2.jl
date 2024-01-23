@@ -25,23 +25,16 @@ ISOKANN 2.0 under construction.
 - `lr`: Learning rate
 - `decay`: Decay rate
 """
-function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-2, decay=1e-5)
-    global s, model, xs, ys, opt, loss
+function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-2, decay=1e-5, kwargs...)
     s = sim
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, ny)
 
-    # nl = Flux.sigmoid
-    # model = Flux.Chain(
-    #     Flux.Dense(dim(sys), 5, nl),
-    #     Flux.Dense(5, 10, nl),
-    #     Flux.Dense(10, 5, nl),
-    #     Flux.Dense(5, nd))
+    model, opt = model_with_opt(defaultmodel(sim; nout=nd), lr, decay)
 
-    model = pairnet(sim; nout=nd)
+    losses, target = isosteps(model, opt, (xs, ys), n; kwargs...)
 
-    opt = Flux.setup(Flux.AdamW(lr, (0.9, 0.999), decay), model)
-    loss = isosteps(model, opt, (xs, ys), n)
+    return (; sim, xs, ys, model, opt, losses, target, kwargs...)
 end
 
 """ isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
@@ -64,6 +57,12 @@ function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; transform=TransformI
 end
 
 
+function isosteps(exp::NamedTuple, nkoop=1, nupdate=1; kwargs...)
+    (; sim, xs, ys, model, opt, losses) = exp
+    l2, target = isosteps(model, opt, (xs, ys), nkoop, nupdate; kwargs...)
+    (; sim, xs, ys, model, opt, losses=vcat(losses, 2), target)
+end
+
 ### ISOKANN target transformations
 
 """
@@ -84,7 +83,7 @@ If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi))
 end
 
 function isotarget(model, xs, ys, t::TransformPseudoInv)
-    (normalize, direct, eigenvecs, permute) = t
+    (; normalize, direct, eigenvecs, permute) = t
     chi = model(xs)
 
     cs = model(ys)::AbstractArray{<:Number,3}
@@ -119,7 +118,9 @@ end
 
 # we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
 # which in turn assumes that the first column is equal to one.
-myisa(X) = inv(X[PCCAPlus.indexmap(X), :])
+function myisa(X)
+    inv(X[PCCAPlus.indexmap(X), :])
+end
 
 function isotarget(model, xs, ys, t::TransformISA)
     chi = model(xs)
@@ -173,12 +174,12 @@ function isodata(diffusion, nx, ny)
 end
 
 function test_dw(; kwargs...)
-    iso2(nd=2, sys=Doublewell(); kwargs...)
+    iso2(nd=2, sim=Doublewell(); kwargs...)
     vismodel(model)
 end
 
 function test_tw(; kwargs...)
-    iso2(nd=3, sys=Triplewell(); kwargs...)
+    iso2(nd=3, sim=Triplewell(); kwargs...)
     vismodel(model)
 end
 
