@@ -55,6 +55,7 @@ include("isosimple.jl")
 include("iso2.jl")
 include("potentials.jl")
 
+include("openmm.jl")
 #include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx

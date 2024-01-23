@@ -34,27 +34,32 @@ function selectrows(x, inds)
 end
 
 """ returns a function `features(x)` which map the system coordinates to its features for the Flux model """
-function featurizer(sim)
-    inds = featureinds(sim)
+
+function pairdistfeatures(sim)
+    pairdistfeatures(featureinds(sim))
+end
+
+function pairdistfeatures(inds::AbstractVector)
+    n = div(length(inds), 3)^2
     function features(x)
         x = selectrows(x, inds)
         x = flatpairdists(x)
         return x
     end
+    n, features
 end
 
-" Flux neural network model with `layers` fully connected layers using the 
-corresponding simulations features as first layers "
-function pairnet(sim::IsoSimulation, layers=3)
-    n = div(length(featureinds(sim)), 3)^2
-    pairnet(n; layers, features=featurizer(sim))
+" A `pairnet()` model with using the simulation's `featureinds()` particles pairwise positions as input for the first layer"
+function pairnet(sim; kwargs...)
+    n, features = pairdistfeatures(sim)
+    pairnet(n; features, kwargs...)
 end
 
 """ Fully connected neural network with `layers` layers from `n` to `nout` dimensions.
 `features` allows to pass a featurizer as preprocessor, 
 `activation` determines the activation function for each but the last layer
 `lastactivation` can be used to modify the last layers activation function """
-function pairnet(n=22; layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1)
+function pairnet(n::Int=22; layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1)
     float32(x) = Float32.(x)
     nn = Flux.Chain(
         float32,

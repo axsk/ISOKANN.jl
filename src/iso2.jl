@@ -25,18 +25,20 @@ ISOKANN 2.0 under construction.
 - `lr`: Learning rate
 - `decay`: Decay rate
 """
-function iso2(; n=1000, nx=100, ny=10, nd=2, sys=Doublewell(), lr=1e-2, decay=1e-5)
+function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-2, decay=1e-5)
     global s, model, xs, ys, opt, loss
-    s = sys
-    xs = randx0(sys, nx)
-    ys = propagate(sys, xs, ny)
+    s = sim
+    xs = randx0(sim, nx)
+    ys = propagate(sim, xs, ny)
 
-    nl = Flux.sigmoid
-    model = Flux.Chain(
-        Flux.Dense(dim(sys), 5, nl),
-        Flux.Dense(5, 10, nl),
-        Flux.Dense(10, 5, nl),
-        Flux.Dense(5, nd))
+    # nl = Flux.sigmoid
+    # model = Flux.Chain(
+    #     Flux.Dense(dim(sys), 5, nl),
+    #     Flux.Dense(5, 10, nl),
+    #     Flux.Dense(10, 5, nl),
+    #     Flux.Dense(5, nd))
+
+    model = pairnet(sim; nout=nd)
 
     opt = Flux.setup(Flux.AdamW(lr, (0.9, 0.999), decay), model)
     loss = isosteps(model, opt, (xs, ys), n)

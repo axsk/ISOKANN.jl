@@ -1,17 +1,34 @@
+module OpenMM
 
 using PyCall
-#import ISOKANN: propagate
+
+import ..ISOKANN: propagate, ISOKANN, featureinds, featurizer
 
 ###
 
 """ A Simulation wrapping the Python OpenMM Simulation object """
-struct OpenMMSimulation
+struct OpenMMSimulation2
     pysim::PyObject
     steps::Int
+    features::Vector{Int}
+end
+
+""" generate `n` random inintial points for the simulation `mm` """
+function ISOKANN.randx0(mm::OpenMMSimulation2, n)
+    x0 = stack([getcoords(mm.pysim)])
+    return reshape(propagate(mm, x0, n), :, n)
+end
+
+function ISOKANN.dim(mm::OpenMMSimulation2)
+    return mm.pysim.system.getNumParticles() * 3
+end
+
+function ISOKANN.featureinds(sim::OpenMMSimulation2)
+    return vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
 end
 
 """ Basic construction of a OpenMM Simulation, following the OpenMM documentation example """
-function OpenMMSimulation(;
+function OpenMMSimulation2(;
     pdb="$(ENV["HOME"])/.julia/conda/3/share/openmm/examples/input.pdb",
     forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
     temp=300,
@@ -20,11 +37,12 @@ function OpenMMSimulation(;
     steps=1)
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step)::PyObject
-    return OpenMMSimulation(pysim, steps)
+    return OpenMMSimulation2(pysim, steps, calphas(pdb))
 end
 
+
 """ multi-threaded propagation of an `OpenMMSimulation` """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=1)
+function propagate(s::OpenMMSimulation2, x0::AbstractMatrix, ny; nthreads=1)
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{Float64,Float64,Float64}, xs))
@@ -32,8 +50,8 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=1)
     return reshape(ys, dim, nx, ny)
 end
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)
-setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
+ISOKANN.getcoords(sim::OpenMMSimulation2) = getcoords(sim.pysim)
+setcoords(sim::OpenMMSimulation2, coords) = setcoords(sim.pysim, coords)
 
 function getcoords(sim::PyObject)
     py"$sim.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer).flatten()"
@@ -93,7 +111,19 @@ function test_getsetcoords(sim)
 end
 
 function test_openmm()
-    sim = OpenMMSimulation()
+    sim = OpenMMSimulation2()
     x0 = stack([getcoords(sim) for _ in 1:2])
     propagate(sim, x0, 3, nthreads=2)
+end
+
+function calphas(pdbfile)
+    inds = Int[]
+    for l in readlines(pdbfile)
+        s = split(l)
+        length(s) < 3 && continue
+        s[3] == "CA" && push!(inds, parse(Int, s[2]))
+    end
+    return inds
+end
+
 end

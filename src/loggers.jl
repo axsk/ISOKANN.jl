@@ -72,10 +72,6 @@ function log(l::ModelLogger; model, j, kwargs...)
     j % l.every != 0 && push!(l.models, model)
 end
 
-function log(f::Function; kwargs...)
-    f(; kwargs...)
-end
-
 
 function loss(model, data)
     xs, ys = data
