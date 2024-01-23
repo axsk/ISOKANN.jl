@@ -4,7 +4,7 @@ module ISOKANN
 
 #using Startup           # precompiles most used packages
 
-
+using Conda # only for OpenMM
 #include("forced/IsoForce.jl")
 
 using LinearAlgebra: norm, dot, cross
