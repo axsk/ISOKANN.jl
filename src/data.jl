@@ -70,15 +70,15 @@ The subsamples are taken only from the `lastn` last datapoints in `data`.
 julia> (xs, ys) = adddata((xs,ys), chi, mollysim)
 ```
 """
-function adddata(data, model, sim::IsoSimulation, ny; lastn=1_000_000)
+function adddata(data, model, sim, ny; lastn=1_000_000)
     ny == 0 && return data
     _, ys = data
     nk = size(ys, 3)
     firstind = max(size(ys, 2) - lastn + 1, 1)
     x0 = subsample(model, ys[:, firstind:end, :], ny)
     ys = propagate(sim, x0, nk)
-    ndata = centercoords(x0), centercoords(ys)  # TODO: this does not really belong here
-    data = hcat.(data, ndata)
+    #ndata = centercoords(x0), centercoords(ys)  # TODO: this does not really belong here
+    data = hcat.(data, (x0, ys))
     return data
 end
 

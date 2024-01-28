@@ -36,8 +36,11 @@ export IsoRun, run!, AdamRegularized#, Adam
 export plot_learning, scatter_ramachandran
 export reactionpath
 
+
 export iso2
 export Doublewell, Triplewell, MuellerBrown
+
+
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
@@ -58,6 +61,10 @@ include("iso2.jl")
 include("potentials.jl")
 
 include("openmm.jl")
+
+import .OpenMM.OpenMMSimulation
+export OpenMMSimulation
+
 #include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx

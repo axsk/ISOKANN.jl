@@ -2,7 +2,9 @@ module OpenMM
 
 using PyCall
 
-import ..ISOKANN: ISOKANN, propagate, dim, randx0, featurizer, defaultmodel
+import ..ISOKANN: ISOKANN, propagate, dim, randx0, featurizer, defaultmodel, savecoords
+
+export OpenMMSimulation
 
 ###
 
@@ -36,13 +38,14 @@ end
 function OpenMMSimulation(;
     pdb="$(ENV["HOME"])/.julia/conda/3/share/openmm/examples/input.pdb",
     forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
-    temp=300,
+    temp=298,
     friction=1,
     step=0.004,
-    steps=1)
+    steps=1,
+    features=calphas(pdb))
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step)::PyObject
-    return OpenMMSimulation(pysim, steps, calphas(pdb))
+    return OpenMMSimulation(pysim, steps, features)
 end
 
 
@@ -107,6 +110,20 @@ function __init__()
         return simulation
 
     """
+end
+
+function savecoords(sim, coords, path)
+    s = sim.pysim
+    p = py"pdbfile.PDBFile"
+    #file = py"open("$(path)', 'w')"
+    file = py"open"(path, "w")
+    p.writeHeader(s.topology, file)
+    for (i, coords) in enumerate(eachcol(coords))
+        pos = reinterpret(Tuple{Float64,Float64,Float64}, coords .* 10)
+        p.writeModel(s.topology, pos, file, modelIndex=i)
+    end
+    p.writeFooter(s.topology, file)
+    file.close()
 end
 
 

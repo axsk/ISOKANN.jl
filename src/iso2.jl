@@ -25,7 +25,7 @@ ISOKANN 2.0 under construction.
 - `lr`: Learning rate
 - `decay`: Decay rate
 """
-function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-2, decay=1e-5, kwargs...)
+function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-3, decay=1e-5, kwargs...)
     s = sim
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, ny)
@@ -58,9 +58,9 @@ end
 
 
 function isosteps(exp::NamedTuple, nkoop=1, nupdate=1; kwargs...)
-    (; sim, xs, ys, model, opt, losses) = exp
-    l2, target = isosteps(model, opt, (xs, ys), nkoop, nupdate; kwargs...)
-    (; sim, xs, ys, model, opt, losses=vcat(losses, 2), target)
+    (; xs, ys, model, opt, losses, transform) = exp
+    l2, target = isosteps(model, opt, (xs, ys), nkoop, nupdate; transform, kwargs...)
+    (; exp..., target, losses=vcat(losses, l2), kwargs...,)
 end
 
 ### ISOKANN target transformations
@@ -128,6 +128,19 @@ function isotarget(model, xs, ys, t::TransformISA)
     ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
     target = myisa(ks')' * ks
     t.permute && (target = fixperm(target, chi))
+    return target
+end
+
+""" TransformShiftscale()
+
+Classical 1D shift-scale (ISOKANN 1) """
+struct TransformShiftscale end
+
+function isotarget(model, xs, ys, t::TransformShiftscale)
+    cs = model(ys)
+    @assert size(cs, 1) == 1
+    ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
+    target = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
     return target
 end
 
