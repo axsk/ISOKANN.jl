@@ -5,6 +5,8 @@ from openmm.app import *
 from openmm.unit import *
 from sys import stdout
 import numpy as np
+from functools import wraps
+from time import time
 
 def threadedrun(xs, sim, steps, nthreads):
     def singlerun(i):
@@ -60,6 +62,23 @@ def enric(pdbfile = "data/enric/native.pdb"):
   simulation.context.setVelocitiesToTemperature(330*kelvin)
   return simulation
 
-sim = enric("yourpdbpathhere")
-%time sim.step(500)
+def timing(f):
+  @wraps(f)
+  def wrap(*args, **kw):
+    t0 = time()
+    result = f(*args, **kw)
+    t1 = time()
+    print('func:%r took: %2.4f sec' % (f.__name__, t1-t0))
+    return result
+  return wrap
 
+@timing 
+def mysim(sim):
+  sim.step(500)
+
+def main():
+  sim = enric()
+  mysim(sim)
+
+if __name__ == '__main__':
+  main()
