@@ -5,12 +5,13 @@ function sims(;
   temp=300.0,
   gamma=1.0,
   dt=0.002,
-  T=1.0
+  T=1.0,
+  pdb="$(@__DIR__)/../data/alanine-dipeptide-nowater.pdb"
 )
 
   @show steps = ceil(Int, T / dt)
 
-  pdb = "$(@__DIR__)/../data/alanine-dipeptide-nowater av.pdb"
+
   ff = "ff99SBildn.xml"
   #ff = "amber14-all.xml"
 
@@ -41,8 +42,8 @@ function test(n=1; kwargs...)
   x2 = @time propagate(oom, x0, n)
 
 
-  p1 = scatter_ramachandran(reshape(x1, :, n)) |> display
-  p2 = scatter_ramachandran(reshape(x2, :, n)) |> display
+  p1 = scatter_ramachandran(reshape(x1, :, n))
+  p2 = scatter_ramachandran(reshape(x2, :, n))
 
   return NamedTuple(Base.@locals)
 end

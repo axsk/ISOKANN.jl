@@ -9,8 +9,13 @@ from functools import wraps
 from time import time
 
 def threadedrun(xs, sim, steps, nthreads):
+    cp = sim.context.createCheckpoint()
     def singlerun(i):
-        c = Context(sim.system, copy.copy(sim.integrator))
+  #      int = copy.copy(sim.integrator) 
+        c = copy.copy(sim.context)
+        c.loadCheckpoint(cp)
+
+ #       c = Context(sim.system, int) # this is where the time is spent
         c.setPositions(xs[i])
         c.setVelocitiesToTemperature(sim.integrator.getTemperature())
         c.getIntegrator().step(steps)
@@ -41,7 +46,8 @@ from openmm import *
 from openmm.app import *
 from openmm.unit import *
 
-def enric(pdbfile = "data/enric/native.pdb"):
+def enric(pdbfile = "data/enric/native.pdb",
+  forcefields = ['amber99sbildn.xml', 'amber99_obc.xml'] ):
   usemdtraj = True
   
   if usemdtraj:
@@ -51,7 +57,7 @@ def enric(pdbfile = "data/enric/native.pdb"):
     pdb = PDBFile(pdbfile)
     topology = pdb.topology
   
-  forcefield = ForceField('amber99sbildn.xml', 'amber99_obc.xml')
+  forcefield = ForceField(*forcefields)
   system = forcefield.createSystem(topology, nonbondedMethod=app.CutoffNonPeriodic)
   integrator = LangevinIntegrator(330*kelvin, 1.0/picosecond, 2*femtosecond)
   simulation = Simulation(topology, system, integrator)
@@ -82,3 +88,8 @@ def main():
 
 if __name__ == '__main__':
   main()
+
+ff99 = ['amber99sbildn.xml', 'amber99_obc.xml']
+ff14 = ["amber14-all.xml"]
+
+pdb_nowater = "data/alanine-dipeptide-nowater av.pdb"
