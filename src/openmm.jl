@@ -88,8 +88,11 @@ function __init__()
     import numpy as np
 
     def threadedrun(xs, sim, steps, nthreads):
+        checkpoint = sim.context.createCheckpoint()
         def singlerun(i):
-            c = Context(sim.system, copy.copy(sim.integrator))
+            #c = Context(sim.system, copy.copy(sim.integrator))
+            c = copy.copy(sim.context)
+            c.loadCheckpoint(checkpoint)
             c.setPositions(xs[i])
             c.setVelocitiesToTemperature(sim.integrator.getTemperature())
             c.getIntegrator().step(steps)
@@ -102,7 +105,7 @@ function __init__()
     def defaultsystem(pdb, forcefields, temp, friction, step, minimize):
         pdb = PDBFile(pdb)
         forcefield = ForceField(*forcefields)
-        system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffPeriodic,
+        system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffNonPeriodic,
                 nonbondedCutoff=1*nanometer, constraints=None)
         integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
         simulation = Simulation(pdb.topology, system, integrator)
