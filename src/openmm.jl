@@ -42,9 +42,10 @@ function OpenMMSimulation(;
     friction=1,
     step=0.004,
     steps=1,
-    features=calphas(pdb))
+    features=calphas(pdb),
+    minimize=false)
 
-    pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step)::PyObject
+    pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
     return OpenMMSimulation(pysim, steps, features)
 end
 
@@ -98,15 +99,16 @@ function __init__()
         return np.array(out).flatten()
 
     # from the OpenMM documentation
-    def defaultsystem(pdb, forcefields, temp, friction, step):
+    def defaultsystem(pdb, forcefields, temp, friction, step, minimize):
         pdb = PDBFile(pdb)
         forcefield = ForceField(*forcefields)
-        system = forcefield.createSystem(pdb.topology, nonbondedMethod=PME,
-                nonbondedCutoff=1*nanometer, constraints=HBonds)
+        system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffPeriodic,
+                nonbondedCutoff=1*nanometer, constraints=None)
         integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
         simulation = Simulation(pdb.topology, system, integrator)
         simulation.context.setPositions(pdb.positions)
-        simulation.minimizeEnergy()
+        if minimize:
+            simulation.minimizeEnergy()
         return simulation
 
     """

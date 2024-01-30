@@ -1,4 +1,5 @@
 using ISOKANN
+using ISOKANN: getcoords
 
 function sims(;
   temp=300.0,
@@ -10,10 +11,22 @@ function sims(;
   @show steps = ceil(Int, T / dt)
 
   pdb = "$(@__DIR__)/../data/alanine-dipeptide-nowater av.pdb"
-  omm = OpenMMSimulation(; pdb, steps, temp, friction=gamma, features=1:66, step=dt)
+  ff = "ff99SBildn.xml"
+  #ff = "amber14-all.xml"
 
+  ffm = joinpath(ISOKANN.molly_data_dir, "force_fields", "ff99SBildn.xml")
+  ffo = ["amber14-all.xml"]
+  ffo = [ffm]
 
-  mol = MollyLangevin(; sys=PDB_ACEMD(),
+  omm = OpenMMSimulation(; pdb, forcefields=ffo, steps, temp, friction=gamma, features=1:66, step=dt)
+
+  ff = ISOKANN.Molly.MolecularForceField(ffm)
+  sys = ISOKANN.System(pdb, ff,
+    rename_terminal_res=false, # this is important,
+    #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
+  )
+
+  mol = MollyLangevin(; sys,
     temp=temp, gamma=gamma, dt=dt, T=T)
 
   return (; omm, mol)
