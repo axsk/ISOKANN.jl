@@ -10,31 +10,39 @@ function adapt_diala()
 end
 
 using ISOKANN: OpenMMSimulation, TransformShiftscale, iso2
+using Plots
 
 function adapt_omm(;
     steps=100,
-    sim=OpenMMSimulation(; steps),
+    sim=OpenMMSimulation(pdb="data/alanine-dipeptide-nowater av.pdb", steps=steps, features=1:22),
     transform=TransformShiftscale(),
     n=1,
     nx=10,
     ny=5,
     nd=1,
     lr=1e-3,
-    epochs=50,
+    epochs=1,
     nkoop=20,
-    nlearn=10,
+    nupdate=10,
     nres=10
 )
     global iso
     @time iso = iso2(; sim, transform, n, nx, ny, nd, lr)
-    @time iso = isosteps(iso, nkoop, nlearn)
+    @time iso = isosteps(; iso, nkoop, nupdate)
 
     for e in 1:epochs
-        @time (xs, ys) = adddata((iso.xs, iso.ys), iso.model, iso.sim, nres)
-        iso = (; iso..., xs, ys,)
-        @time iso = isosteps(iso, nkoop, nlearn)
-        #plot(sort(vec(iso.target))) |> display
+        iso = adddata(iso, nres)
+        #@time (xs, ys) = adddata((iso.xs, iso.ys), iso.model, iso.sim, nres)
+        #iso = (; iso..., xs, ys,)
+        @time iso = isosteps(iso)
+        plot(sort(vec(iso.target))) |> display
     end
 
-    return Base.@locals
+    return (; NamedTuple(Base.@locals)..., iso...)
+end
+
+function ISOKANN.adddata(iso::NamedTuple, nres=nothing)
+    nres === nothing && (nres = iso.nkoop)
+    @time (xs, ys) = adddata((iso.xs, iso.ys), iso.model, iso.sim, nres)
+    iso = (; iso..., xs, ys, nres)
 end

@@ -40,7 +40,7 @@ function OpenMMSimulation(;
     forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
     temp=298,
     friction=1,
-    step=0.004,
+    step=0.002,
     steps=1,
     features=calphas(pdb),
     minimize=false)
@@ -51,7 +51,7 @@ end
 
 
 """ multi-threaded propagation of an `OpenMMSimulation` """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=1)
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=Threads.nthreads())
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{Float64,Float64,Float64}, xs))
@@ -78,43 +78,7 @@ function __init__()
     pyimport_conda("openmm", "openmm", "conda-forge")
     pyimport_conda("joblib", "joblib")
 
-    py"""
-
-    from joblib import Parallel, delayed
-    from openmm.app import *
-    from openmm import *
-    from openmm.unit import *
-    from sys import stdout
-    import numpy as np
-
-    def threadedrun(xs, sim, steps, nthreads):
-        checkpoint = sim.context.createCheckpoint()
-        def singlerun(i):
-            #c = Context(sim.system, copy.copy(sim.integrator))
-            c = copy.copy(sim.context)
-            c.loadCheckpoint(checkpoint)
-            c.setPositions(xs[i])
-            c.setVelocitiesToTemperature(sim.integrator.getTemperature())
-            c.getIntegrator().step(steps)
-            return c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
-
-        out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
-        return np.array(out).flatten()
-
-    # from the OpenMM documentation
-    def defaultsystem(pdb, forcefields, temp, friction, step, minimize):
-        pdb = PDBFile(pdb)
-        forcefield = ForceField(*forcefields)
-        system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffNonPeriodic,
-                nonbondedCutoff=1*nanometer, constraints=None)
-        integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
-        simulation = Simulation(pdb.topology, system, integrator)
-        simulation.context.setPositions(pdb.positions)
-        if minimize:
-            simulation.minimizeEnergy()
-        return simulation
-
-    """
+    @pyinclude("$(@__DIR__)/mopenmm.py")
 end
 
 function savecoords(sim, coords, path)
@@ -141,9 +105,9 @@ function test_getsetcoords(sim)
     @assert getcoords(sim) == bak
 end
 
-function test_openmm()
+function test_openmm(replicas=2)
     sim = OpenMMSimulation()
-    x0 = stack([getcoords(sim) for _ in 1:2])
+    x0 = stack([getcoords(sim) for _ in 1:replicas])
     propagate(sim, x0, 3, nthreads=2)
 end
 

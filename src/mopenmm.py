@@ -1,47 +1,56 @@
 from joblib import Parallel, delayed
-import mdtraj
 from openmm import *
 from openmm.app import *
 from openmm.unit import *
-from sys import stdout
 import numpy as np
-from functools import wraps
-from time import time
 
-def threadedrun(xs, sim, steps, nthreads):
-    cp = sim.context.createCheckpoint()
+def threadedrun(xs, sim, steps, nthreads, nthreadssim=1):
+    context = sim.context
     def singlerun(i):
-  #      int = copy.copy(sim.integrator) 
-        c = copy.copy(sim.context)
-        c.loadCheckpoint(cp)
-
- #       c = Context(sim.system, int) # this is where the time is spent
+        c = Context(context.getSystem(), copy.copy(context.getIntegrator()), context.getPlatform(), {'Threads': str(nthreadssim)})
+        
         c.setPositions(xs[i])
         c.setVelocitiesToTemperature(sim.integrator.getTemperature())
         c.getIntegrator().step(steps)
+
         return c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
 
     out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
     return np.array(out).flatten()
 
 # from the OpenMM documentation
-def defaultsystem(pdb, forcefields, temp, friction, step, minimize):
+def defaultsystem(pdb, forcefields, temp, friction, step, minimize, platform='CPU', properties={'Threads': '1'}):
+    platform = Platform.getPlatformByName(platform)
     pdb = PDBFile(pdb)
     forcefield = ForceField(*forcefields)
-    system = forcefield.createSystem(
-      pdb.topology, 
-      nonbondedMethod=CutoffNonPeriodic,
-      nonbondedCutoff=1*nanometer,
-      constraints=None)
-    integrator = LangevinIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
-    simulation = Simulation(pdb.topology, system, integrator)
+    system = forcefield.createSystem(pdb.topology, 
+            nonbondedMethod=CutoffNonPeriodic,
+            nonbondedCutoff=1*nanometer, 
+            constraints=None)
+    integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
+    simulation = Simulation(pdb.topology, system, integrator, platform, properties)
     simulation.context.setPositions(pdb.positions)
-
+    simulation.context.setVelocitiesToTemperature(simulation.integrator.getTemperature())
     if minimize:
         simulation.minimizeEnergy()
     return simulation
 
+def test():
+  ff99 = ['amber99sbildn.xml', 'amber99_obc.xml']
+  ff14 = ["amber14-all.xml"]
+
+  pdb_nowater = "data/alanine-dipeptide-nowater av.pdb"
+
+  s = defaultsystem(pdb_nowater, ff14, 298, 1, 0.002, False, 'CPU', {'Threads':'1'})
+  x0 = s.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
+  threadedrun([x0], s, 500, 1)
+  return s
+
+"""
+# FROM HERE ON ENRIC AND TEST STUFF
 import mdtraj
+from functools import wraps
+from time import time
 from openmm import *
 from openmm.app import *
 from openmm.unit import *
@@ -82,14 +91,7 @@ def timing(f):
 def mysim(sim):
   sim.step(500)
 
-def main():
+def testenric():
   sim = enric()
   mysim(sim)
-
-if __name__ == '__main__':
-  main()
-
-ff99 = ['amber99sbildn.xml', 'amber99_obc.xml']
-ff14 = ["amber14-all.xml"]
-
-pdb_nowater = "data/alanine-dipeptide-nowater av.pdb"
+"""

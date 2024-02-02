@@ -45,7 +45,7 @@ train the model on a given batch of trajectory data `(xs, ys)` with
 """
 function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; transform=TransformISA())
     losses = Float64[]
-    local target
+    local target = nothing
     for i in 1:nkoop
         target = isotarget(model, xs, ys, transform)
         for j in 1:nupdate
@@ -57,10 +57,14 @@ function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; transform=TransformI
 end
 
 
-function isosteps(exp::NamedTuple, nkoop=1, nupdate=1; kwargs...)
+
+isosteps(iso::NamedTuple; kwargs...) = isosteps(; iso..., kwargs...)
+function isosteps(; nkoop=1, nupdate=1, exp...)
+    exp = NamedTuple(exp)
+    @show (exp)
     (; xs, ys, model, opt, losses, transform) = exp
-    l2, target = isosteps(model, opt, (xs, ys), nkoop, nupdate; transform, kwargs...)
-    (; exp..., target, losses=vcat(losses, l2), kwargs...,)
+    l2, target = isosteps(model, opt, (xs, ys), nkoop, nupdate; transform)
+    (; exp..., target, losses=vcat(losses, l2), nkoop, nupdate)
 end
 
 ### ISOKANN target transformations
