@@ -1,6 +1,12 @@
 
 using Flux
-using ISOKANN: randx0, propagate, TransformShiftscale, TransformISA, adddata, isosteps, defaultmodel
+
+if false # workaround vscode "missing reference bug"
+    include("../src/ISOKANN.jl")
+    using .ISOKANN: randx0, propagate, TransformShiftscale, TransformISA, adddata, isosteps, defaultmodel, OpenMMSimulation
+end
+
+using ISOKANN: randx0, propagate, TransformShiftscale, TransformISA, adddata, isosteps, defaultmodel, OpenMMSimulation
 
 function adapt_setup(;
     steps=100,
@@ -42,4 +48,17 @@ end
 function test_adapt()
     iso = adapt_setup()
     iso = adapt_run(; iso, nresample=1)
+end
+
+function gpu(iso::NamedTuple)
+
+    (; xs, ys, model, opt, sim, transform, losses, targets) = iso
+
+    model = Flux.gpu(model)
+    opt = Flux.gpu(opt)
+    xs = Flux.gpu(xs)
+    ys = Flux.gpu(ys)
+
+    iso = (; xs, ys, model, opt, sim, transform, losses, targets)
+
 end

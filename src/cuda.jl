@@ -12,6 +12,7 @@ function gpu!(iso::IsoRun)
     return
 end
 
+propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
 
 """ Fallback to simulate MD dynamics on the CPU """
 propagate(ms::MollyLangevin, x0::CuMatrix, ny) = propagate(ms, collect(x0), ny)

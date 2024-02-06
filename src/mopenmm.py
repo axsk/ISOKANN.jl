@@ -6,8 +6,15 @@ import numpy as np
 
 def threadedrun(xs, sim, steps, nthreads, nthreadssim=1):
     context = sim.context
+    if nthreadssim == 'gpu':
+      platform = Platform.getPlatformByName('CUDA')
+      platformargs = {}
+    else:
+      platform = context.getPlatform()
+      platformargs = {'Threads': str(nthreadssim)}
+
     def singlerun(i):
-        c = Context(context.getSystem(), copy.copy(context.getIntegrator()), context.getPlatform(), {'Threads': str(nthreadssim)})
+        c = Context(context.getSystem(), copy.copy(context.getIntegrator()), platform, platformargs)
         
         c.setPositions(xs[i])
         c.setVelocitiesToTemperature(sim.integrator.getTemperature())

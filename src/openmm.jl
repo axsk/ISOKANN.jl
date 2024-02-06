@@ -50,12 +50,26 @@ function OpenMMSimulation(;
 end
 
 
-""" multi-threaded propagation of an `OpenMMSimulation` """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix, ny; nthreads=Threads.nthreads())
+"""
+    propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
+
+Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x0`.
+
+# Arguments
+- `s`: An instance of the OpenMMSimulation type.
+- `x0`: Matrix containing the initial states as columns
+- `ny`: The number of replicas to create.
+
+# Optional Arguments
+- `nthreads`: The number of threads to use for parallelization of multiple simulations.
+- `mmthreads`: The number of threads to use for each OpenMM simulation. Set to "gpu" to use the GPU platform.
+
+"""
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
-    xs = permutedims(reinterpret(Tuple{Float64,Float64,Float64}, xs))
-    ys = @pycall py"threadedrun"(xs, s.pysim, s.steps, nthreads)::PyArray
+    xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
+    ys = @pycall py"threadedrun"(xs, s.pysim, s.steps, nthreads, mmthreads)::PyArray
     return reshape(ys, dim, nx, ny)
 end
 
@@ -66,8 +80,8 @@ function getcoords(sim::PyObject)
     py"$sim.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer).flatten()"
 end
 
-function setcoords(sim::PyObject, coords)
-    sim.context.setPositions(reinterpret(Tuple{Float64,Float64,Float64}, coords))
+function setcoords(sim::PyObject, coords::AbstractArray{T}) where {T}
+    sim.context.setPositions(reinterpret(Tuple{T,T,T}, coords))
 end
 
 
