@@ -53,7 +53,6 @@ include("isomolly.jl")        # ISOKANN for Molly systems
 include("plots.jl")           # visualizations
 include("loggers.jl")     # performance metric loggers
 include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
-include("cuda.jl")            # fixes for cuda
 include("reactionpath.jl")
 
 include("isosimple.jl")
@@ -64,6 +63,8 @@ include("openmm.jl")
 
 import .OpenMM.OpenMMSimulation
 export OpenMMSimulation
+
+include("cuda.jl")            # fixes for cuda
 
 #include("dataloader.jl")
 

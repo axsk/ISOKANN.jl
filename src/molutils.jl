@@ -21,14 +21,14 @@ end
 
 dihedral(x::AbstractMatrix) = @views dihedral(x[:, 1], x[:, 2], x[:, 3], x[:, 4])
 
-function psi(x::AbstractVector)  # dihedral of the oxygens
+function psi(x::AbstractVector, inds=[7, 9, 15, 17])  # dihedral of the oxygens
     x = reshape(x, 3, :)
-    @views dihedral(x[:, [7, 9, 15, 17]])
+    @views dihedral(x[:, inds])
 end
 
-function phi(x::AbstractVector)
+function phi(x::AbstractVector, inds=[5, 7, 9, 15])
     x = reshape(x, 3, :)
-    @views dihedral(x[:, [5, 7, 9, 15]])
+    @views dihedral(x[:, inds])
 end
 
 phi(x::AbstractMatrix) = mapslices(phi, x, dims=1) |> vec

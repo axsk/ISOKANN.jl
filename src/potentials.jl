@@ -32,7 +32,7 @@ mueller_brown_2d_man(x::AbstractArray) = mueller_brown_2d_man(eachslice(x, dims=
 mueller_brown = mueller_brown_2d_man
 
 # Extends AbstractLangevin from forced/langevin.jl
-@with_kw struct MuellerBrown <: AbstractLangevin
+@kwdef struct MuellerBrown <: AbstractLangevin
     tmax::Float64 = 0.01
     sigma::Float64 = 2.0
 end

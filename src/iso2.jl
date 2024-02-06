@@ -52,6 +52,8 @@ function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1;
     for i in 1:nkoop
         target = isotarget(model, xs, ys, transform)
         push!(targets, target)
+        # note that nupdate is classically called epochs
+        # TODO: should we use minibatches here?
         for j in 1:nupdate
             loss = ISOKANN.learnstep!(model, xs, target, opt)  # Neural Network update
             push!(losses, loss)
@@ -59,7 +61,6 @@ function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1;
     end
     (; losses, targets)
 end
-
 
 
 isosteps(iso::NamedTuple; kwargs...) = isosteps(; iso..., kwargs...)
@@ -82,7 +83,7 @@ If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi))
 `normalize` specifies whether to renormalize the resulting target vectors.
 `permute` specifies whether to permute the target for stability.
 """
-@with_kw struct TransformPseudoInv
+@kwdef struct TransformPseudoInv
     normalize::Bool = true
     direct::Bool = true
     eigenvecs::Bool = true
@@ -119,7 +120,7 @@ end
 
 Compute the target via the inner simplex algorithm (without feasiblization routine).
 `permute` specifies whether to apply the stabilizing permutation """
-@with_kw struct TransformISA
+@kwdef struct TransformISA
     permute::Bool = true
 end
 
@@ -194,13 +195,13 @@ function isodata(diffusion, nx, ny)
 end
 
 function test_dw(; kwargs...)
-    iso2(nd=2, sim=Doublewell(); kwargs...)
-    vismodel(model)
+    i = iso2(nd=2, sim=Doublewell(); kwargs...)
+    vismodel(i.model)
 end
 
 function test_tw(; kwargs...)
-    iso2(nd=3, sim=Triplewell(); kwargs...)
-    vismodel(model)
+    i = iso2(nd=3, sim=Triplewell(); kwargs...)
+    vismodel(i.model)
 end
 
 
