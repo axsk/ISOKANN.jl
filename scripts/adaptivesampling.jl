@@ -1,48 +1,45 @@
-using ISOKANN
-using ISOKANN: diala2, adddata, isosteps
 
-# proof of concept for adaptive sampling with isokann 2
-function adapt_diala()
-    ia = IsoRun()
-    iso = diala2()
-    ndata = adddata(iso.data, iso.model, ia.sim, 10; renormalize=true)
-    isosteps()
-end
+using Flux
+using ISOKANN: randx0, propagate, TransformShiftscale, TransformISA, adddata, isosteps, defaultmodel
 
-using ISOKANN: OpenMMSimulation, TransformShiftscale, iso2
-using Plots
-
-function adapt_omm(;
+function adapt_setup(;
     steps=100,
     sim=OpenMMSimulation(pdb="data/alanine-dipeptide-nowater av.pdb", steps=steps, features=1:22),
-    transform=TransformShiftscale(),
-    n=1,
-    nx=10,
-    ny=5,
+    nx0=10,
+    nmc=5,
     nd=1,
     lr=1e-3,
-    epochs=1,
-    nkoop=20,
-    nupdate=10,
-    nres=10
+    decay=1e-5,
+    nlayers=4,
+    activation=Flux.relu,
+    transform=(nd == 1 ? TransformShiftscale() : TransformISA())
 )
-    global iso
-    @time iso = iso2(; sim, transform, n, nx, ny, nd, lr)
-    @time iso = isosteps(; iso, nkoop, nupdate)
+    xs = randx0(sim, nx0)
+    ys = propagate(sim, xs, nmc)
 
-    for e in 1:epochs
-        iso = adddata(iso, nres)
-        #@time (xs, ys) = adddata((iso.xs, iso.ys), iso.model, iso.sim, nres)
-        #iso = (; iso..., xs, ys,)
-        @time iso = isosteps(iso)
-        plot(sort(vec(iso.target))) |> display
-    end
+    model = defaultmodel(sim; nout=nd, activation, layers=nlayers)
+    opt = Flux.setup(Flux.AdamW(lr, (0.9, 0.999), decay), model)
 
-    return (; NamedTuple(Base.@locals)..., iso...)
+    losses = Float64[]
+    targets = Matrix{Float64}[]
+
+    return (; xs, ys, model, opt, sim, transform, losses, targets)
 end
 
-function ISOKANN.adddata(iso::NamedTuple, nres=nothing)
-    nres === nothing && (nres = iso.nkoop)
-    @time (xs, ys) = adddata((iso.xs, iso.ys), iso.model, iso.sim, nres)
-    iso = (; iso..., xs, ys, nres)
+function adapt_run(; iso,
+    epochs=1, nresample=0, nkoop=1, nupdate=1)
+
+    (; xs, ys, model, opt, sim, transform, losses, targets) = iso
+
+    for e in 1:epochs
+        @time "resampling" xs, ys = adddata((xs, ys), model, sim, nresample,)
+        @time "training" l, t = isosteps(model, opt, (xs, ys), nkoop, nupdate; transform, losses, targets)
+    end
+
+    return (; xs, ys, model, opt, sim, transform, losses, targets)
+end
+
+function test_adapt()
+    iso = adapt_setup()
+    iso = adapt_run(; iso, nresample=1)
 end

@@ -30,8 +30,8 @@ function featurizer(sim::OpenMMSimulation)
     n, features = ISOKANN.pairdistfeatures(ix)
 end
 
-function defaultmodel(sim::OpenMMSimulation; nout)
-    ISOKANN.pairnet(sim; nout)
+function defaultmodel(sim::OpenMMSimulation; nout, kwargs...)
+    ISOKANN.pairnet(sim; nout, kwargs...)
 end
 
 """ Basic construction of a OpenMM Simulation, following the OpenMM documentation example """

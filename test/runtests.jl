@@ -74,4 +74,16 @@ using Test
         @test true
     end
 
+    @testset "compare simulators" begin
+        sim_molly = MollyLangevin(sys=PDB_ACEMD(), T=1.0)
+        sim_omm = OpenMMSimulation(pdb="data/alanine-dipeptide-nowater av.pdb",
+            steps=500,
+            features=1:22,
+            forcefields=["amber14-all.xml"])
+
+        x0 = ISOKANN.randx0(sim_molly, 2)
+        @time propagate(sim_molly, x0, 100)
+        @time propagate(sim_omm, x0, 100)
+    end
+
 end

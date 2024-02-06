@@ -37,23 +37,27 @@ function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-3, decay=1e
     return (; sim, xs, ys, model, opt, losses, target, kwargs...)
 end
 
-""" isostep(model, opt, (xs, ys), nkoop=1, nupdate=1)
+""" isostep(model, opt, (xs, ys), nkoop=1, nupdate=1; transform = TransformISA())
 
 train the model on a given batch of trajectory data `(xs, ys)` with
 - nkoop: outer iterations, i.e. reevaluating Koopman
 - nupdate: inner iterations, i.e. updating the neural network on fixed data
 """
-function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1; transform=TransformISA())
-    losses = Float64[]
+function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1;
+    transform=TransformISA(),
+    losses=Float64[],
+    targets=[])
+
     local target = nothing
     for i in 1:nkoop
         target = isotarget(model, xs, ys, transform)
+        push!(targets, target)
         for j in 1:nupdate
             loss = ISOKANN.learnstep!(model, xs, target, opt)  # Neural Network update
             push!(losses, loss)
         end
     end
-    (; losses, target)
+    (; losses, targets)
 end
 
 
@@ -61,7 +65,6 @@ end
 isosteps(iso::NamedTuple; kwargs...) = isosteps(; iso..., kwargs...)
 function isosteps(; nkoop=1, nupdate=1, exp...)
     exp = NamedTuple(exp)
-    @show (exp)
     (; xs, ys, model, opt, losses, transform) = exp
     l2, target = isosteps(model, opt, (xs, ys), nkoop, nupdate; transform)
     (; exp..., target, losses=vcat(losses, l2), nkoop, nupdate)
