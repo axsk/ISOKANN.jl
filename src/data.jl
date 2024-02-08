@@ -96,14 +96,20 @@ end
 
 
 """
-    data_from_trajectory(xs::Matrix [, nx]) :: DataTuple
+    data_from_trajectory(xs::Matrix; reverse=false) :: DataTuple
 
 Generate the lag-1 data from the trajectory `xs`.
-If `nx` is given, use only the first `nx` transitions of the trajectory.
+If `reverse` is true, also take the time-reversed lag-1 data.
 """
-function data_from_trajectory(xs::Matrix, nx=size(xs, 2) - 1)
-    ys = reshape(xs[:, 2:nx+1], :, nx, 1)
-    return xs[:, 1:nx], ys
+function data_from_trajectory(xs::Matrix; reverse=false)
+    if reverse
+        ys = stack([xs[:, 3:end], xs[:, 1:end-2]])
+        xs = [:, 2:end-1]
+    else
+        xs = xs[:, 1:end-1]
+        ys = stack([xs[:, 2:end]])
+    end
+    return xs, ys
 end
 
 """
