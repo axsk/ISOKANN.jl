@@ -51,7 +51,6 @@ function plot_learning(iso; subdata=nothing)
     p2 = plot_chi(xs, vec(model(xs)))
     p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])
-
     ps = [p1, p2, p3]
     plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)))
 end
@@ -63,6 +62,8 @@ function plot_chi(xs, chi::AbstractVector)
         scatter(xs[1, :], xs[2, :], marker_z=chi, label="")
     elseif size(xs, 1) == 66
         scatter_ramachandran(xs, chi)
+    else
+        scatter(chi)
     end
 end
 
@@ -87,16 +88,6 @@ end
 
 # good colors
 # berlin, delta, roma, tofino, tokyo
-function scatter_ramachandran(x::AbstractMatrix, model=nothing; kwargs...)
-    z = nothing
-    !isnothing(model) && (z = model(x) |> vec)
-    ph = phi(x)
-    ps = psi(x)
-    scatter(ph, ps, marker_z=z, xlims=[-pi, pi], ylims=[-pi, pi],
-        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:tofino,
-        xlabel="\\phi", ylabel="\\psi", title="Ramachandran", ; kwargs...
-    )
-end
 
 scatter_ramachandran(x, model; kwargs...) = scatter_ramachandran(x, vec(model(x)))
 
