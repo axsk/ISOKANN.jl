@@ -104,7 +104,7 @@ If `reverse` is true, also take the time-reversed lag-1 data.
 function data_from_trajectory(xs::Matrix; reverse=false)
     if reverse
         ys = stack([xs[:, 3:end], xs[:, 1:end-2]])
-        xs = [:, 2:end-1]
+        xs = xs[:, 2:end-1]
     else
         xs = xs[:, 1:end-1]
         ys = stack([xs[:, 2:end]])
