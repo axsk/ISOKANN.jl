@@ -106,8 +106,8 @@ function data_from_trajectory(xs::Matrix; reverse=false)
         ys = stack([xs[:, 3:end], xs[:, 1:end-2]])
         xs = xs[:, 2:end-1]
     else
-        xs = xs[:, 1:end-1]
         ys = stack([xs[:, 2:end]])
+        xs = xs[:, 1:end-1]
     end
     return xs, ys
 end
