@@ -77,7 +77,11 @@ function run!(iso::IsoRun; showprogress=true)
     t_samp = t_koop = t_train = 0.0
 
     for j in 1:nd
-        t_samp += @elapsed subdata = subsample(model, data, nx)
+        if nx < size(data[1], 2)
+            t_samp += @elapsed subdata = subsample(model, data, nx)
+        else
+            subdata = data
+        end
         # train model(xs) = target
         for i in 1:np
             xs, ys = subdata
