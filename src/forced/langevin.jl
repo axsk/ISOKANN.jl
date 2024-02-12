@@ -70,4 +70,4 @@ triplewell(x) = triplewell(x...)
 
 Triplewell() = Diffusion(; potential=triplewell, dim=2, sigma=[1.0, 1.0])
 
-defaultmodel(sim::AbstractLangevin; nout, activation, layers) = smallnet(dim(sim), nout)
+defaultmodel(sim::AbstractLangevin; nout, kwargs...) = smallnet(dim(sim), nout)

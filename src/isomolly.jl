@@ -57,6 +57,7 @@ Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     data::T = bootstrap(sim, ny, nk)
     losses = Float64[]
     loggers::Vector = Any[]
+    minibatch::Int = 32
 end
 
 optparms(iso::IsoRun) = optparms(iso.opt.layers[2].bias.rule)
@@ -67,7 +68,7 @@ optparms(o::Optimisers.Adam) = (; Adam=o.eta)
 """ run the given `IsoRun` object """
 function run!(iso::IsoRun; showprogress=true)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
-    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, loggers, nxmax) = iso
+    (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres, loggers, nxmax, minibatch) = iso
     #datastats(data)
 
     local subdata
@@ -77,7 +78,7 @@ function run!(iso::IsoRun; showprogress=true)
     t_samp = t_koop = t_train = 0.0
 
     for j in 1:nd
-        if nx < size(data[1], 2)
+        if 0 < nx < size(data[1], 2)
             t_samp += @elapsed subdata = subsample(model, data, nx)
         else
             subdata = data
@@ -89,7 +90,7 @@ function run!(iso::IsoRun; showprogress=true)
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
             t_train += @elapsed for i in 1:nl
-                ls = learnstep!(model, xs, target, opt)
+                ls = learnbatch!(model, xs, target, opt, minibatch)
                 push!(losses, ls)
             end
         end
@@ -144,17 +145,16 @@ shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
 """ DEPRECATED - batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
     ndata = length(target)
-    if ndata <= batchsize || batchsize == 0
-        return learnstep!(model, xs, target, opt)
-    end
 
-    nbatches = ceil(Int, ndata / batchsize)
+    (0 < batchsize < ndata) || return learnstep!(model, xs, target, opt)
+
+    inds = Flux.DataLoader(1:ndata; batchsize, shuffle=true)
+
     l = 0.0
-    for batch in 1:nbatches
-        ind = ((batch-1)*batchsize+1):min(batch * batchsize, ndata)
-        l += learnstep!(model, xs[:, ind], target[ind], opt)
+    for ind in inds
+        l += learnstep!(model, xs[:, ind], target[ind], opt) * length(ind)
     end
-    return l / nbatches  # this is only approx correct for uneven batches
+    return l / ndata
 end
 
 """ single supervised learning step """
