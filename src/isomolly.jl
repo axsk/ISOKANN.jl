@@ -57,7 +57,7 @@ Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     data::T = bootstrap(sim, ny, nk)
     losses = Float64[]
     loggers::Vector = Any[]
-    minibatch::Int = 32
+    minibatch::Int = 128
 end
 
 optparms(iso::IsoRun) = optparms(iso.opt.layers[2].bias.rule)
@@ -140,7 +140,7 @@ function koopman(model, ys)
 end
 
 """ empirical shift-scale operation """
-shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
+shiftscale(ks) = (ks .- minimum(ks)) ./ @show (maximum(ks) - minimum(ks))
 
 """ DEPRECATED - batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
