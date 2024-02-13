@@ -140,7 +140,7 @@ function koopman(model, ys)
 end
 
 """ empirical shift-scale operation """
-shiftscale(ks) = (ks .- minimum(ks)) ./ @show (maximum(ks) - minimum(ks))
+shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
 
 """ DEPRECATED - batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
