@@ -39,6 +39,7 @@ To start the actual training call the `run!` method.
 - `data::T`: Data object.
 - `losses`: Vector to store loss values.
 - `loggers::Vector`: Vector of loggers.
+- `minibatch::Int`: Size of the (shuffled) minibatches. Set to 0 to disable
 
 """
 Base.@kwdef mutable struct IsoRun{T} # takes 10 min

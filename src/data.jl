@@ -103,16 +103,11 @@ If `reverse` is true, also take the time-reversed lag-1 data.
 """
 function data_from_trajectory(xs::Matrix; reverse=false)
     if reverse
-        ys = Array{eltype(xs)}(undef, size(xs)..., 2)
-        @views ys[:, 1:end-1, 1] .= xs[:, 2:end]  # forward
-        @views ys[:, 2:end, 2] .= xs[:, 1:end-1]  # backward
-
-        @views ys[:, end, 1] = ys[:, end, 2]  # twice backward
-        @views ys[:, 1, 2] = ys[:, 1, 1]  #twice forward
+        ys = stack([xs[:, 3:end], xs[:, 1:end-2]])
+        xs = xs[:, 2:end-1]
     else
-        ys = Array{eltype(xs)}(undef, size(xs)..., 1)
-        @views ys[:, 1:end-1] .= xs[:, 2:end]
-        @views ys[:, end] .= xs[:, end]  # self-reference results in 0 change to koopman
+        ys = xs[:, 2:end]
+        xs = xs[:, 1:end-1]
     end
     return xs, ys
 end
