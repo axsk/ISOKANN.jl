@@ -9,6 +9,7 @@ move the model and data of the given `IsoRun` to the GPU for CUDA support
 function gpu!(iso::IsoRun)
     iso.model = Flux.gpu(iso.model)
     iso.data = Flux.gpu(iso.data)
+    iso.opt = Flux.gpu(iso.opt)
     return
 end
 
