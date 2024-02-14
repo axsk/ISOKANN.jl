@@ -140,6 +140,22 @@ function koopman(model, ys)
     return ks
 end
 
+
+
+"""
+    scaleandshift(model, xs, ys)
+
+Estimate the scale and shift parameters using linear regression
+"""
+function scaleandshift(model, xs, ys)
+    a = model(xs) |> vec
+    b = koopman(model, ys)
+    o = ones(length(a))
+    [a o] \ [b o][:, 1]
+end
+
+scaleandshift(iso::IsoRun) = scaleandshift(iso.model, iso.data...)
+
 """ empirical shift-scale operation """
 shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
 
