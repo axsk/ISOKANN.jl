@@ -11,7 +11,7 @@ using StatsBase: mean, sample, mean_and_std
 using Molly: Molly, System
 using StaticArrays: SVector
 using StatsBase: sample
-using CUDA: CuArray, CuMatrix, cu
+using CUDA: CuArray, CuMatrix, cu, CUDA
 using NNlib: batched_adjoint, batched_mul
 using Unitful: @u_str, unit
 import ProgressMeter

@@ -48,7 +48,7 @@ function plot_learning(iso; subdata=nothing)
     end
 
     xs, ys = data
-    p2 = plot_chi(xs, vec(model(xs)))
+    p2 = plot_chi(xs, Flux.cpu(vec(model(xs))))
     p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])
     ps = [p1, p2, p3]
@@ -70,8 +70,8 @@ end
 """ fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
     xs, ys = data
-    target = koopman(model, ys)
-    xs = model(xs) |> vec
+    target = koopman(model, ys) |> Flux.cpu
+    xs = model(xs) |> Flux.cpu
     scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ")
     plot!([minimum(xs), maximum(xs)], [minimum(target), maximum(target)], legend=false)
 end

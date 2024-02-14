@@ -2,15 +2,16 @@
 
 pickclosest(haystack::CuArray, needles::AbstractVector) = pickclosest(collect(haystack), needles)
 
-""" gpu!(iso::IsoRun)
+""" gpu(iso::IsoRun)
 
 move the model and data of the given `IsoRun` to the GPU for CUDA support
 """
-function gpu!(iso::IsoRun)
-    iso.model = Flux.gpu(iso.model)
-    iso.data = Flux.gpu(iso.data)
-    iso.opt = Flux.gpu(iso.opt)
-    return
+function gpu(iso::IsoRun)
+    (; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch) = iso
+    model = Flux.gpu(model)
+    data = Flux.gpu(data)
+    opt = Flux.gpu(opt)
+    return IsoRun(; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch)
 end
 
 propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
