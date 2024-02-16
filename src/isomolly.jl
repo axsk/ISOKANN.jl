@@ -157,7 +157,10 @@ end
 scaleandshift(iso::IsoRun) = scaleandshift(iso.model, iso.data...)
 
 """ empirical shift-scale operation """
-shiftscale(ks) = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
+shiftscale(ks) =
+    let (a, b) = extrema(ks)
+        (ks .- a) ./ (b - a)
+    end
 
 """ DEPRECATED - batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
@@ -176,9 +179,10 @@ end
 
 """ single supervised learning step """
 function learnstep!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
+    n = size(target, 2)
     l, grad = let xs = xs  # `let` allows xs to not be boxed
         Zygote.withgradient(model) do model
-            sum(abs2, model(xs) .- target) / size(target, 2)
+            sum(abs2, model(xs) .- target) / n
         end
     end
     Optimisers.update!(opt, model, grad[1])
@@ -237,6 +241,7 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::IsoRun)
     println(io, " nx=$(iso.nx), ny=$(iso.ny), nk=$(iso.nk)")
     println(io, " model: $(iso.model.layers)")
     println(io, " opt: $(optimizerstring(iso.opt))")
+    println(io, " minibatch: $(iso.minibatch)")
     println(io, " loggers: $(length(iso.loggers))")
     println(io, " data: $(size.(iso.data))")
     length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")

@@ -70,10 +70,12 @@ end
 """ fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
     xs, ys = data
-    target = koopman(model, ys) |> Flux.cpu
-    xs = model(xs) |> Flux.cpu
-    scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ")
-    plot!([minimum(xs), maximum(xs)], [minimum(target), maximum(target)], legend=false)
+    target = koopman(model, ys) |> vec |> Flux.cpu
+    xs = model(xs) |> vec |> Flux.cpu
+    #scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ")
+    #scatter(xs, target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
+    scatter(target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
+    #plot!([minimum(xs), maximum(xs)], [minimum(target), maximum(target)], legend=false)
 end
 
 # DEPRECATED

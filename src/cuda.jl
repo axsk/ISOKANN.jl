@@ -14,6 +14,14 @@ function gpu(iso::IsoRun)
     return IsoRun(; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch)
 end
 
+function cpu(iso::IsoRun)
+    (; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch) = iso
+    model = Flux.cpu(model)
+    data = Flux.cpu(data)
+    opt = Flux.cpu(opt)
+    return IsoRun(; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch)
+end
+
 propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
 
 """ Fallback to simulate MD dynamics on the CPU """
