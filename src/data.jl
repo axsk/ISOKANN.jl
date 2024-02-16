@@ -101,9 +101,9 @@ end
 Generate the lag-1 data from the trajectory `xs`.
 If `reverse` is true, also take the time-reversed lag-1 data.
 """
-function data_from_trajectory(xs::Matrix; reverse=false)
+function data_from_trajectory(xs::AbstractMatrix; reverse=false)
     if reverse
-        ys = stack([xs[:, 3:end], xs[:, 1:end-2]])
+        @views ys = stack([xs[:, 3:end], xs[:, 1:end-2]])
         xs = xs[:, 2:end-1]
     else
         ys = xs[:, 2:end]
