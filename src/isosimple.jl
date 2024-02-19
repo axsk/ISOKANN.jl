@@ -13,7 +13,7 @@ data a tuple of (x,y) coordinates, n the number of iterations
 function isokann_simple(model, opt, data, n)
     xs::Matrix, ys::Tensor = data                # decompose data in start and endpoints
     for _ in 1:n
-        ks       = mean(model(ys), dims=3)[1,:]  # Monte-Carlo estimate of Kx
+        ks = mean(model(ys), dims=2)[1, :]  # Monte-Carlo estimate of Kx
         target   = shiftscale(ks)                # SKx
         learnstep!(model, xs, target, opt)       # Neural Network update
     end

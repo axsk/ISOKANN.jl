@@ -95,7 +95,7 @@ function isotarget(model, xs, ys, t::TransformPseudoInv)
     chi = model(xs)
 
     cs = model(ys)::AbstractArray{<:Number,3}
-    kchi = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
+    kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
 
     if direct
         Kinv = chi * pinv(kchi)
@@ -133,7 +133,7 @@ end
 function isotarget(model, xs, ys, t::TransformISA)
     chi = model(xs)
     cs = model(ys)
-    ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
+    ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
     target = myisa(ks')' * ks
     t.permute && (target = fixperm(target, chi))
     return target
@@ -147,7 +147,7 @@ struct TransformShiftscale end
 function isotarget(model, xs, ys, t::TransformShiftscale)
     cs = model(ys)
     @assert size(cs, 1) == 1
-    ks = StatsBase.mean(cs[:, :, :], dims=3)[:, :, 1]
+    ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
     target = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
     return target
 end

@@ -109,10 +109,10 @@ TODO: specify the actual interface required for a simulation to be runnable by I
 """
 function propagate(ms::MollyLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
-    ys = zeros(dim, nx, ny)
-    inds = [(i, j) for i in 1:nx, j in 1:ny]
+    ys = zeros(dim, ny, nx)
+    inds = [(i, j) for j in 1:ny, i in 1:nx]
     Threads.@threads for (i, j) in inds
-        ys[:, i, j] = solve_end(ms; u0=x0[:, i])
+        ys[:, j, i] = solve_end(ms; u0=x0[:, i])
     end
     return ys
 end

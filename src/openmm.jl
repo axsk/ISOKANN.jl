@@ -70,8 +70,11 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Thre
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
     ys = @pycall py"threadedrun"(xs, s.pysim, s.steps, nthreads, mmthreads)::PyArray
-    return reshape(ys, dim, nx, ny)
+    ys = reshape(ys, dim, nx, ny)
+    return newdataformat(ys) 
 end
+
+newdataformat(ys::AbstractArray{<:Any,3}) = permutedims(ys, [1,3,2])
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)

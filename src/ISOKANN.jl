@@ -18,6 +18,8 @@ import ProgressMeter
 using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 
+using MLUtils: numobs, getobs, shuffleobs
+
 import ChainRulesCore
 import Flux
 import StatsBase, Zygote, Optimisers, Flux, JLD2

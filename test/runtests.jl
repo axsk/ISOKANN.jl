@@ -16,7 +16,7 @@ using Test
         if CUDA.functional()
             CUDA.allowscalar(false)
             iso = ISOKANN.IsoRun()
-            ISOKANN.gpu!(iso)
+            iso = ISOKANN.gpu(iso)
             ISOKANN.run!(iso)
             @test true
         else

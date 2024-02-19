@@ -74,7 +74,7 @@ function run!(iso::IsoRun; showprogress=true)
 
     local subdata
 
-    p = ProgressMeter.Progress(nd, 1, offset=1)
+    p = ProgressMeter.Progress(nd)
 
     t_samp = t_koop = t_train = 0.0
 
@@ -87,7 +87,7 @@ function run!(iso::IsoRun; showprogress=true)
         # train model(xs) = target
         for i in 1:np
             xs, ys = subdata
-            t_koop += @elapsed ks = koopman(model, ys)
+            t_koop += @elapsed ks = koopman(model, ys) |> vec
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
             t_train += @elapsed for i in 1:nl
@@ -105,7 +105,7 @@ function run!(iso::IsoRun; showprogress=true)
             #if size(data[1], 2) > 3000
             #    data = datasubsample(model, data, 1000)  # keep the data small
             #end
-            iso.data = data
+            iso.data = getobs(data)
 
             #extractdata(data[1], model, sim.sys)
         end
@@ -136,7 +136,8 @@ end
 function koopman(model, ys)
     #ys = Array(ys)
     cs = model(ys)::AbstractArray{<:Number,3}
-    ks = vec(StatsBase.mean(cs[1, :, :], dims=2))::AbstractVector
+    #ks = vec(StatsBase.mean(cs[1, :, :], dims=2))::AbstractVector
+    ks = dropdims(StatsBase.mean(cs, dims=2), dims=2)
     return ks
 end
 
@@ -149,7 +150,7 @@ Estimate the scale and shift parameters using linear regression
 """
 function scaleandshift(model, xs, ys)
     a = model(xs) |> vec
-    b = koopman(model, ys)
+    b = koopman(model, ys) |> vec
     o = ones(length(a))
     [a o] \ [b o][:, 1]
 end
@@ -164,22 +165,19 @@ shiftscale(ks) =
 
 """ DEPRECATED - batched supervised learning for a given batchsize """
 function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
-    ndata = length(target)
+    ndata = numobs(xs)
 
     (0 < batchsize < ndata) || return learnstep!(model, xs, target, opt)
 
-    inds = Flux.DataLoader(1:ndata; batchsize, shuffle=true)
-
-    l = 0.0
-    for ind in inds
-        l += learnstep!(model, xs[:, ind], target[ind], opt) * length(ind)
+    l = sum(Flux.DataLoader((xs, target); batchsize, shuffle=true)) do (xs, target)
+        learnstep!(model, xs, target, opt) * length(ind)
     end
     return l / ndata
 end
 
 """ single supervised learning step """
 function learnstep!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
-    n = size(target, 2)
+    n = numobs(xs)
     l, grad = let xs = xs  # `let` allows xs to not be boxed
         Zygote.withgradient(model) do model
             sum(abs2, model(xs) .- target) / n
@@ -211,7 +209,7 @@ function saveall(iso::IsoRun, pathlength=300)
 end
 
 
-
+# TODO: check if this is consistent with scaleandshift
 function estimate_K(x, Kx)
     @. Kinv(Kx, p) = p[1]^-1 * (Kx .- (1 - p[1]) * p[2])  # define the parametric inverse of K
     fit = LsqFit.curve_fit(Kinv, vec(x), vec(Kx), [0.5, 1])     # lsq regression
@@ -227,6 +225,7 @@ function chi_exit_rate(x, Kx, tau)
     return a + b
 end
 
+# TODO: remove, not used anywhere
 function gettarget(xs, ys, model)
     ks = koopman(model, ys)
     lambda, a = estimate_K(model(xs), ks)

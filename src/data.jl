@@ -7,7 +7,7 @@ Functions to generate and handle data for the ISOKANN algorithm.
 We represent data as a tuple of xs and ys.
 
 xs is a matrix of size (d, n) where d is the dimension of the system and n the number of samples.
-ys is a tensor of size (d, n, k) where k is the number of koopman samples.
+ys is a tensor of size (d, k, n) where k is the number of koopman samples.
 """
 DataTuple = Tuple{Matrix{T},Array{T,3}} where {T<:Number}
 
@@ -48,11 +48,7 @@ subsample(model, xs::AbstractArray{<:Any,2}, n) =
 subsample(model, ys::AbstractArray{<:Any,3}, n) =
     subsample(model, reshape(ys, size(ys, 1), :), n)
 
-function subsample(model, data::Tuple, n)
-    xs, ys = data
-    ix = subsample_inds(model, xs, n)
-    return (xs[:, ix], ys[:, ix, :])
-end
+subsample(model, data::Tuple, n) = getobs(data, subsample_inds(model, first(data), n))
 
 """
     adddata(data::D, model, sim, ny, lastn=1_000_000)::D
@@ -70,24 +66,24 @@ The subsamples are taken only from the `lastn` last datapoints in `data`.
 julia> (xs, ys) = adddata((xs,ys), chi, mollysim)
 ```
 """
-function adddata(data, model, sim, ny; lastn=1_000_000)
+function adddata(data, model, sim, ny)
     ny == 0 && return data
-    _, ys = data
-    nk = size(ys, 3)
-    firstind = max(size(ys, 2) - lastn + 1, 1)
-    x0 = subsample(model, ys[:, firstind:end, :], ny)
-    ys = propagate(sim, x0, nk)
-    #ndata = centercoords(x0), centercoords(ys)  # TODO: this does not really belong here
-    data = hcat.(data, (x0, ys))
-    return data
+    nk = size(last(data), 2)
+    xs = subsample(model, last(data), ny)
+    ys = propagate(sim, xs, nk)
+    return joindata(data, (xs, ys))
+end
+
+function joindata((x1, y1), (x2, y2))
+    return hcat(x1, x2), cat(y1, y2, dims=3)
 end
 
 function datastats(data)
     xs, ys = data
     ext = extrema.(eachrow(xs))
     uni = length(unique(xs[1, :]))
-    _, n, ks = size(ys)
-    println("\n Dataset has $n entries ($uni unique) with $ks koop's. Extrema: $ext")
+    _, ks, n = size(ys)
+    println("\n Dataset has $n entries (approx $uni unique) with $ks koop's. Extrema: $ext")
 end
 
 @deprecate stratified_x0(model, ys, n) subsample(model, ys, n)
@@ -104,9 +100,13 @@ If `reverse` is true, also take the time-reversed lag-1 data.
 function data_from_trajectory(xs::AbstractMatrix; reverse=false)
     if reverse
         @views ys = stack([xs[:, 3:end], xs[:, 1:end-2]])
+        ys = permutedims(ys, [1, 3, 2])
+        #ys = similar(xs, size(xs, 1, 2, size(xs, 2) - 2))
+        #@views ys[:, 1, :] .= xs[:, 3:end]
+        #@views ys[:, 2, :] .= xs[:, 1:end-2]
         xs = xs[:, 2:end-1]
     else
-        ys = xs[:, 2:end]
+        ys = unsqueeze(xs[:, 2:end], dims=3)
         xs = xs[:, 1:end-1]
     end
     return xs, ys
@@ -117,24 +117,15 @@ end
 
 return a random subsample of `nx` points from `data` """
 function subsample(trajdata, nx)
-    xs, ys = trajdata
-    i = sample(1:size(xs, 2), nx, replace=false)
-    return xs[:, i], ys[:, i, :]
+    i = sample(1:numobs(data), nx, replace=false)
+    return getobs(data, i)
 end
 
-function data_sliced(data::Tuple, slice)
-    xs, ys = data
-    (xs[:, slice], ys[:, slice, :])
-end
+@deprecate data_sliced(data, inds) getobs(data, inds)
 
-import Random
-function shuffledata(data)
-    xs, ys = data
-    n = size(xs, 2)
-    i = Random.randperm(n)
-    return xs[:, i], ys[:, i, :]
-end
+@deprecate shuffledata(data) shuffleobs(data)
 
+# TODO: this does not belong here!
 """  trajectory(sim, nx)
 generate a trajectory of length `nx` from the simulation `sim`"""
 function trajectory(sim, nx)

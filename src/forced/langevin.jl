@@ -17,9 +17,9 @@ end
 
 function propagate(l::AbstractLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
-    ys = zeros(dim, nx, ny)
-    Threads.@threads for (i, j) in [(i, j) for i in 1:nx, j in 1:ny]
-        ys[:, i, j] = solve_end(l; u0=x0[:, i])
+    ys = zeros(dim, ny, nx)
+    Threads.@threads for (i, j) in [(i, j) for j in 1:ny, i in 1:nx]
+        ys[:, j, i] = solve_end(l; u0=x0[:, i])
     end
     return ys
 end
