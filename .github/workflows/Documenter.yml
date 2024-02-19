@@ -14,7 +14,7 @@ jobs:
       contents: write
       statuses: write
     runs-on: ubuntu-latest
-    env:
+    #env:
       #PYTHON: ""
     steps:
       - uses: actions/checkout@v4
