@@ -99,7 +99,7 @@ const isokann_data_dir = joinpath(dirname(pathof(ISOKANN)), "..", "data")
 molly_data(path) = joinpath(molly_data_dir, path)
 isokann_data(path) = joinpath(isokann_data_dir, path)
 
-molly_forcefields(ffs) = MolecularForceField(map(ffs) do ff
+molly_forcefields(ffs) = Molly.MolecularForceField(map(ffs) do ff
     molly_data("force_fields/$ff")
 end...)
 

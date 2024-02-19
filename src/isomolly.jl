@@ -170,7 +170,7 @@ function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, bat
     (0 < batchsize < ndata) || return learnstep!(model, xs, target, opt)
 
     l = sum(Flux.DataLoader((xs, target); batchsize, shuffle=true)) do (xs, target)
-        learnstep!(model, xs, target, opt) * length(ind)
+        learnstep!(model, xs, target, opt) * numobs(xs)
     end
     return l / ndata
 end

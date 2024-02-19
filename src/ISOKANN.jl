@@ -6,6 +6,8 @@ module ISOKANN
 
 #include("forced/IsoForce.jl")
 
+import Random
+
 using LinearAlgebra: norm, dot, cross
 using StatsBase: mean, sample, mean_and_std
 using Molly: Molly, System
@@ -18,7 +20,7 @@ import ProgressMeter
 using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 
-using MLUtils: numobs, getobs, shuffleobs
+using MLUtils: numobs, getobs, shuffleobs, unsqueeze
 
 import ChainRulesCore
 import Flux

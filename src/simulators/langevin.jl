@@ -29,7 +29,7 @@ function solve_end(l::AbstractLangevin; u0)
 end
 
 ##  Generic Diffusion in a potential
-@with_kw struct Diffusion{T} <: AbstractLangevin
+@kwdef struct Diffusion{T} <: AbstractLangevin
     potential::T
     dim::Int64=1
     sigma::Vector{Float64} = [1.0]

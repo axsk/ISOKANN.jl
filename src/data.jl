@@ -116,7 +116,7 @@ end
     subsample(data, nx)
 
 return a random subsample of `nx` points from `data` """
-function subsample(trajdata, nx)
+function subsample(data, nx)
     i = sample(1:numobs(data), nx, replace=false)
     return getobs(data, i)
 end
