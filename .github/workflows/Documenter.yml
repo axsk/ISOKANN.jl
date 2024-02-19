@@ -15,7 +15,7 @@ jobs:
       statuses: write
     runs-on: ubuntu-latest
     env:
-      PYTHON: ""
+      #PYTHON: ""
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/cache@v1

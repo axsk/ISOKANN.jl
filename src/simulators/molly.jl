@@ -94,21 +94,21 @@ end
 ## loaders for the molecules in /data
 
 const molly_data_dir = joinpath(dirname(pathof(Molly)), "..", "data")
+const isokann_data_dir = joinpath(dirname(pathof(ISOKANN)), "..", "data")
 
-function PDB_6MRR()
-    ff = MolecularForceField(
-        joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"),
-        joinpath(molly_data_dir, "force_fields", "tip3p_standard.xml"),
-        joinpath(molly_data_dir, "force_fields", "his.xml"),
-    )
-    sys = System(joinpath(molly_data_dir, "6mrr_nowater.pdb"), ff)
-    return sys
-end
+molly_data(path) = joinpath(molly_data_dir, path)
+isokann_data(path) = joinpath(isokann_data_dir, path)
+
+molly_forcefields(ffs) = MolecularForceField(map(ffs) do ff
+    molly_data("force_fields/$ff")
+end...)
+
+PDB_6MRR() = System(molly_data("6mrr_nowater.pdb"), molly_forcefields(["ff99SBildn.xml", "tip3p_standard.xml", "his.xml"]))
 
 function PDB_5XER()
     sys = System(
-        joinpath(dirname(pathof(Molly)), "..", "data", "5XER", "gmx_coords.gro"),
-        joinpath(dirname(pathof(Molly)), "..", "data", "5XER", "gmx_top_ff.top");
+        molly_data("5XER/gmx_coords.gro"),
+        molly_data("5XER/gmx_top_ff.top")
     )
     #temp = 298.0u"K"
     ## attempt at removing water. not working, some internal data is referring to all atoms
@@ -120,32 +120,29 @@ end
 
 """ Create a Molly system for the alanine dipeptide without solvent """
 function PDB_ACEMD(; kwargs...)
-    ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
-    sys = System(joinpath(@__DIR__, "..", "data", "alanine-dipeptide-nowater av.pdb"), ff,
+    System(
+        joinpath(isokann_data_dir, "alanine-dipeptide-nowater av.pdb"),
+        molly_forcefields(["ff99SBildn.xml"]),
         rename_terminal_res=false, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
         ; kwargs...
     )
-    return sys
 end
 
 """ Create a Molly system for the small Chignolin protein """
 function PDB_1UAO(; rename_terminal_res=true, kwargs...)
-    ff = Molly.MolecularForceField(joinpath(molly_data_dir, "force_fields", "ff99SBildn.xml"))
-    sys = System(joinpath(@__DIR__, "..", "data", "1uao av.pdb"), ff,
+    System(joinpath(isokann_data_dir, "1uao av.pdb"), molly_forcefields(["ff99SBildn.xml"]),
         ; rename_terminal_res, # this is important,
         #boundary = CubicBoundary(Inf*u"nm", Inf*u"nm", Inf*u"nm")  breaking neighbor search
-        kwargs...
-    )
-    return sys
+        kwargs...)
 end
 
 """ Create a Molly system for the alanine dipeptide with water """
 function PDB_diala_water()
-    ff_dir = joinpath(dirname(pathof(Molly)), "..", "data", "force_fields")
-    ff = Molly.MolecularForceField(joinpath.(ff_dir, ["ff99SBildn.xml", "tip3p_standard.xml"])...)
-    sys = Molly.System(joinpath(@__DIR__, "..", "data", "dipeptide_equil.pdb"), ff; rename_terminal_res=false)
-    return sys
+    Molly.System(
+        isokann_data("dipeptide_equil.pdb"),
+        molly_forcefields(["ff99SBildn.xml", "tip3p_standard.xml"]);
+        rename_terminal_res=false)
 end
 
 

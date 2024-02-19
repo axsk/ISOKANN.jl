@@ -46,22 +46,24 @@ export Doublewell, Triplewell, MuellerBrown
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
-include("simulation.jl")      # Langevin dynamic simulator (MollySystem+Integrator)
+include("simulators/simulation.jl")      # Langevin dynamic simulator (MollySystem+Integrator)
 include("models.jl")          # the neural network models/architectures
-include("molly.jl")           # interface to work with Molly Systems
+include("simulators/molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
 include("data.jl")            # tools for handling the data (sampling, slicing, ...)
 include("isomolly.jl")        # ISOKANN for Molly systems
 include("plots.jl")           # visualizations
-include("loggers.jl")     # performance metric loggers
-include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
+#include("loggers.jl")     # performance metric loggers
+#include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
 include("reactionpath.jl")
+
+include("simulators/langevin.jl")  # for the simulators
 
 include("isosimple.jl")
 include("iso2.jl")
-include("potentials.jl")
+include("simulators/potentials.jl")
 
-include("openmm.jl")
+include("simulators/openmm.jl")
 
 import .OpenMM.OpenMMSimulation
 export OpenMMSimulation

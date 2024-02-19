@@ -41,11 +41,13 @@ function plot_learning(iso; subdata=nothing)
     !isnothing(subdata) && (data = subdata)
 
     p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss", xlabel="iter")
+    #=
     for tl in filter(l -> isa(l, TrainlossLogger), iso.loggers)
         if length(tl.losses) > 1
             plot!(tl.xs, tl.losses, label="validationloss")
         end
     end
+    =#
 
     xs, ys = data
     p2 = plot_chi(xs, Flux.cpu(vec(model(xs))))
