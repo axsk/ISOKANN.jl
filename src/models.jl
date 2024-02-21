@@ -48,6 +48,10 @@ function pairnet(sim; kwargs...)
     pairnet(n; features, kwargs...)
 end
 
+function pairnet((xs, ys)::Tuple; kwargs...)
+    pairnet(size(xs, 1); kwargs...)
+end
+
 """ Fully connected neural network with `layers` layers from `n` to `nout` dimensions.
 `features` allows to pass a featurizer as preprocessor, 
 `activation` determines the activation function for each but the last layer

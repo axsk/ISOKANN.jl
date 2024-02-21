@@ -24,17 +24,18 @@ ISOKANN 2.0 under construction.
 - `lr`: Learning rate
 - `decay`: Decay rate
 """
-function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-3, decay=1e-5, kwargs...)
+function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-3, decay=1e-5, transform=TransformISA(), kwargs...)
     s = sim
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, ny)
 
     model, opt = model_with_opt(defaultmodel(sim; nout=nd), lr, decay)
 
-    losses, target = isosteps(model, opt, (xs, ys), n; kwargs...)
+    losses, target = isosteps(model, opt, (xs, ys), n; transform, kwargs...)
 
-    return (; sim, xs, ys, model, opt, losses, target, kwargs...)
+    return (; sim, xs, ys, model, opt, losses, target, transform, kwargs...)
 end
+
 
 """ isostep(model, opt, (xs, ys), nkoop=1, nupdate=1; transform = TransformISA())
 
@@ -92,6 +93,7 @@ end
 function isotarget(model, xs, ys, t::TransformPseudoInv)
     (; normalize, direct, eigenvecs, permute) = t
     chi = model(xs)
+    size(chi, 1) > 1 || error("TransformPseudoInv does not work with one dimensional chi functions")
 
     cs = model(ys)::AbstractArray{<:Number,3}
     kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
@@ -131,6 +133,7 @@ end
 
 function isotarget(model, xs, ys, t::TransformISA)
     chi = model(xs)
+    size(chi, 1) > 1 || error("TransformISA does not work with one dimensional chi functions")
     cs = model(ys)
     ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
     target = myisa(ks')' * ks
@@ -145,7 +148,7 @@ struct TransformShiftscale end
 
 function isotarget(model, xs, ys, t::TransformShiftscale)
     cs = model(ys)
-    @assert size(cs, 1) == 1
+    size(cs, 1) == 1 || error("TransformShiftscale only works with one dimensional chi functions")
     ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
     target = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
     return target
@@ -169,6 +172,9 @@ function fixperm(new, old)
     n = size(new, 1)
     p = argmin(Combinatorics.permutations(1:n)) do p
         norm(new[p, :] - old, 1)
+    end
+    if p != collect(1:length(p))
+        @show p
     end
     new[p, :]
 end
@@ -260,7 +266,7 @@ function diala2(; data=nothing, nd=3000)
     end
 
     sim = MollyLangevin(sys=PDB_ACEMD())
-    model = ISOKANN.pairnet(66^2, features=flatpairdists, nout=3)
+    model = ISOKANN.pairnet(484, features=flatpairdists, nout=3)
     opt = Flux.setup(Flux.AdamW(1e-3, (0.9, 0.999), 1e-4), model)
     losses = Float64[]
 
@@ -271,9 +277,10 @@ function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, nupdate=10)
     (; data, model, sim, opt, losses) = iso
     local target
     for _ in 1:epochs
-        l, target = isosteps(model, opt, data, nkoop, nupdate)
+        l, targets = isosteps(model, opt, data, nkoop, nupdate)
         data = adddata(data, model, sim, ny)
         append!(losses, l)
+        target = targets[end]
         vis_training(; model, data, target, losses) |> display
     end
 
@@ -333,3 +340,58 @@ scatter_chi(chi; kwargs...) = (plot(); scatter_chi!(chi; kwargs...))
 function plot_path(chi, path; kwargs...)
     plot!(eachcol(bary_to_euclidean(chi[path, :]))...; kwargs...)
 end
+
+
+@kwdef mutable struct Iso2
+    model
+    opt
+    data
+    transform
+    losses = Float64[]
+    loggers = [autoplot(1)]
+    minibatch = 0
+end
+
+function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
+    opt = Flux.setup(opt, model)
+    transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
+    if gpu
+        model = gpu(model)
+        opt = gpu(opt)
+        data = gpu(data)
+    end
+    Iso2(; model, opt, data, transform, kwargs...)
+end
+
+function run!(iso::Iso2, n=1, epochs=1)
+    p = ProgressMeter.Progress(n)
+
+    for _ in 1:n
+        xs, ys = getobs(iso.data)
+        target = isotarget(iso.model, xs, ys, iso.transform)
+        for i in 1:epochs
+            ls = learnbatch!(iso.model, xs, target, iso.opt, iso.minibatch)
+            push!(iso.losses, ls)
+        end
+
+        for logger in iso.loggers
+            log(logger; iso, subdata=nothing)
+        end
+
+        ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
+    end
+    return iso
+end
+
+Flux.adjust!(iso::Iso2; kwargs...) = Flux.adjust!(iso.opt; kwargs...)
+Flux.gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
+    println(io, typeof(iso), ":")
+    println(io, " model: $(iso.model.layers)")
+    println(io, " opt: $(optimizerstring(iso.opt))")
+    println(io, " minibatch: $(iso.minibatch)")
+    println(io, " loggers: $(length(iso.loggers))")
+    println(io, " data: $(size.(iso.data))")
+    length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
+end
+

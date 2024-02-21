@@ -1,5 +1,6 @@
 out
 .vscode
+*.cov
 *.out
 *.so
 *.jld2

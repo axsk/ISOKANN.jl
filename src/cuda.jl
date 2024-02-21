@@ -6,7 +6,7 @@ pickclosest(haystack::CuArray, needles::AbstractVector) = pickclosest(collect(ha
 
 move the model and data of the given `IsoRun` to the GPU for CUDA support
 """
-function gpu(iso::IsoRun)
+function Flux.gpu(iso::IsoRun)
     (; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch) = iso
     model = Flux.gpu(model)
     data = Flux.gpu(data)
@@ -14,7 +14,7 @@ function gpu(iso::IsoRun)
     return IsoRun(; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch)
 end
 
-function cpu(iso::IsoRun)
+function Flux.cpu(iso::IsoRun)
     (; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch) = iso
     model = Flux.cpu(model)
     data = Flux.cpu(data)
@@ -42,7 +42,7 @@ centercoordscoords(xs::CuArray) = cu(centercoordscoords(collect(xs)))
 datastats(data::Tuple{<:CuArray,<:CuArray}) = datastats(collect.(data))
 
 """ move the ::System to the GPU, mirroring behavior of Flux.gpu """
-gpu(sys::System) = System(sys;
+Flux.gpu(sys::System) = System(sys;
     atoms=cu(sys.atoms),
     atoms_data=cu(sys.atoms_data),
     coords=cu(sys.coords),

@@ -164,7 +164,7 @@ shiftscale(ks) =
     end
 
 """ DEPRECATED - batched supervised learning for a given batchsize """
-function learnbatch!(model, xs::AbstractMatrix, target::AbstractVector, opt, batchsize)
+function learnbatch!(model, xs::AbstractMatrix, target::AbstractArray, opt, batchsize)
     ndata = numobs(xs)
 
     (0 < batchsize < ndata) || return learnstep!(model, xs, target, opt)

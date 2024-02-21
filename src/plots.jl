@@ -50,14 +50,14 @@ function plot_learning(iso; subdata=nothing)
     =#
 
     xs, ys = data
-    p2 = plot_chi(xs, Flux.cpu(vec(model(xs))))
+    p2 = plot_chi(xs, Flux.cpu(model(xs)))
     p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])
     ps = [p1, p2, p3]
     plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)))
 end
 
-function plot_chi(xs, chi::AbstractVector)
+function plot_chi(xs, chi)
     if size(xs, 1) == 1
         scatter(vec(xs), chi)
     elseif size(xs, 1) == 2
@@ -94,12 +94,15 @@ end
 # berlin, delta, roma, tofino, tokyo
 
 scatter_ramachandran(x, model; kwargs...) = scatter_ramachandran(x, vec(model(x)))
+scatter_ramachandran(x, mat::Matrix; kwargs...) = plot(map(eachrow(mat)) do row
+    scatter_ramachandran(x, vec(row))
+end...)
 
 function scatter_ramachandran(x::AbstractMatrix, z::Union{AbstractVector,Nothing}=nothing; kwargs...)
     ph = phi(x)
     ps = psi(x)
     scatter(ph, ps, marker_z=z, xlims=[-pi, pi], ylims=[-pi, pi],
-        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:tofino,
+        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:tofino, legend=false,
         xlabel="\\phi", ylabel="\\psi", title="Ramachandran", ; kwargs...
     )
 end
