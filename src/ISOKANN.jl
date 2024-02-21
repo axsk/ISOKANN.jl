@@ -8,7 +8,7 @@ module ISOKANN
 
 import Random
 
-using LinearAlgebra: norm, dot, cross
+using LinearAlgebra: norm, dot, cross, diag
 using StatsBase: mean, sample, mean_and_std
 using Molly: Molly, System
 using StaticArrays: SVector

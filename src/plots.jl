@@ -51,9 +51,14 @@ function plot_learning(iso; subdata=nothing)
 
     xs, ys = data
     p2 = plot_chi(xs, Flux.cpu(model(xs)))
-    p3 = scatter_chifix(data, model)
+    #p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])
-    ps = [p1, p2, p3]
+    ps = [p1, p2]#, p3]
+    for l in iso.loggers
+        if l isa NamedTuple
+            push!(ps, l.plot())
+        end
+    end
     plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)))
 end
 
@@ -74,9 +79,9 @@ function scatter_chifix(data, model)
     xs, ys = data
     target = koopman(model, ys) |> vec |> Flux.cpu
     xs = model(xs) |> vec |> Flux.cpu
-    #scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ")
+    scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ")
     #scatter(xs, target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
-    scatter(target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
+    #scatter(target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
     #plot!([minimum(xs), maximum(xs)], [minimum(target), maximum(target)], legend=false)
 end
 

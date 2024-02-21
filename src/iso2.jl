@@ -173,9 +173,6 @@ function fixperm(new, old)
     p = argmin(Combinatorics.permutations(1:n)) do p
         norm(new[p, :] - old, 1)
     end
-    if p != collect(1:length(p))
-        @show p
-    end
     new[p, :]
 end
 
