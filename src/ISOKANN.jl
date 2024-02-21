@@ -53,7 +53,7 @@ include("models.jl")          # the neural network models/architectures
 include("simulators/molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
 include("data.jl")            # tools for handling the data (sampling, slicing, ...)
-include("isomolly.jl")        # ISOKANN for Molly systems
+include("iso1.jl")        # ISOKANN for Molly systems
 include("plots.jl")           # visualizations
 #include("loggers.jl")     # performance metric loggers
 #include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
