@@ -71,7 +71,7 @@ function isodata(ds::Vector{DataLink})
   mc = mean_and_std(dists, 2)
   ndists = (dists .- mc[1]) ./ mc[2]
 
-  data = mapreduce((x,y)->hcat.(x,y), 1:length(inds1)) do i
+  data = mapreduce(ISOKANN.joindata, 1:length(inds1)) do i
     rng = inds1[i]:inds2[i]
     ISOKANN.data_from_trajectory(@view(ndists[:, rng]); reverse)
   end
