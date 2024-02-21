@@ -95,7 +95,7 @@ end
 function localpdistinds(traj::AbstractArray{<:Any,3}, radius)
   elmin(x, y) = min.(x, y)
   d = mapreduce(elmin, eachslice(traj, dims=3)) do coords
-    UpperTriangular(pairwise(Euclidean(), coords))
+    UpperTriangular(pairwise(Euclidean(), coords, dims=2))
   end
   inds = findall(0 .< d .<= radius)
   return inds

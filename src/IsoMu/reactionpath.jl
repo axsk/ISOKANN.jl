@@ -52,7 +52,7 @@ fromto(f::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma=1)
-    dxs = pairwise(Euclidean(), xs)
+    dxs = pairwise(Euclidean(), xs, dims=2)
     d = size(xs, 1)
     logp = onsager_machlup(dxs, xi, sigma, d)
 
