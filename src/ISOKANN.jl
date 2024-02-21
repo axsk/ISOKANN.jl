@@ -40,6 +40,9 @@ export IsoRun, run!, AdamRegularized#, Adam
 export plot_learning, scatter_ramachandran
 export reactionpath
 
+import Flux: cpu, gpu
+export cpu, gpu
+
 
 export iso2
 export Doublewell, Triplewell, MuellerBrown
@@ -75,5 +78,7 @@ include("cuda.jl")            # fixes for cuda
 #include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx
+
+include("IsoMu/IsoMu.jl")
 
 end

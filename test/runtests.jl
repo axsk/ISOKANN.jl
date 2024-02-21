@@ -86,4 +86,21 @@ using Test
         @time propagate(sim_omm, x0, 100)
     end
 
+    @testset "IsoMu" begin
+        using ISOKANN.IsoMu
+
+        @testset "IsoMu.jl" begin
+            datapath = "/data/numerik/ag_cmd/trajectory_transfers_for_isokann/data/8EF5_Aspargine_116_100ns_7.4_v2"
+            iter = 10
+
+            data = DataLink(datapath, startpos=2)
+            mu = isokann(data, gpu=false)
+            train!(mu, iter)
+            out = Base.Filesystem.tempname() * ".pdb"
+            save_reactive_path(mu, sigma=0.05, out=out)
+
+            @test true
+        end
+    end
+
 end
