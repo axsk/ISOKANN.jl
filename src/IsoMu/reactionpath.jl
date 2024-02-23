@@ -99,10 +99,13 @@ function plot_reactive_path(ids, xi)
 end
 
 # visualization of what shortestchain does in 1d
-function visualize_shortestpath(; n=1000, sigma=0.1, eps=0.01)
+function visualize_shortestpath(; n=1000, sigma=0.1)
     xs = rand(1, n)
     xi = rand(n)
-    is, dx, dt = shortestchain(xs, xi; eps, sigma)
-    scatter(xi, xs[1, :], label="samples")
-    plot!(xi[is], xs[1, is], xlabel="χ", ylabel="State", label="reaction path")
+    xi[1] = 0
+    xi[end] = 1
+    is, dx, dt = shortestchain(xs, xi, 1, n; sigma)
+    scatter(xi, xs[1, :])
+    plot!(xi[is], xs[1, is], xlabel="t", ylabel="x", label="reaction path")
+    plot!(yticks=[0, 1], xticks=[0, 1], legend=false)
 end
