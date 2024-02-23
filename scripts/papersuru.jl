@@ -7,7 +7,7 @@ using Plots, JLD2
 # TODO: update to current data dir
 datapath = "/data/numerik/ag_cmd/trajectory_transfers_for_isokann/data/Feb16_data_for_paper_disulfide_sims"
 
-function papersuru(n=30_000)
+function papersuru(n=30_000, datapath=datapath)
   Random.seed!(42) # TODO: unfortunately not working - fix it
 
   links = [DataLink("$datapath/_$i") for i in 1:10]
