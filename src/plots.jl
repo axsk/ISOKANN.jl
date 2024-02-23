@@ -70,7 +70,7 @@ function plot_chi(xs, chi)
     elseif size(xs, 1) == 66
         scatter_ramachandran(xs, chi)
     else
-        scatter(chi)
+        scatter(chi')
     end
 end
 

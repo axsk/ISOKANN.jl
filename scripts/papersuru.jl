@@ -5,12 +5,12 @@ using Random
 using Plots, JLD2
 
 # TODO: update to current data dir
-datapath = "/data/numerik/ag_cmd/trajectory_transfers_for_isokann/data/Feb16_data_for_paper_disulfide_sims"
+dataprefix = "/data/numerik/ag_cmd/trajectory_transfers_for_isokann/data/Feb19_data_for_paper_2024/des_prod_7UL4_159_251_disulfide_100ns_extension_replica__"
 
-function papersuru(n=30_000, datapath=datapath)
+function papersuru(n=30_000; dataprefix=dataprefix)
   Random.seed!(42) # TODO: unfortunately not working - fix it
 
-  links = [DataLink("$datapath/_$i") for i in 1:10]
+  links = [DataLink("$dataprefix$i") for i in 1:10]
 
   mu = isokann(links, learnrate=1e-4, regularization=1e-2)
 
