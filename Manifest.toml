@@ -2,7 +2,7 @@
 
 julia_version = "1.10.1"
 manifest_format = "2.0"
-project_hash = "b2d3a256abcfa077cdde8224c68c7691b682485e"
+project_hash = "d0d94a2ca2d6e89ef3aa284a4e6b845ac24afd7f"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "41c37aa88889c171f1300ceac1313c06e891d245"
@@ -952,6 +952,25 @@ git-tree-sha1 = "ce1566720fd6b19ff3411404d4b977acd4814f9f"
 uuid = "313cdc1a-70c2-5d6a-ae34-0150d3930a38"
 version = "1.1.1"
 
+[[deps.InfiniteArrays]]
+deps = ["ArrayLayouts", "FillArrays", "Infinities", "LazyArrays", "LinearAlgebra"]
+git-tree-sha1 = "f72d4b348b992435d86f1b63e9ba5ae917dade47"
+uuid = "4858937d-0d70-526a-a4dd-2d5cb5dd786c"
+version = "0.13.4"
+
+    [deps.InfiniteArrays.extensions]
+    InfiniteArraysDSPExt = "DSP"
+    InfiniteArraysStatisticsExt = "Statistics"
+
+    [deps.InfiniteArrays.weakdeps]
+    DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
+    Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[[deps.Infinities]]
+git-tree-sha1 = "6336676b91409ec0a2c82723de9bdf4cabd02d78"
+uuid = "e1ba4f0e-776d-440f-acd9-e1d2e9742647"
+version = "0.1.8"
+
 [[deps.Inflate]]
 git-tree-sha1 = "ea8031dea4aff6bd41f1df8f2fdfb25b33626381"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
@@ -1749,6 +1768,12 @@ git-tree-sha1 = "fb28e33b8a95c4cee25ce296c817d89cc2e53518"
 uuid = "65ce6f38-6b18-4e1d-a461-8949797d7930"
 version = "1.0.2"
 weakdeps = ["Requires", "TOML"]
+
+[[deps.ParameterSchedulers]]
+deps = ["InfiniteArrays", "Optimisers"]
+path = "/home/htc/bzfsikor/.julia/dev/ParameterSchedulers"
+uuid = "d7d3b36b-41b8-4d0d-a2bf-768c6151755e"
+version = "0.4.0"
 
 [[deps.Parameters]]
 deps = ["OrderedCollections", "UnPack"]

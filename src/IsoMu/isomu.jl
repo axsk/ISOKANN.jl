@@ -35,7 +35,7 @@ function IMu(data::Union{DataLink,Vector{DataLink}};
         np=1, # no subreuse
         nl=1, # no powerreuse
         nres=0, # no resampling
-        minibatch=128,
+        minibatch=200,
         sim=nothing,
         model=model,
         data=idata,
