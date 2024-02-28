@@ -2,7 +2,7 @@
 # functionally equivalent (up to the plots, loggers, ...) to isomolly.jl
 
 using ProgressMeter
-using ISOKANN: koopman, shiftscale, learnstep!, ISOKANN
+using ISOKANN: koopman, shiftscale, train_step!, ISOKANN
 Tensor = Array{<:Any, 3}
 
 """
@@ -15,7 +15,7 @@ function isokann_simple(model, opt, data, n)
     for _ in 1:n
         ks = mean(model(ys), dims=2)[1, :]  # Monte-Carlo estimate of Kx
         target   = shiftscale(ks)                # SKx
-        learnstep!(model, xs, target, opt)       # Neural Network update
+        train_step!(model, xs, target, opt)       # Neural Network update
     end
     return model                                 # the learned χ-function
 end
@@ -38,7 +38,7 @@ function isostep!(model, opt, data::Tuple{<:Matrix, <:Tensor})
     xs, ys = data
     ks     = koopman(model, ys)  # Monte-Carlo estimate of Kx
     target = shiftscale(ks)      # SKx
-    loss   = learnstep!(model, xs, target, opt)  # Neural Network update
+    loss = train_step!(model, xs, target, opt)  # Neural Network update
     return loss
 end
 

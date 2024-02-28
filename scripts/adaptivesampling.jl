@@ -126,7 +126,7 @@ end
 
 using Plots
 
-function plot_learning(iso::ISO2)
+function plot_training(iso::ISO2)
     (; losses, xs, model) = iso
     p1 = plot(losses, yaxis=:log, title="loss", label="trainloss", xlabel="iter")
     p2 = plot_chi(xs, vec(model(xs)))

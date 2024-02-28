@@ -66,6 +66,18 @@ optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
 optparms(o::Optimisers.WeightDecay) = (; WeightDecay=o.gamma)
 optparms(o::Optimisers.Adam) = (; Adam=o.eta)
 
+function Optimisers.setup(iso::IsoRun)
+
+    iso.opt = if isa(iso.opt, Optimisers.AbstractRule)
+        Optimisers.setup(iso.opt, iso.model)
+    else
+        Optimisers.setup(iso.opt.layers[end].bias.rule, iso.model)
+    end
+end
+
+Base.extrema(iso::IsoRun) = extrema(chis(iso))
+chis(iso::IsoRun) = iso.model(iso.data[1])
+
 """ run the given `IsoRun` object """
 function run!(iso::IsoRun; showprogress=true)
     isa(iso.opt, Optimisers.AbstractRule) && (iso.opt = Optimisers.setup(iso.opt, iso.model))
@@ -92,7 +104,7 @@ function run!(iso::IsoRun; showprogress=true)
             target = shiftscale(ks)
             # target = gettarget(xs, ys, model)
             t_train += @elapsed for i in 1:nl
-                ls = learnbatch!(model, xs, target, opt, minibatch)
+                ls = train_batch!(model, xs, target, opt, minibatch)
                 push!(losses, ls)
             end
         end
@@ -138,7 +150,7 @@ end
 function autoplot(secs=10)
     Flux.throttle(
         function plotcallback(; iso, subdata, kwargs...)
-            p = plot_learning(iso; subdata)
+            p = plot_training(iso; subdata)
             try
                 display(p)
             catch e
@@ -179,19 +191,19 @@ shiftscale(ks) =
     end
 
 """ DEPRECATED - batched supervised learning for a given batchsize """
-function learnbatch!(model, xs::AbstractMatrix, target::AbstractArray, opt, batchsize)
+function train_batch!(model, xs::AbstractMatrix, target::AbstractArray, opt, batchsize)
     ndata = numobs(xs)
 
-    (0 < batchsize < ndata) || return learnstep!(model, xs, target, opt)
+    (0 < batchsize < ndata) || return train_step!(model, xs, target, opt)
 
     l = sum(Flux.DataLoader((xs, target); batchsize, shuffle=true)) do (xs, target)
-        learnstep!(model, xs, target, opt) * numobs(xs)
+        train_step!(model, xs, target, opt) * numobs(xs)
     end
     return l / ndata
 end
 
 """ single supervised learning step """
-function learnstep!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
+function train_step!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
     n = numobs(xs)
     l, grad = let xs = xs  # `let` allows xs to not be boxed
         Zygote.withgradient(model) do model
@@ -202,7 +214,7 @@ function learnstep!(model, xs::AbstractMatrix, target::AbstractMatrix, opt)
     return l
 end
 
-learnstep!(model, xs, target::AbstractVector, opt) = learnstep!(model, xs, target', opt)
+train_step!(model, xs, target::AbstractVector, opt) = train_step!(model, xs, target', opt)
 
 ## DATA MANGLING
 # TODO: better interface
@@ -218,7 +230,7 @@ function saveall(iso::IsoRun, pathlength=300)
     xs, ys = data
     zs = standardform(subsample(model, xs, pathlength))
     savecoords(sim, zs, "out/latest/path.pdb")
-    savefig(plot_learning(iso), "out/latest/learning.png")
+    savefig(plot_training(iso), "out/latest/learning.png")
 
     JLD2.save("out/latest/iso.jld2", "iso", iso)
 end
@@ -281,7 +293,7 @@ function autotune!(iso::IsoRun, targets=[4, 1, 1, 4])
     tsubdata = @elapsed (subdata = subsample(model, data, nx))
     xs, ys = subdata
     ttarget = @elapsed target = shiftscale(koopman(model, ys))
-    ttrain = @elapsed learnbatch!(model, xs, target, opt, Inf)
+    ttrain = @elapsed train_batch!(model, xs, target, opt, Inf)
 
 
     nl = ceil(Int, ttarget / ttrain * targets[4] / targets[3])

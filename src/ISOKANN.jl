@@ -37,7 +37,7 @@ export pairnet#, pairnetn
 export PDB_ACEMD, PDB_1UAO, PDB_diala_water
 export MollyLangevin, propagate, solve#, MollySDE
 export IsoRun, run!, AdamRegularized#, Adam
-export plot_learning, scatter_ramachandran
+export plot_training, scatter_ramachandran
 export reactionpath
 
 import Flux: cpu, gpu

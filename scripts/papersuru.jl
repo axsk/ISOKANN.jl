@@ -75,7 +75,7 @@ function papersuru(;
   p2 = plot!(ids, chi[ids], linealpha=1, linecolor="Salmon") |> display
   savefig("out/paper/paperplot2.pdf")
 
-  p3 = plot_learning(mu.iso)
+  p3 = plot_training(mu.iso)
   savefig("out/paper/learning.pdf")
   println("saved plots")
 

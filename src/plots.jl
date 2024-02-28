@@ -35,7 +35,7 @@ end
 
 ## Plotting
 
-function plot_learning(iso; subdata=nothing)
+function plot_training(iso; subdata=nothing)
     (; losses, data, model) = iso
 
     !isnothing(subdata) && (data = subdata)

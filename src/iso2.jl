@@ -8,7 +8,7 @@ import PCCAPlus
 import ISOKANN
 using LinearAlgebra: pinv, norm, I, schur
 using Plots
-#include("isosimple.jl")  # for the learnstep! function
+#include("isosimple.jl")  # for the train_step! function
 
 """
     iso2(; n=1000, nx=100, ny=10, nd=2, sys=Doublewell(), lr=1e-2, decay=1e-5)
@@ -55,7 +55,7 @@ function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1;
         # note that nupdate is classically called epochs
         # TODO: should we use minibatches here?
         for j in 1:nupdate
-            loss = ISOKANN.learnstep!(model, xs, target, opt)  # Neural Network update
+            loss = ISOKANN.train_step!(model, xs, target, opt)  # Neural Network update
             push!(losses, loss)
         end
     end
@@ -367,7 +367,7 @@ function run!(iso::Iso2, n=1, epochs=1)
         xs, ys = getobs(iso.data)
         target = isotarget(iso.model, xs, ys, iso.transform)
         for i in 1:epochs
-            ls = learnbatch!(iso.model, xs, target, iso.opt, iso.minibatch)
+            ls = train_batch!(iso.model, xs, target, iso.opt, iso.minibatch)
             push!(iso.losses, ls)
         end
 

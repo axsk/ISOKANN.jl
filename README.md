@@ -19,7 +19,7 @@ using ISOKANN
 iso = IsoRun()  # create the ISOKANN system/configuration
 run!(iso)       # run it for iso.nd steps
 
-plot_learning(iso) # plot the training overview
+plot_training(iso) # plot the training overview
 
 # scatter plot of all initial points colored in  corresponding chi value
 scatter_ramachandran(iso.data[1], iso.model)
