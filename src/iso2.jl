@@ -444,6 +444,7 @@ function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
     ids, path = IsoMu.reactive_path(chi, coords ./ 10, sigma)
     IsoMu.plot_reactive_path(ids, chi) |> display
     path = IsoMu.aligntrajectory(path) .* 10
+    println("saving reactive path of length $(length(ids)) to $out")
     IsoMu.writechemfile(out, path; source)
     return ids
 end
