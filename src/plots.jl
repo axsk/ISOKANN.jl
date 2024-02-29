@@ -51,6 +51,9 @@ function plot_training(iso; subdata=nothing)
 
     xs, ys = data
     p2 = plot_chi(xs, Flux.cpu(model(xs)))
+
+    scatter!(isotarget(iso) |> cpu |> vec)
+
     p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])
     ps = [p1, p2, p3]
@@ -70,7 +73,16 @@ function plot_chi(xs, chi)
     elseif size(xs, 1) == 66
         scatter_ramachandran(xs, chi)
     else
-        scatter(chi')
+        scatter(chi'; ylims=autolims(chi))
+    end
+end
+
+function autolims(chi)
+    e = extrema(chi)
+    if e[1] > 0 && e[2] < 1 && e[2] - e[1] > 0.2
+        return (0, 1)
+    else
+        return :auto
     end
 end
 
@@ -79,7 +91,8 @@ function scatter_chifix(data, model)
     xs, ys = data
     target = koopman(model, ys) |> vec |> Flux.cpu
     xs = model(xs) |> vec |> Flux.cpu
-    scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ")
+    lim = autolims(xs)
+    scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ", xlims=lim, ylims=lim)
     #scatter(xs, target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
     #scatter(target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
     #plot!([minimum(xs), maximum(xs)], [minimum(target), maximum(target)], legend=false)

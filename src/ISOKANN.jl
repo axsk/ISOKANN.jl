@@ -36,7 +36,8 @@ import OrdinaryDiffEq
 export pairnet#, pairnetn
 export PDB_ACEMD, PDB_1UAO, PDB_diala_water
 export MollyLangevin, propagate, solve#, MollySDE
-export IsoRun, run!, AdamRegularized#, Adam
+export IsoRun, run!
+export AdamRegularized, pairnet#, Adam
 export plot_training, scatter_ramachandran
 export reactionpath
 
@@ -45,6 +46,7 @@ export cpu, gpu
 
 
 export iso2
+export Iso2
 export Doublewell, Triplewell, MuellerBrown
 
 

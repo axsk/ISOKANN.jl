@@ -73,6 +73,28 @@ end
 
 ### ISOKANN target transformations
 
+@kwdef mutable struct Stabilize2
+    transform
+    last
+end
+
+function isotarget(model, xs, ys, t::Stabilize2)
+    target = isotarget(model, xs, ys, t.transform)
+    isnothing(t.last) && (t.last = target)
+    if t.transform isa TransformShiftscale
+        #@show target[1:10], t.last[1:10]
+        if (sum(abs, target - t.last)) > length(target) / 2
+            println("flipping")
+            target .= 1 .- target
+        end
+        t.last = target
+        #@show size(target)
+        return target
+    else
+        return fixperm(target, t.last)
+    end
+end
+
 """
     TransformPseudoInv(normalize, direct, eigenvecs, permute)
 
@@ -131,14 +153,16 @@ function myisa(X)
     inv(X[PCCAPlus.indexmap(X), :])
 end
 
-function isotarget(model, xs, ys, t::TransformISA)
+function isotarget(model, xs::T, ys, t::TransformISA) where {T}
     chi = model(xs)
     size(chi, 1) > 1 || error("TransformISA does not work with one dimensional chi functions")
     cs = model(ys)
     ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
+    ks = cpu(ks)
+    chi = cpu(chi)
     target = myisa(ks')' * ks
     t.permute && (target = fixperm(target, chi))
-    return target
+    return T(target)
 end
 
 """ TransformShiftscale()
@@ -339,6 +363,7 @@ function plot_path(chi, path; kwargs...)
 end
 
 
+
 @kwdef mutable struct Iso2
     model
     opt
@@ -352,23 +377,22 @@ end
 function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
     opt = Flux.setup(opt, model)
     transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
-    if gpu
-        model = gpu(model)
-        opt = gpu(opt)
-        data = gpu(data)
-    end
-    Iso2(; model, opt, data, transform, kwargs...)
+
+    iso = Iso2(; model, opt, data, transform, kwargs...)
+    gpu && (iso = ISOKANN.gpu(iso))
+    return iso
 end
 
 function run!(iso::Iso2, n=1, epochs=1)
     p = ProgressMeter.Progress(n)
+    iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
     for _ in 1:n
         xs, ys = getobs(iso.data)
         target = isotarget(iso.model, xs, ys, iso.transform)
         for i in 1:epochs
-            ls = train_batch!(iso.model, xs, target, iso.opt, iso.minibatch)
-            push!(iso.losses, ls)
+            loss = train_batch2!(iso.model, iso.data[1], target, iso.opt, iso.minibatch)
+            push!(iso.losses, loss)
         end
 
         for logger in iso.loggers
@@ -380,15 +404,46 @@ function run!(iso::Iso2, n=1, epochs=1)
     return iso
 end
 
+isotarget(iso::Iso2) = isotarget(iso.model, iso.data..., iso.transform)
+
+function train_batch2!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
+    batchsize = minibatch == 0 ? size(ys, 2) : minibatch
+    data = Flux.DataLoader((xs, ys); batchsize, shuffle)
+    ls = 0.0
+    Flux.train!(model, data, opt) do m, x, y
+        l = sum(abs2, m(x) .- y)
+        ls += l
+        l / numobs(x)
+    end
+    return ls / numobs(xs)
+end
+
+Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
+
 Flux.adjust!(iso::Iso2; kwargs...) = Flux.adjust!(iso.opt; kwargs...)
 Flux.gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+Flux.cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
 function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
     println(io, typeof(iso), ":")
     println(io, " model: $(iso.model.layers)")
+    println(io, " tranform: $(iso.transform)")
     println(io, " opt: $(optimizerstring(iso.opt))")
     println(io, " minibatch: $(iso.minibatch)")
     println(io, " loggers: $(length(iso.loggers))")
-    println(io, " data: $(size.(iso.data))")
+    println(io, " data: $(size.(iso.data)), $(typeof(iso.data))")
     length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
 end
 
+chis(iso::Iso2) = iso.model(iso.data[1])
+
+Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
+
+function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
+    sigma=1, out="out/reactive_path.pdb", source)
+    chi = chis(iso) |> vec |> cpu
+    ids, path = IsoMu.reactive_path(chi, coords ./ 10, sigma)
+    IsoMu.plot_reactive_path(ids, chi) |> display
+    path = IsoMu.aligntrajectory(path) .* 10
+    IsoMu.writechemfile(out, path; source)
+    return ids
+end

@@ -135,8 +135,10 @@ function run!(iso::IsoRun; showprogress=true)
     return iso
 end
 
+isotarget(iso::IsoRun, ys=iso.data[2]) = shiftscale(koopman(iso.model, ys)) |> vec
+
 log(f::Function; kwargs...) = f(; kwargs...)
-log(logger::NamedTuple; kwargs...) = logger.call(; kwargs...)
+log(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
 
 function RateLogger()
     rates = Float64[]

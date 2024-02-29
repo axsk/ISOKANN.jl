@@ -96,6 +96,7 @@ function plot_reactive_path(ids, xi)
     plot(xi)
     scatter!(ids, xi[ids])
     plot!(ids, xi[ids])
+    plot(plot!(), plot(xi[ids]))
 end
 
 # visualization of what shortestchain does in 1d
