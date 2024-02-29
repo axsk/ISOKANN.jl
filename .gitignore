@@ -8,3 +8,5 @@ out
 *.png
 .*
 data/*
+LocalPreferences.toml
+*.pdf
