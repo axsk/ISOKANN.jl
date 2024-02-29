@@ -82,5 +82,6 @@ include("cuda.jl")            # fixes for cuda
 #include("precompile.jl") # precompile for faster ttx
 
 include("IsoMu/IsoMu.jl")
+include("vgv/vgv.jl")
 
 end

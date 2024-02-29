@@ -3,12 +3,10 @@ using ISOKANN: flatpairdists, ISOKANN, run!, AdamRegularized
 using ProgressMeter
 using JLD2
 using Flux: Flux, cpu, gpu, Dense, Chain
-using Infiltrator
 using StatsBase: mean, std
 using Plots
-using Distances: pairwise, Euclidean
+import Distances: pairwise, Euclidean
 using LinearAlgebra: UpperTriangular
-using ISOKANN
 using Optimisers: Optimisers
 
 ## DATA INGESTION
@@ -61,8 +59,6 @@ function pairwisedata(; data=defaultdata(), nk=100, lag=10)
     pairwise(Euclidean(), co, dims=2)
   end[inds, :, :] ./ 10
 
-
-  @exfiltrate
   return dx, dy
 end
 
