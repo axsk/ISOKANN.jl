@@ -8,34 +8,42 @@ using Plots
 import Distances: pairwise, Euclidean
 using LinearAlgebra: UpperTriangular
 using Optimisers: Optimisers
+using Flux: Dense
 
-## DATA INGESTION
 
-# the maximal distance is attained between 14-CA2 and 72-O
+## DATA HANDLING
 
-PDB_TEMPLATE = "data/luca/VGVAPG/implicit/input/initial_states/x0_1.pdb"
+abstract type VGVData end
 
-function defaultdata()
-  global DATA
-  @isdefined(DATA) || (DATA = readsim())
-  return DATA
+struct VGVData2 <: VGVData
+  dir 
+  data
+  coords
 end
 
-# this loads the vgv dataset into the global namespace
-function read_vgvapg(; kwargs...)
-  readnfgail(dir="data/luca/VGVAPG/implicit"; save="data/luca/vgvapg.jld2", natoms=73, kwargs...)
+function VGVData(dir= "data/luca/VGVAPG/implicit"; lag=1, nx=500, nk=100, nt=10)
+  xs, ys = alldata(dir, nx, nk, nt)
+  coords = reshape(xs, :, size(xs,3))
+  data = pairwisedata(xs, ys[:, :, :, :, lag])
+  VGVData2(dir, data, coords)
 end
 
-function read_traj()
-  ISOKANN.IsoMu.readchemfile("data/luca/VGVAPG/implicit/output/trajectory.dcd")
+pdbfile(v::VGVData) = joinpath(v.dir, "input/initial_states/x0_1.pdb")
+getcoords(v::VGVData) = v.coords :: AbstractMatrix
+function reactioncoord(v::VGVData)
+  i = findfirst(CartesianIndex(1,71).==halfinds(73))
+  v.data[1][i,:]
 end
 
-function readsim(;
-  dir="data/luca/VGVAPG/implicit",
-  nx=500,
-  nk=100,
-  nt=10)
+# TODO: we need a proper caching idea, probably Memoize or Albert
+#=function alldata_cached(args...)
+  global VGVDATA
+  @isdefined(VGVDATA) || (VGVDATA = alldata(args...))
+  return VGVDATA
+end
+=#
 
+function alldata(dir, nx, nk, nt)
   xs = stack((readchemfile("$dir/input/initial_states/x0_$(i-1).pdb", 1)[:, :, 1] for i in 1:nx))
 
   dim, atoms, nx = size(xs)
@@ -48,96 +56,49 @@ function readsim(;
   xs, ys
 end
 
-function pairwisedata(; data=defaultdata(), nk=100, lag=10)
-  xs, ys = data
-  inds = halfinds(size(xs, 2))
+# TODO: implment batched dists instead
+# cf pairwisedists
+function pairwisedata(xs, ys)
   dx = stack(eachslice(xs, dims=3)) do co
-    Distances.pairwise(Euclidean(), co |> collect, dims=2)
-  end[inds, :] ./ 10
-
-  dy = stack(eachslice(ys[:, :, 1:nk, :, lag], dims=(3, 4))) do co
     pairwise(Euclidean(), co, dims=2)
-  end[inds, :, :] ./ 10
+  end
 
-  return dx, dy
+  dy = stack(eachslice(ys, dims=(3, 4))) do co
+    pairwise(Euclidean(), co, dims=2)
+  end
+
+  inds = halfinds(size(xs, 2))
+
+  return dx[inds, :] ./ 10, dy[inds, :, :] ./ 10
 end
 
-using LinearAlgebra
 function halfinds(n)
   a = UpperTriangular(ones(n, n))
   a[diagind(a)] .= 0
   findall(a .> 0)
 end
 
+
 ### ISOKANN MODELS
 
 # a copy of lucas python model
-function lucaisokann(; data=pairwisedata(), kwargs...)
-  model = lucanet2(size(data[1], 1))
-  opt = ISOKANN.AdamRegularized(5e-4, 1e-5)
+function vgv_luca(;v=VGVData(), kwargs...)
+  model = lucanet2(size(v.data, 1))
+  opt = AdamRegularized(5e-4, 1e-5)
 
-  iso = IsoRunFixedData(; data, model, opt,
+  iso = IsoRunFixedData(; v.data, model, opt,
     minibatch=100,
     nd=100, # niters
     nl=10, # epochs
     kwargs...
   ) |> gpu
 
-  iso.loggers = [ISOKANN.autoplot(1), reactioncoordlogger(iso)]
+  iso.loggers = [ISOKANN.autoplot(1), 
+    (; plot=() -> scatter_reactioncoord(iso, v))]
   return iso
 end
 
-using Flux: Dense
-
-lucanet1(dim; activation=Flux.sigmoid) = Chain(Dense(dim => 2048, activation),
-  Dense(2048 => 1024, activation),
-  Dense(1024 => 512, activation),
-  Dense(512 => 1, identity))
-
-lucanet2(dim; activation=Flux.sigmoid) = Chain(Dense(dim => 204, activation),
-  Dense(204 => 102, activation),
-  Dense(102 => 51, activation),
-  Dense(51 => 1, identity))
-
-alexisokann(; data=pairwisedata(), kw...) = lucaisokann(;
-  data,
-  model=ISOKANN.pairnet(data),
-  opt=ISOKANN.AdamRegularized(1e-3, 1e-3),
-  nd=1000,
-  nl=1,
-  kw...)
-
-
-function alex2()
-  data = pairwisedata()
-  ISOKANN.Iso2(data, opt=AdamRegularized(1e-4, 1e-3))
-end
-
-function examplerun()
-
-  iso = alexisokann() |> Flux.gpu
-  run!(iso)
-
-  ISOKANN.plot_training(iso) |> display
-
-  co = DATA[1]
-
-  export_sorted(iso, coords)
-  flatcoords = reshape(co, :, size(co, 3))
-  ISOKANN.save_reactive_path(Iso2(iso), flatcoords,
-    sigma=1,
-    out="out/vgv/reactionpath.pdb",
-    source=PDB_TEMPLATE)
-
-  return iso
-end
-
-
-
-
-
-###
-
+# TODO: should make these defaults for sim==nothing
 IsoRunFixedData(; data, kwargs...) = ISOKANN.IsoRun(;
   data=data,
   model=ISOKANN.pairnet(data),
@@ -150,18 +111,36 @@ IsoRunFixedData(; data, kwargs...) = ISOKANN.IsoRun(;
   sim=nothing, kwargs...)
 
 
-function scatter_reactioncoord(iso, xs=defaultdata()[1])
-  rc = sqrt.(sum(abs2, xs[:, 1, :] .- xs[:, 71, :], dims=1)) |> vec
-  chis = iso.model(iso.data[1]) |> vec |> Flux.cpu
-  scatter(rc, chis, xlabel="outer atom distance", ylabel="\\chi")
+
+lucanet1(dim; activation=Flux.sigmoid) = Chain(Dense(dim => 2048, activation),
+  Dense(2048 => 1024, activation),
+  Dense(1024 => 512, activation),
+  Dense(512 => 1, identity))
+
+lucanet2(dim; activation=Flux.sigmoid) = Chain(Dense(dim => 204, activation),
+  Dense(204 => 102, activation),
+  Dense(102 => 51, activation),
+  Dense(51 => 1, identity))
+
+vgv_alex(; v=VGVDATA(), kw...) = vgv_luca(;
+  v,
+  model=ISOKANN.pairnet(v.data),
+  opt=ISOKANN.AdamRegularized(0e-3, 1e-3),
+  nd=1000,
+  nl=1,
+  kw...)
+
+
+### OUTPUT
+
+function scatter_reactioncoord(iso, v::VGVData)
+  chi = chis(iso) |> vec |> cpu
+  rc = reactioncoord(v) |> vec
+  scatter(rc, chi, xlabel="outer atom distance", ylabel="\\chi")
 end
 
-function reactioncoordlogger(iso, xs=defaultdata()[1])
-  (; plot=() -> scatter_reactioncoord(iso, xs))
-end
-
-function plot_longtraj(iso)
-  xs = read_traj()
+function plot_longtraj(iso, v::VGVData)
+  xs = ISOKANN.IsoMu.readchemfile("$(v.dir)/implicit/output/trajectory.dcd")
   inds = halfinds(size(xs, 2))
   dx = stack(eachslice(xs, dims=3)) do co
     pairwise(Euclidean(), co, dims=2)
@@ -170,64 +149,28 @@ function plot_longtraj(iso)
   plot(vals, xlabel="frame #", ylabel="chi", title="long traj")
 end
 
-
-
 using ISOKANN.IsoMu: aligntrajectory
-function export_sorted(iso, xs, path="out/vgv/chisorted.pdb", source="data/luca/VGVAPG/implicit/input/initial_states/x0_1.pdb")
-  i = sortperm(iso.model(iso.data[1]) |> cpu |> vec)
-  xs = reshape(xs[:, :, i], :, length(i))
-  #xs = ISOKANN.standardform(xs, (21, 28, 44))
-  xs = vec.(aligntrajectory(Flux.MLUtils.unbatch(xs))) |> stack
+function save_sorted_path(iso, v::VGVData, path="out/vgv/chisorted.pdb")
+  source = pdbfile(v)
+  i = sortperm(chis(iso) |> cpu |> vec)
+  xs = aligntrajectory(getcoords(v)[:,  i])
   println("saved sorted trajectory to $path")
-
-  ISOKANN.IsoMu.writechemfile(path, xs; source)
+  IsoMu.writechemfile(path, xs; source)
 end
 
 
-#=
-function pairwisedata_my((xs, ys), nk, lag)
-  nx = size(xs, 3)
-  xs = reshape(xs, :, nx)
-  ys = reshape(ys[:, :, 1:nk, :, lag], :, nk, nx)
+### EXAMPLE
 
-  # note that this is the squared distances
+function vgv_examplerun(v=VGVData())
+  iso = vgv_alex(;v)
+  run!(iso)
+  plot_training(iso) |> display
 
-  xs = ISOKANN.flatpairdists(xs) .|> sqrt
-  ys = ISOKANN.flatpairdists(ys) .|> sqrt
-  inds = halfinds(xs)
-  return (xs[inds, :], ys[inds, :, :])
+  save_sorted_path(iso, v)
+  save_reactive_path(Iso2(iso), v.coords,
+    sigma=1,
+    out="out/vgv/reactionpath.pdb",
+    source=pdbfile(v))
 
-  #return normalizedata((xs[inds, :], ys[inds, :, :]))
+  return iso
 end
-
-function test(vgv=read_vgvapg())
-  d1 = pairwisedata_my(vgv, 100, 10)[1]
-  d2 = pairwisedata(vgv, 100, 10)[1]
-  isapprox(d1, d2)
-end
-
-
-## A CHECK HOW GOOD MODELS CAN LEARN A GIVEN DISTANCE
-function benchmarkmodels(; reps=3, epochs=10, iso=lucaisokann(), activation=Flux.sigmoid)
-  dim = size(iso.data[1], 1)
-  target = let xs = vgv[1]
-    sqrt.(sum(abs2, xs[:, 1, :] .- xs[:, 71, :], dims=1))
-  end |> ISOKANN.shiftscale
-  plot(target')
-  for _ in 1:reps
-    for (model, color) in [(lucanet(dim; activation), :blue), (ISOKANN.pairnet(dim, layers=4; activation), :red)]
-      iso.model = model
-      Optimisers.setup(iso)
-      @time for i in 1:epochs
-        Flux.train!((m, x, y) -> Flux.mse(m(x), y), iso.model, Flux.DataLoader((iso.data[1], target), batchsize=50), iso.opt)
-      end
-      @show Flux.mse(iso.model(iso.data[1]), target)
-      plot!(iso.model(iso.data[1])'; color) |> display
-    end
-  end
-
-  plot!() |> display
-
-end
-
-=#

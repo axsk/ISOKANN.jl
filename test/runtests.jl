@@ -103,4 +103,10 @@ using Test
         end
     end
 
+    @testset "vgv" begin
+        v=ISOKANN.VGVData(nx=10, nk=2)
+        ISOKANN.vgv_examplerun(v)
+        @test true
+    end
+
 end
