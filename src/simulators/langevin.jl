@@ -25,7 +25,7 @@ function propagate(l::AbstractLangevin, x0::AbstractMatrix, ny)
 end
 
 function solve_end(l::AbstractLangevin; u0)
-    StochasticDiffEq.solve(SDEProblem(l, u0))[end]
+    StochasticDiffEq.solve(SDEProblem(l, u0))[:, end]
 end
 
 ##  Generic Diffusion in a potential

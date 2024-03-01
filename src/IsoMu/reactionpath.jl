@@ -1,23 +1,8 @@
 
 function reactive_path(xi::AbstractVector, coords::Matrix, sigma; method=QuantilePath(0.05))
-    #=if method == :quantile
-        eps = max(quantile(xi, q), 1 - quantile(xi, 1 - q))
-        from = findall(xi .< eps)
-        to = findall(xi .> 1 - eps)
-    elseif method == :full
-        from = 1
-        to = length(xi)
-    elseif isa(method, FromToPath)
-        from = method.s1
-        to = method.s2
-    end
-    =#
     xi = Flux.cpu(xi)
-
     from, to = fromto(method, xi)
-
-    ids, = shortestchain(coords, xi, from, to; sigma)
-
+    ids = shortestchain(coords, xi, from, to; sigma)
     path = coords[:, ids]
     return ids, path
 end
@@ -36,6 +21,7 @@ end
 # find a path between the first and last frame
 struct FullPath end
 
+# find the path between minimal and maximal chi value
 struct MaxPath end
 
 function fromto(q::QuantilePath, xi)
@@ -47,20 +33,15 @@ end
 
 fromto(f::FromToPath, xi) = (f.s1, f.s2)
 fromto(::FullPath, xi) = (1, length(xi))
-fromto(f::MaxPath, xi) = (argmin(xi), argmax(xi))
+fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma=1)
     dxs = pairwise(Euclidean(), xs, dims=2)
-    d = size(xs, 1)
-    logp = onsager_machlup(dxs, xi, sigma, d)
-
-    is = shortestpath(-logp, from, to)
-
-    dx = [dxs[is[i], is[i+1]] for i in 1:length(is)-1]
-    dt = xi[is[1:end-1]] - xi[is[2:end]]
-    is, dx, dt
+    logp = finite_dimensional_distribution(dxs, xi, sigma, size(xs, 1))
+    ids = shortestpath(-logp, from, to)
+    return ids
 end
 
 # compute the shortest through the matrix A from ind s1 to s2
@@ -74,7 +55,7 @@ end
 shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1], [s2])
 
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
-function onsager_machlup(dxs, xi, sigma=1, d=1)
+function finite_dimensional_distribution(dxs, xi, sigma=1, d=1)
     logp = zero(dxs)
     for c in CartesianIndices(dxs)
         i, j = Tuple(c)
@@ -91,6 +72,8 @@ function onsager_machlup(dxs, xi, sigma=1, d=1)
     return logp
 end
 
+### VISUALIZATION
+
 function plot_reactive_path(ids, xi)
     xi = Flux.cpu(xi)
     plot(xi)
@@ -99,14 +82,14 @@ function plot_reactive_path(ids, xi)
     plot(plot!(), plot(xi[ids]))
 end
 
-# visualization of what shortestchain does in 1d
+# visualization of what shortestchain does in 1d with random data
 function visualize_shortestpath(; n=1000, sigma=0.1)
     xs = rand(1, n)
     xi = rand(n)
     xi[1] = 0
     xi[end] = 1
-    is, dx, dt = shortestchain(xs, xi, 1, n; sigma)
+    ids = shortestchain(xs, xi, 1, n; sigma)
     scatter(xi, xs[1, :])
-    plot!(xi[is], xs[1, is], xlabel="t", ylabel="x", label="reaction path")
+    plot!(xi[ids], xs[1, ids], xlabel="t", ylabel="x", label="reaction path")
     plot!(yticks=[0, 1], xticks=[0, 1], legend=false)
 end
