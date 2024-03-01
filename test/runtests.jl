@@ -25,20 +25,6 @@ using Test
         end
     end
 
-    @testset "IsoForce" begin
-        @test_broken ISOKANN.IsoForce.isokann(usecontrol=true)  # broken since IsoForce is not included in ISOKANN any more
-    end
-    #=
-        @testset "IsoForce (deprecated)" begin
-            using ISOKANN.IsoForce: test_GirsanovSDE, test_optcontrol, isokann, Doublewell
-            test_GirsanovSDE()
-            test_optcontrol()
-
-            @test_broken @time isokann()
-            @test_broken @time isokann(dynamics = Doublewell(dim=2))
-        end
-    =#
-
     @testset "iso2" verbose = true begin
 
         @testset "iso2 Doublewell" begin
@@ -86,25 +72,31 @@ using Test
         @time propagate(sim_omm, x0, 100)
     end
 
-    @testset "IsoMu" begin
+    @testset "IsoMu.jl" begin
         using ISOKANN.IsoMu
-
-        @testset "IsoMu.jl" begin
-            datapath = "/data/numerik/ag_cmd/trajectory_transfers_for_isokann/data/8EF5_Aspargine_116_100ns_7.4_v2"
-            iter = 10
-
-            data = DataLink(datapath, startpos=2)
-            mu = isokann(data, gpu=false)
-            train!(mu, iter)
-            out = Base.Filesystem.tempname() * ".pdb"
-            save_reactive_path(mu, sigma=0.05, out=out)
-
-            @test true
+        datapath = "/data/numerik/ag_cmd/trajectory_transfers_for_isokann/data/8EF5_Aspargine_116_100ns_7.4_v2"
+        if !ispath(datapath)
+            println("could not access IsoMu datapath $datapath")
+            return @test_broken false
         end
+        iter = 10
+
+        data = DataLink(datapath, startpos=2)
+        mu = isokann(data, gpu=false)
+        train!(mu, iter)
+        out = Base.Filesystem.tempname() * ".pdb"
+        save_reactive_path(mu, sigma=0.05, out=out)
+
+        @test true
     end
 
     @testset "vgv" begin
-        v=ISOKANN.VGVData(nx=10, nk=2)
+        datapath = ISOKANN.VGV_DATA_DIR
+        if !ispath(datapath)
+            println("could not access VGV datapath $datapath")
+            return @test_broken false
+        end
+        v = ISOKANN.VGVData(datapath, nx=10, nk=2)
         ISOKANN.vgv_examplerun(v, Base.Filesystem.tempname())
         @test true
     end
