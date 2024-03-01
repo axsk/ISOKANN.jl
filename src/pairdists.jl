@@ -14,14 +14,29 @@ function flatpairdists(x)
     return reshape(p, c * c, s...)
 end
 
+# TODO: note we return the squred distances here. we should take the sqrt but check whether aladip and so on still work fine
 function simplepairdists(x)
     p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
     return p
 end
 
+using Distances: pairwise, Euclidean
+using LinearAlgebra: diagind, UpperTriangular
+# using Distances
+function batchedpairdists(x)
+    inds = halfinds(size(x, 2))
+    dropdims(mapslices(x -> pairwise(Euclidean(), x)[inds], x, dims=(1, 2)), dims=2)
+end
+
+function halfinds(n)
+    a = UpperTriangular(ones(n, n))
+    a[diagind(a)] .= 0
+    findall(a .> 0)
+end
+
 
 ### custom implementation of multithreaded pairwise distances
-function batchedpairdists(x::AbstractArray)
+function batchedpairdists_threaded(x::AbstractArray)
     ChainRulesCore.@ignore_derivatives begin
         d, n, cols = size(x)
         out = similar(x, n, n, cols)

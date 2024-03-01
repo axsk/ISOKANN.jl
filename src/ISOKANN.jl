@@ -21,6 +21,7 @@ using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
+import MLUtils: numobs
 
 import ChainRulesCore
 import Flux

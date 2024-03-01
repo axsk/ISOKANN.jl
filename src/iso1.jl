@@ -61,6 +61,20 @@ Base.@kwdef mutable struct IsoRun{T} # takes 10 min
     minibatch::Int = 128
 end
 
+# TODO: should make these defaults for sim==nothing
+IsoRunFixedData(; data, kwargs...) = ISOKANN.IsoRun(;
+    data=data,
+    model=ISOKANN.pairnet(data),
+    nd=1,
+    minibatch=0,
+    nx=0, # no chi subsampling,
+    nres=0, # no resampling,
+    np=1, # power iterations,
+    nl=1, # weight updates,
+    nk=0,
+    ny=0,
+    sim=nothing, kwargs...)
+
 optparms(iso::IsoRun) = optparms(iso.opt.layers[2].bias.rule)
 optparms(o::Optimisers.OptimiserChain) = map(optparms, o.opts)
 optparms(o::Optimisers.WeightDecay) = (; WeightDecay=o.gamma)
