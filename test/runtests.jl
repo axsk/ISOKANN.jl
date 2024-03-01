@@ -105,7 +105,7 @@ using Test
 
     @testset "vgv" begin
         v=ISOKANN.VGVData(nx=10, nk=2)
-        ISOKANN.vgv_examplerun(v)
+        ISOKANN.vgv_examplerun(v, Base.Filesystem.tempname())
         @test true
     end
 

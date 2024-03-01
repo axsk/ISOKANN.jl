@@ -120,7 +120,7 @@ end
 
 ### EXAMPLE
 
-function vgv_examplerun(v=VGV5000(nk=1), outdir="out/vgvexample")
+function vgv_examplerun(v=VGV5000(nk=1), outdir="out/vgv_examplerun")
   mkpath(outdir)
   iso = vgv_alex(v)
   run!(iso)
@@ -140,6 +140,8 @@ function vgv_examplerun(v=VGV5000(nk=1), outdir="out/vgvexample")
   open("$outdir/parameters.txt", "w") do io
     show(io, MIME"text/plain"(), iso)
   end
+
+  println("saved vgv output to $outdir")
 
   return iso
 end

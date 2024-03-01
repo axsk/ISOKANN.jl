@@ -25,7 +25,7 @@ using LinearAlgebra: diagind, UpperTriangular
 # using Distances
 function batchedpairdists(x)
     inds = halfinds(size(x, 2))
-    dropdims(mapslices(x -> pairwise(Euclidean(), x)[inds], x, dims=(1, 2)), dims=2)
+    dropdims(mapslices(x -> pairwise(Euclidean(), x, dims=2)[inds], x, dims=(1, 2)), dims=2)
 end
 
 function halfinds(n)
