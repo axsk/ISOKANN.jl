@@ -92,10 +92,14 @@ end
 
 function __init__()
     # install / load OpenMM
-    pyimport_conda("openmm", "openmm", "conda-forge")
-    pyimport_conda("joblib", "joblib")
+    try
+        pyimport_conda("openmm", "openmm", "conda-forge")
+        pyimport_conda("joblib", "joblib")
 
-    @pyinclude("$(@__DIR__)/mopenmm.py")
+        @pyinclude("$(@__DIR__)/mopenmm.py")
+    catch
+        @warn "Could not load openmm."
+    end
 end
 
 function savecoords(sim, coords, path)
