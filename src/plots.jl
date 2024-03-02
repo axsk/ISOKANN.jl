@@ -160,3 +160,58 @@ scatter_chi(chi; kwargs...) = (plot(); scatter_chi!(chi; kwargs...))
 function plot_path(chi, path; kwargs...)
     plot!(eachcol(bary_to_euclidean(chi[path, :]))...; kwargs...)
 end
+
+
+## from former iso2.jl
+### Visualization
+
+function vismodel(model, grd=-2:0.03:2; xs=nothing, ys=nothing, float=0.01, kwargs...)
+    defargs = (; markeralpha=0.1, markersize=0.5, markerstrokewidth=0)
+    dim = ISOKANN.inputdim(model)
+    if dim == 1
+        plot(grd, model(collect(grd)')')
+    elseif dim == 2
+        p = plot()
+        g = makegrid(grd, grd)
+        y = model(g)
+        for i in 1:ISOKANN.outputdim(model)
+            yy = reshape(y[i, :], length(grd), length(grd))
+            surface!(p, grd, grd, yy, clims=(0, 1); kwargs...)
+        end
+        if !isnothing(ys)
+            yy = reshape(ys, 2, :)
+            scatter!(eachrow(yy)..., maximum(model(yy), dims=1) .+ float |> vec; markercolor=:blue, defargs..., kwargs...)
+        end
+        !isnothing(xs) && scatter!(eachrow(xs)..., maximum(model(xs), dims=1) .+ float |> vec; markercolor=:red, kwargs...)
+        plot!(; kwargs...)
+    end
+end
+
+function makegrid(x, y)
+    A = zeros(Float32, 2, length(x) * length(y))
+    i = 1
+    for x in x
+        for y in y
+            A[:, i] .= (x, y)
+            i += 1
+        end
+    end
+    A
+end
+
+function vis_training(; model, data, target, losses, others...)
+    p1 = visualize_diala(model, data[1],)
+    p2 = scatter(eachrow(target)..., markersize=1)
+    #p3 = plot(losses, yaxis=:log)
+    plot(p1, p2)#, p3)
+end
+
+function visualize_diala(mm, xs; kwargs...)
+    p1, p2 = ISOKANN.phi(xs), ISOKANN.psi(xs)
+    plot()
+    for chi in eachrow(mm(xs))
+        markersize = max.(chi .* 3, 0.01)
+        scatter!(p1, p2, chi; kwargs..., markersize, markerstrokewidth=0)
+    end
+    plot!()
+end

@@ -94,3 +94,16 @@ function visualize_shortestpath(; n=1000, sigma=0.1)
     plot!(xi[ids], xs[1, ids], xlabel="t", ylabel="x", label="reaction path")
     plot!(yticks=[0, 1], xticks=[0, 1], legend=false)
 end
+
+
+# TODO: check how this works with IsoMu
+function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
+    sigma=1, out="out/reactive_path.pdb", source)
+    chi = chis(iso) |> vec |> cpu
+    ids, path = reactive_path(chi, coords ./ 10, sigma)
+    plot_reactive_path(ids, chi) |> display
+    path = aligntrajectory(path) .* 10
+    println("saving reactive path of length $(length(ids)) to $out")
+    writechemfile(out, path; source)
+    return ids
+end

@@ -71,6 +71,7 @@ include("reactionpath.jl")
 include("simulators/langevin.jl")  # for the simulators
 
 include("isosimple.jl")
+include("isotarget.jl")
 include("iso2.jl")
 include("simulators/potentials.jl")
 

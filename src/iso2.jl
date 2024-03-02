@@ -8,210 +8,111 @@ import PCCAPlus
 import ISOKANN
 using LinearAlgebra: pinv, norm, I, schur
 using Plots
-#include("isosimple.jl")  # for the train_step! function
 
-"""
-    iso2(; n=1000, nx=100, ny=10, nd=2, sys=Doublewell(), lr=1e-2, decay=1e-5)
+@kwdef mutable struct Iso2
+    model
+    opt
+    data
+    transform
+    losses = Float64[]
+    loggers = [autoplot(1)]
+    minibatch = 0
+end
 
-ISOKANN 2.0 under construction.
+function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
+    opt = Flux.setup(opt, model)
+    transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
 
-## Arguments
-- `n`: Number of iterations (default: 1000)
-- `nx`: Number of start points (default: 100)
-- `ny`: Number of end points per start (default: 10)
-- `nd`: Number of dimensions of the koopman function (default: 2)
-- `sys`: System object (needs to support randx0, dim, propagate) (default: Doublewell())
-- `lr`: Learning rate
-- `decay`: Decay rate
-"""
-function iso2(; n=1000, nx=100, ny=10, nd=2, sim=Doublewell(), lr=1e-3, decay=1e-5, transform=TransformISA(), kwargs...)
-    s = sim
+    iso = Iso2(; model, opt, data, transform, kwargs...)
+    gpu && (iso = ISOKANN.gpu(iso))
+    return iso
+end
+
+Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
+
+function run!(iso::Iso2, n=1, epochs=1)
+    p = ProgressMeter.Progress(n)
+    iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
+
+    for _ in 1:n
+        xs, ys = getobs(iso.data)
+        target = isotarget(iso.model, xs, ys, iso.transform)
+        for i in 1:epochs
+            loss = train_batch2!(iso.model, iso.data[1], target, iso.opt, iso.minibatch)
+            push!(iso.losses, loss)
+        end
+
+        for logger in iso.loggers
+            log(logger; iso, subdata=nothing)
+        end
+
+        ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
+    end
+    return iso
+end
+
+function train_batch2!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
+    batchsize = minibatch == 0 ? size(ys, 2) : minibatch
+    data = Flux.DataLoader((xs, ys); batchsize, shuffle)
+    ls = 0.0
+    Flux.train!(model, data, opt) do m, x, y
+        l = sum(abs2, m(x) .- y)
+        ls += l
+        l / numobs(x)
+    end
+    return ls / numobs(xs)
+end
+
+chis(iso::Iso2) = iso.model(iso.data[1])
+isotarget(iso::Iso2) = isotarget(iso.model, iso.data..., iso.transform)
+
+Optimisers.adjust!(iso::Iso2; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
+Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
+Flux.gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+Flux.cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+
+function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
+    println(io, typeof(iso), ":")
+    println(io, " model: $(iso.model.layers)")
+    println(io, " tranform: $(iso.transform)")
+    println(io, " opt: $(optimizerstring(iso.opt))")
+    println(io, " minibatch: $(iso.minibatch)")
+    println(io, " loggers: $(length(iso.loggers))")
+    println(io, " data: $(size.(iso.data)), $(typeof(iso.data))")
+    length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
+end
+
+# TODO: rewrite for Iso2
+# with adaptive sampling
+function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, nupdate=10)
+    (; data, model, sim, opt, losses) = iso
+    local target
+    for _ in 1:epochs
+        l, targets = isosteps(model, opt, data, nkoop, nupdate)
+        data = adddata(data, model, sim, ny)
+        append!(losses, l)
+        target = targets[end]
+        vis_training(; model, data, target, losses) |> display
+    end
+
+    (; data, model, sim, opt, losses, target)
+end
+
+
+# constructor for simulation
+# TODO: dispatch on AbstractSimulation / IsoSimulation / Simulation
+function IsoSimulation(sim=Doublewell(); nx=100, ny=10, nd=2, kwargs...)
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, ny)
+    data = (xs, ys)
 
-    model, opt = model_with_opt(defaultmodel(sim; nout=nd), lr, decay)
+    model = defaultmodel(sim; nout=nd)
 
-    losses, target = isosteps(model, opt, (xs, ys), n; transform, kwargs...)
-
-    return (; sim, xs, ys, model, opt, losses, target, transform, kwargs...)
+    return Iso2(data; model; kwargs...)
 end
 
-
-""" isostep(model, opt, (xs, ys), nkoop=1, nupdate=1; transform = TransformISA())
-
-train the model on a given batch of trajectory data `(xs, ys)` with
-- nkoop: outer iterations, i.e. reevaluating Koopman
-- nupdate: inner iterations, i.e. updating the neural network on fixed data
-"""
-function isosteps(model, opt, (xs, ys), nkoop=1, nupdate=1;
-    transform=TransformISA(),
-    losses=Float64[],
-    targets=[])
-
-    local target = nothing
-    for i in 1:nkoop
-        target = isotarget(model, xs, ys, transform)
-        push!(targets, target)
-        # note that nupdate is classically called epochs
-        # TODO: should we use minibatches here?
-        for j in 1:nupdate
-            loss = ISOKANN.train_step!(model, xs, target, opt)  # Neural Network update
-            push!(losses, loss)
-        end
-    end
-    (; losses, targets)
-end
-
-
-isosteps(iso::NamedTuple; kwargs...) = isosteps(; iso..., kwargs...)
-function isosteps(; nkoop=1, nupdate=1, exp...)
-    exp = NamedTuple(exp)
-    (; xs, ys, model, opt, losses, transform) = exp
-    l2, target = isosteps(model, opt, (xs, ys), nkoop, nupdate; transform)
-    (; exp..., target, losses=vcat(losses, l2), nkoop, nupdate)
-end
-
-### ISOKANN target transformations
-
-@kwdef mutable struct Stabilize2
-    transform
-    last
-end
-
-function isotarget(model, xs, ys, t::Stabilize2)
-    target = isotarget(model, xs, ys, t.transform)
-    isnothing(t.last) && (t.last = target)
-    if t.transform isa TransformShiftscale
-        #@show target[1:10], t.last[1:10]
-        if (sum(abs, target - t.last)) > length(target) / 2
-            println("flipping")
-            target .= 1 .- target
-        end
-        t.last = target
-        #@show size(target)
-        return target
-    else
-        return fixperm(target, t.last)
-    end
-end
-
-"""
-    TransformPseudoInv(normalize, direct, eigenvecs, permute)
-
-Compute the target by approximately inverting the action of K with the Moore-Penrose pseudoinverse.
-
-If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi)))`.
-`eigenvecs` specifies whether to use the eigenvectors of the schur matrix.
-`normalize` specifies whether to renormalize the resulting target vectors.
-`permute` specifies whether to permute the target for stability.
-"""
-@kwdef struct TransformPseudoInv
-    normalize::Bool = true
-    direct::Bool = true
-    eigenvecs::Bool = true
-    permute::Bool = true
-end
-
-function isotarget(model, xs, ys, t::TransformPseudoInv)
-    (; normalize, direct, eigenvecs, permute) = t
-    chi = model(xs)
-    size(chi, 1) > 1 || error("TransformPseudoInv does not work with one dimensional chi functions")
-
-    cs = model(ys)::AbstractArray{<:Number,3}
-    kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
-
-    if direct
-        Kinv = chi * pinv(kchi)
-        s = schur(Kinv)
-        T = eigenvecs ? inv(s.vectors) : I
-        target = T * Kinv * kchi
-    else
-        K = kchi * pinv(chi)
-        s = schur(K)
-        T = eigenvecs ? inv(s.vectors) : I
-        target = T * inv(K) * kchi
-    end
-
-    normalize && (target = target ./ norm.(eachrow(target), 1) .* size(target, 2))
-    permute && (target = fixperm(target, chi))
-
-    return target
-end
-
-
-""" TransformISA(permute)
-
-Compute the target via the inner simplex algorithm (without feasiblization routine).
-`permute` specifies whether to apply the stabilizing permutation """
-@kwdef struct TransformISA
-    permute::Bool = true
-end
-
-# we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
-# which in turn assumes that the first column is equal to one.
-function myisa(X)
-    inv(X[PCCAPlus.indexmap(X), :])
-end
-
-function isotarget(model, xs::T, ys, t::TransformISA) where {T}
-    chi = model(xs)
-    size(chi, 1) > 1 || error("TransformISA does not work with one dimensional chi functions")
-    cs = model(ys)
-    ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
-    ks = cpu(ks)
-    chi = cpu(chi)
-    target = myisa(ks')' * ks
-    t.permute && (target = fixperm(target, chi))
-    return T(target)
-end
-
-""" TransformShiftscale()
-
-Classical 1D shift-scale (ISOKANN 1) """
-struct TransformShiftscale end
-
-function isotarget(model, xs, ys, t::TransformShiftscale)
-    cs = model(ys)
-    size(cs, 1) == 1 || error("TransformShiftscale only works with one dimensional chi functions")
-    ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
-    target = (ks .- minimum(ks)) ./ (maximum(ks) - minimum(ks))
-    return target
-end
-
-
-### Permutation - stabilization
-import Combinatorics
-
-"""
-    fixperm(new, old)
-
-Permutes the rows of `new` such as to minimize L1 distance to `old`.
-
-# Arguments
-- `new`: The data to match to the reference data.
-- `old`: The reference data.
-"""
-function fixperm(new, old)
-    # TODO: use the hungarian algorithm for larger systems
-    n = size(new, 1)
-    p = argmin(Combinatorics.permutations(1:n)) do p
-        norm(new[p, :] - old, 1)
-    end
-    new[p, :]
-end
-
-using Random: shuffle
-function test_fixperm(n=3)
-    old = rand(n, n)
-    @show old
-    new = old[shuffle(1:n), :]
-    new = fixperm(new, old)
-    @show new
-    norm(new - old) < 1e-9
-end
-
-
-### Examples with the Double and Triplewell
+# TODO: update for Iso2
+### Examples with different simulations
 
 function isodata(diffusion, nx, ny)
     d = diffusion
@@ -229,46 +130,6 @@ function test_tw(; kwargs...)
     i = iso2(nd=3, sim=Triplewell(); kwargs...)
     vismodel(i.model)
 end
-
-
-### Visualization
-
-function vismodel(model, grd=-2:0.03:2; xs=nothing, ys=nothing, float=0.01, kwargs...)
-    defargs = (; markeralpha=0.1, markersize=0.5, markerstrokewidth=0)
-    dim = ISOKANN.inputdim(model)
-    if dim == 1
-        plot(grd, model(collect(grd)')')
-    elseif dim == 2
-        p = plot()
-        g = makegrid(grd, grd)
-        y = model(g)
-        for i in 1:ISOKANN.outputdim(model)
-            yy = reshape(y[i, :], length(grd), length(grd))
-            surface!(p, grd, grd, yy, clims=(0, 1); kwargs...)
-        end
-        if !isnothing(ys)
-            yy = reshape(ys, 2, :)
-            scatter!(eachrow(yy)..., maximum(model(yy), dims=1) .+ float |> vec; markercolor=:blue, defargs..., kwargs...)
-        end
-        !isnothing(xs) && scatter!(eachrow(xs)..., maximum(model(xs), dims=1) .+ float |> vec; markercolor=:red, kwargs...)
-        plot!(; kwargs...)
-    end
-end
-
-function makegrid(x, y)
-    A = zeros(Float32, 2, length(x) * length(y))
-    i = 1
-    for x in x
-        for y in y
-            A[:, i] .= (x, y)
-            i += 1
-        end
-    end
-    A
-end
-
-
-###  DIALANINE
 
 # obtain data from 1d ISOKANN
 function diala2data()
@@ -292,125 +153,4 @@ function diala2(; data=nothing, nd=3000)
     losses = Float64[]
 
     return (; data, model, sim, opt, losses)
-end
-
-# with adaptive sampling
-function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, nupdate=10)
-    (; data, model, sim, opt, losses) = iso
-    local target
-    for _ in 1:epochs
-        l, targets = isosteps(model, opt, data, nkoop, nupdate)
-        data = adddata(data, model, sim, ny)
-        append!(losses, l)
-        target = targets[end]
-        vis_training(; model, data, target, losses) |> display
-    end
-
-    (; data, model, sim, opt, losses, target)
-end
-
-function vis_training(; model, data, target, losses, others...)
-    p1 = visualize_diala(model, data[1],)
-    p2 = scatter(eachrow(target)..., markersize=1)
-    #p3 = plot(losses, yaxis=:log)
-    plot(p1, p2)#, p3)
-end
-
-function visualize_diala(mm, xs; kwargs...)
-    p1, p2 = ISOKANN.phi(xs), ISOKANN.psi(xs)
-    plot()
-    for chi in eachrow(mm(xs))
-        markersize = max.(chi .* 3, 0.01)
-        scatter!(p1, p2, chi; kwargs..., markersize, markerstrokewidth=0)
-    end
-    plot!()
-end
-
-
-
-@kwdef mutable struct Iso2
-    model
-    opt
-    data
-    transform
-    losses = Float64[]
-    loggers = [autoplot(1)]
-    minibatch = 0
-end
-
-function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
-    opt = Flux.setup(opt, model)
-    transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
-
-    iso = Iso2(; model, opt, data, transform, kwargs...)
-    gpu && (iso = ISOKANN.gpu(iso))
-    return iso
-end
-
-function run!(iso::Iso2, n=1, epochs=1)
-    p = ProgressMeter.Progress(n)
-    iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
-
-    for _ in 1:n
-        xs, ys = getobs(iso.data)
-        target = isotarget(iso.model, xs, ys, iso.transform)
-        for i in 1:epochs
-            loss = train_batch2!(iso.model, iso.data[1], target, iso.opt, iso.minibatch)
-            push!(iso.losses, loss)
-        end
-
-        for logger in iso.loggers
-            log(logger; iso, subdata=nothing)
-        end
-
-        ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
-    end
-    return iso
-end
-
-isotarget(iso::Iso2) = isotarget(iso.model, iso.data..., iso.transform)
-
-function train_batch2!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
-    batchsize = minibatch == 0 ? size(ys, 2) : minibatch
-    data = Flux.DataLoader((xs, ys); batchsize, shuffle)
-    ls = 0.0
-    Flux.train!(model, data, opt) do m, x, y
-        l = sum(abs2, m(x) .- y)
-        ls += l
-        l / numobs(x)
-    end
-    return ls / numobs(xs)
-end
-
-Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
-
-Flux.adjust!(iso::Iso2; kwargs...) = Flux.adjust!(iso.opt; kwargs...)
-Flux.gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
-Flux.cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
-
-function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
-    println(io, typeof(iso), ":")
-    println(io, " model: $(iso.model.layers)")
-    println(io, " tranform: $(iso.transform)")
-    println(io, " opt: $(optimizerstring(iso.opt))")
-    println(io, " minibatch: $(iso.minibatch)")
-    println(io, " loggers: $(length(iso.loggers))")
-    println(io, " data: $(size.(iso.data)), $(typeof(iso.data))")
-    length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
-end
-
-chis(iso::Iso2) = iso.model(iso.data[1])
-
-Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
-
-# TODO: check how this works with IsoMu
-function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
-    sigma=1, out="out/reactive_path.pdb", source)
-    chi = chis(iso) |> vec |> cpu
-    ids, path = reactive_path(chi, coords ./ 10, sigma)
-    plot_reactive_path(ids, chi) |> display
-    path = aligntrajectory(path) .* 10
-    println("saving reactive path of length $(length(ids)) to $out")
-    writechemfile(out, path; source)
-    return ids
 end
