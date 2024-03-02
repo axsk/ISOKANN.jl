@@ -48,6 +48,10 @@ using Test
         end
     end
 
+    @testset "Iso2" begin
+        run!(Iso2(IsoRun()))
+    end
+
     @testset "iso2 OpenMM" begin
         sim = ISOKANN.OpenMM.OpenMMSimulation()
         exp = iso2(; sim, nx=20, ny=5, n=100, lr=1e-3)

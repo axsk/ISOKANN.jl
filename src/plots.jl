@@ -124,3 +124,39 @@ function scatter_ramachandran(x::AbstractMatrix, z::Union{AbstractVector,Nothing
         xlabel="\\phi", ylabel="\\psi", title="Ramachandran", ; kwargs...
     )
 end
+
+### Simplex plotting - should be in PCCAPlus.jl
+using Plots
+
+function euclidean_coords_simplex()
+    s1 = [0, 0, 0]
+    s2 = [1, 0, 0]
+    s3 = [0.5, sqrt(3) / 2, 0]
+    s4 = [0.5, sqrt(3) / 4, sqrt(3) / 2]
+    hcat(s1, s2, s3, s4)'
+end
+
+function plot_simplex(; n=2, kwargs...)
+    c = euclidean_coords_simplex()
+    c = c[1:(n+1), 1:n]
+    for i in 1:(n+1), j in i+1:(n+1)
+        plot!(eachcol(c[[i, j], :])...; kwargs...)
+    end
+    plot!()
+end
+
+function bary_to_euclidean(x::AbstractMatrix)
+    n = size(x, 2)
+    x * euclidean_coords_simplex()[1:n, 1:(n-1)]
+end
+
+function scatter_chi!(chi; kwargs...)
+    c = bary_to_euclidean(chi)
+    scatter!(eachcol(c)...; kwargs...)
+end
+
+scatter_chi(chi; kwargs...) = (plot(); scatter_chi!(chi; kwargs...))
+
+function plot_path(chi, path; kwargs...)
+    plot!(eachcol(bary_to_euclidean(chi[path, :]))...; kwargs...)
+end

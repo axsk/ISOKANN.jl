@@ -1,3 +1,4 @@
+# maximum likelihood path on given data
 
 function reactive_path(xi::AbstractVector, coords::Matrix, sigma; method=QuantilePath(0.05))
     xi = Flux.cpu(xi)
@@ -63,7 +64,7 @@ function finite_dimensional_distribution(dxs, xi, sigma=1, d=1)
         if dt > 0
             v = dxs[i, j] / dt
             L = 1 / 2 * (v / sigma)^2
-            s = (-d / 2) * log(2 * pi * sigma^2 * dt)
+            s = (-d / 2) * Base.log(2 * pi * sigma^2 * dt)
             logp[c] = (s - L * dt)
         else
             logp[c] = -Inf

@@ -294,6 +294,7 @@ function diala2(; data=nothing, nd=3000)
     return (; data, model, sim, opt, losses)
 end
 
+# with adaptive sampling
 function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, nupdate=10)
     (; data, model, sim, opt, losses) = iso
     local target
@@ -323,43 +324,6 @@ function visualize_diala(mm, xs; kwargs...)
         scatter!(p1, p2, chi; kwargs..., markersize, markerstrokewidth=0)
     end
     plot!()
-end
-
-
-### Simplex plotting - should be in PCCAPlus.jl
-using Plots
-
-function euclidean_coords_simplex()
-    s1 = [0, 0, 0]
-    s2 = [1, 0, 0]
-    s3 = [0.5, sqrt(3) / 2, 0]
-    s4 = [0.5, sqrt(3) / 4, sqrt(3) / 2]
-    hcat(s1, s2, s3, s4)'
-end
-
-function plot_simplex(; n=2, kwargs...)
-    c = euclidean_coords_simplex()
-    c = c[1:(n+1), 1:n]
-    for i in 1:(n+1), j in i+1:(n+1)
-        plot!(eachcol(c[[i, j], :])...; kwargs...)
-    end
-    plot!()
-end
-
-function bary_to_euclidean(x::AbstractMatrix)
-    n = size(x, 2)
-    x * euclidean_coords_simplex()[1:n, 1:(n-1)]
-end
-
-function scatter_chi!(chi; kwargs...)
-    c = bary_to_euclidean(chi)
-    scatter!(eachcol(c)...; kwargs...)
-end
-
-scatter_chi(chi; kwargs...) = (plot(); scatter_chi!(chi; kwargs...))
-
-function plot_path(chi, path; kwargs...)
-    plot!(eachcol(bary_to_euclidean(chi[path, :]))...; kwargs...)
 end
 
 
@@ -423,6 +387,7 @@ Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), is
 Flux.adjust!(iso::Iso2; kwargs...) = Flux.adjust!(iso.opt; kwargs...)
 Flux.gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
 Flux.cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+
 function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
     println(io, typeof(iso), ":")
     println(io, " model: $(iso.model.layers)")
@@ -438,13 +403,14 @@ chis(iso::Iso2) = iso.model(iso.data[1])
 
 Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
+# TODO: check how this works with IsoMu
 function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
     sigma=1, out="out/reactive_path.pdb", source)
     chi = chis(iso) |> vec |> cpu
-    ids, path = IsoMu.reactive_path(chi, coords ./ 10, sigma)
-    IsoMu.plot_reactive_path(ids, chi) |> display
-    path = IsoMu.aligntrajectory(path) .* 10
+    ids, path = reactive_path(chi, coords ./ 10, sigma)
+    plot_reactive_path(ids, chi) |> display
+    path = aligntrajectory(path) .* 10
     println("saving reactive path of length $(length(ids)) to $out")
-    IsoMu.writechemfile(out, path; source)
+    writechemfile(out, path; source)
     return ids
 end

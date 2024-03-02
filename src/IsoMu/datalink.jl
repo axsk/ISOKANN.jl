@@ -23,7 +23,7 @@ DataLink(dir::String; kwargs...) = DataLink(; dir, kwargs...)
 trajfile(d::DataLink) = joinpath(d.dir, "traj.dcd")
 pdbfile(d::DataLink) = joinpath(d.dir, "struct.pdb")
 outdir(d::DataLink) = joinpath("out", splitpath(d.dir)[2:end]...)
-trajectory(d::DataLink) = readchemfile(trajfile(d))[:, :, d.startpos:d.stride:end]
+trajectory(d::DataLink) = ISOKANN.readchemfile(trajfile(d))[:, :, d.startpos:d.stride:end]
 coords(d::DataLink) = d.reverse ? trajectory(d)[:, :, 2:end-1] : trajectory(d)[:, :, 2:end]  # returns the coordinates corresponding to the isodata
 
 coords(ds::Vector{DataLink}) = mapreduce(coords, (a, b) -> cat(a, b, dims=3), ds)
@@ -91,6 +91,9 @@ function c_alpha_inds(pdbfile="data/struct.pdb")
 end
 
 ## pairwise distances
+
+# note there is some overlap here with what we have in pairdists.jl
+# however, here we use only some features
 
 function localpdistinds(traj::AbstractArray{<:Any,3}, radius)
   elmin(x, y) = min.(x, y)

@@ -1,5 +1,5 @@
-using ISOKANN.IsoMu: readchemfile
-using ISOKANN: flatpairdists, ISOKANN, run!, AdamRegularized
+#using ISOKANN: readchemfile, writechemfile
+#using ISOKANN: flatpairdists, ISOKANN, run!, AdamRegularized
 using ProgressMeter
 using JLD2
 using Flux: Flux, cpu, gpu, Dense, Chain
@@ -102,19 +102,19 @@ function scatter_reactioncoord(iso, v::VGVData)
 end
 
 function plot_longtraj(iso, v::VGVData)
-  xs = ISOKANN.IsoMu.readchemfile("$(v.dir)/output/trajectory.dcd")
+  xs = readchemfile("$(v.dir)/output/trajectory.dcd")
   dx = batchedpairdists(xs) ./ 10
   vals = iso.model(dx |> gpu) |> cpu |> vec
   plot(vals, xlabel="frame #", ylabel="chi", title="long traj")
 end
 
-using ISOKANN.IsoMu: aligntrajectory
+
 function save_sorted_path(iso, v::VGVData, path="out/vgv/chisorted.pdb")
   source = pdbfile(v)
   i = sortperm(chis(iso) |> cpu |> vec)
   xs = aligntrajectory(getcoords(v)[:,  i])
   println("saved sorted trajectory to $path")
-  IsoMu.writechemfile(path, xs; source)
+  writechemfile(path, xs; source)
 end
 
 

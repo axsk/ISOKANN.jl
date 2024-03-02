@@ -8,21 +8,22 @@ module ISOKANN
 
 import Random
 
-using LinearAlgebra: norm, dot, cross, diag
+using LinearAlgebra: norm, dot, cross, diag, svd
 using StatsBase: mean, sample, mean_and_std
 using Molly: Molly, System
 using StaticArrays: SVector
-using StatsBase: sample
+using StatsBase: sample, quantile
 using CUDA: CuArray, CuMatrix, cu, CUDA
 using NNlib: batched_adjoint, batched_mul
 using Unitful: @u_str, unit
-import ProgressMeter
 using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
-
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
-import MLUtils: numobs
+using Flux: cpu, gpu
 
+
+import Chemfiles
+import ProgressMeter
 import ChainRulesCore
 import Flux
 import StatsBase, Zygote, Optimisers, Flux, JLD2
@@ -33,6 +34,11 @@ import NNlib
 import MLUtils
 import Zygote
 import OrdinaryDiffEq
+import Graphs
+import Optimisers
+
+import MLUtils: numobs
+import Flux: cpu, gpu
 
 export pairnet#, pairnetn
 export PDB_ACEMD, PDB_1UAO, PDB_diala_water
@@ -41,14 +47,11 @@ export IsoRun, run!
 export AdamRegularized, pairnet#, Adam
 export plot_training, scatter_ramachandran
 export reactionpath
-
-import Flux: cpu, gpu
 export cpu, gpu
-
-
 export iso2
 export Iso2
 export Doublewell, Triplewell, MuellerBrown
+
 
 
 
@@ -81,6 +84,8 @@ include("cuda.jl")            # fixes for cuda
 #include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx
+
+include("reactionpath2.jl")
 
 include("IsoMu/IsoMu.jl")
 include("vgv/vgv.jl")

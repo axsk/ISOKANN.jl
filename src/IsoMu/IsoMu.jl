@@ -1,11 +1,11 @@
 module IsoMu
 
-using StatsBase
 using LinearAlgebra
 using Plots
 
 using DataFrames: DataFrame
 using ISOKANN
+import ISOKANN: reactive_path, save_reactive_path
 using Distances: pairwise, Euclidean
 
 #using FileIO
@@ -20,9 +20,6 @@ export DataLink, train!, save_reactive_path, isokann, meanvelocity, adjust!, gpu
 
 include("datalink.jl")
 include("isomu.jl")
-include("reactionpath.jl")
-include("align.jl")
-include("chemfiles.jl")
 include("dataloader.jl")
 
 end

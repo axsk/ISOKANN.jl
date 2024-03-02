@@ -24,7 +24,7 @@ end
 
 Base.length(ltl::LazyTrajectory) = ltl.size[3]
 Base.size(ltl::LazyTrajectory) = ltl.size
-Base.getindex(ltl::LazyTrajectory, idx) = readchemfile(ltl.traj, idx)
+Base.getindex(ltl::LazyTrajectory, idx) = ISOKANN.readchemfile(ltl.traj, idx)
 
 
 ### Pairwise Atom Distances 
