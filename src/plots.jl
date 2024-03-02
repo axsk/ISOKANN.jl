@@ -1,5 +1,3 @@
-
-
 """
 scatter plot of all first "O" atoms of the starting points `xs`
 as well as the "O" atoms from the koopman samples to the first point from `ys`
@@ -50,9 +48,9 @@ function plot_training(iso; subdata=nothing)
     =#
 
     xs, ys = data
-    p2 = plot_chi(xs, Flux.cpu(model(xs)))
+    p2 = plot_chi(iso)
 
-    scatter!(isotarget(iso) |> cpu |> vec)
+
 
     p3 = scatter_chifix(data, model)
     #annotate!(0,0, repr(iso)[1:10])
@@ -65,16 +63,22 @@ function plot_training(iso; subdata=nothing)
     plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)))
 end
 
-function plot_chi(xs, chi)
+function plot_chi(iso; target=true)
+    xs, ys = iso.data
+    chi = iso.model(xs) |> cpu
+
     if size(xs, 1) == 1
-        scatter(vec(xs), chi)
+        scatter(xs', chi', xlabel="x", ylabel="χ")
     elseif size(xs, 1) == 2
-        scatter(xs[1, :], xs[2, :], marker_z=chi, label="")
-    elseif size(xs, 1) == 66
+        scatter(xs[1, :], xs[2, :], marker_z=chi', label="", xlabel="x", ylabel="y", cbar_title="χ")
+    elseif size(xs, 1) == 66  # TODO: dispatch on simulation
         scatter_ramachandran(xs, chi)
     else
-        scatter(chi'; ylims=autolims(chi))
+        scatter(chi'; ylims=autolims(chi), xlabel="#")
+        target && scatter!(isotarget(iso)' |> cpu)
     end
+
+
 end
 
 function autolims(chi)

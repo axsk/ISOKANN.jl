@@ -2,7 +2,7 @@ using Parameters
 import StochasticDiffEq  # does this incur invalidations?
 import ForwardDiff
 
-abstract type AbstractLangevin end
+abstract type AbstractLangevin <: IsoSimulation end
 # interface methods: potential(l), sigma(l), dim(l)
 
 function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=tmax(l); dt=dt(l), alg=integrator(l), kwargs...)

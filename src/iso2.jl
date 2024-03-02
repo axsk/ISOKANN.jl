@@ -28,6 +28,12 @@ function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwarg
     return iso
 end
 
+function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
+    data = isodata(sim, nx, nk)
+    model = defaultmodel(sim; nout=nd)
+    return Iso2(data; model, kwargs...)
+end
+
 Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
 
 function run!(iso::Iso2, n=1, epochs=1)
@@ -84,73 +90,11 @@ end
 
 # TODO: rewrite for Iso2
 # with adaptive sampling
-function run!(iso::NamedTuple; epochs=1, ny=10, nkoop=1000, nupdate=10)
-    (; data, model, sim, opt, losses) = iso
-    local target
-    for _ in 1:epochs
-        l, targets = isosteps(model, opt, data, nkoop, nupdate)
-        data = adddata(data, model, sim, ny)
-        append!(losses, l)
-        target = targets[end]
-        vis_training(; model, data, target, losses) |> display
+function run!(iso::Iso2, sim::IsoSimulation, generates=1, iter=1, epochs=1; ny)
+    for _ in 1:generates
+        iso.data = adddata(iso.data, iso.model, sim, ny)
+        run!(iso, iter, epochs)
     end
-
-    (; data, model, sim, opt, losses, target)
+    return iso
 end
 
-
-# constructor for simulation
-# TODO: dispatch on AbstractSimulation / IsoSimulation / Simulation
-function IsoSimulation(sim=Doublewell(); nx=100, ny=10, nd=2, kwargs...)
-    xs = randx0(sim, nx)
-    ys = propagate(sim, xs, ny)
-    data = (xs, ys)
-
-    model = defaultmodel(sim; nout=nd)
-
-    return Iso2(data; model; kwargs...)
-end
-
-# TODO: update for Iso2
-### Examples with different simulations
-
-function isodata(diffusion, nx, ny)
-    d = diffusion
-    xs = randx0(d, nx)
-    ys = propagate(d, xs, ny)
-    return xs, ys
-end
-
-function test_dw(; kwargs...)
-    i = iso2(nd=2, sim=Doublewell(); kwargs...)
-    vismodel(i.model)
-end
-
-function test_tw(; kwargs...)
-    i = iso2(nd=3, sim=Triplewell(); kwargs...)
-    vismodel(i.model)
-end
-
-# obtain data from 1d ISOKANN
-function diala2data()
-    iso = ISOKANN.IsoRun(nd=3000, loggers=[])
-    ISOKANN.run!(iso)
-    iso
-end
-
-""" ISOKANN 2 dialanine experiment
-generates data from 1d ISOKANN and trains a 3d ISOKANN on it
-"""
-function diala2(; data=nothing, nd=3000)
-    if isnothing(data)
-        iso = run!(IsoRun(nd=nd, loggers=[]))
-        data = iso.data
-    end
-
-    sim = MollyLangevin(sys=PDB_ACEMD())
-    model = ISOKANN.pairnet(484, features=flatpairdists, nout=3)
-    opt = Flux.setup(Flux.AdamW(1e-3, (0.9, 0.999), 1e-4), model)
-    losses = Float64[]
-
-    return (; data, model, sim, opt, losses)
-end

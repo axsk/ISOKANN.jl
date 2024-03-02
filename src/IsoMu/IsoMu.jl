@@ -5,7 +5,7 @@ using Plots
 
 using DataFrames: DataFrame
 using ISOKANN
-import ISOKANN: reactive_path, save_reactive_path
+import ISOKANN: reactive_path, save_reactive_path, aligntrajectory
 using Distances: pairwise, Euclidean
 
 #using FileIO

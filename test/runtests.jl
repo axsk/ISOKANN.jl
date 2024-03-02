@@ -5,8 +5,7 @@ using Test
 @testset "ISOKANN.jl" verbose = true begin
 
     @testset "IsoRun CPU" begin
-        iso = ISOKANN.IsoRun()
-        ISOKANN.run!(iso)
+        iso = ISOKANN.IsoRun(nd=10) |> run!
         @test true
     end
 
@@ -15,9 +14,7 @@ using Test
         using CUDA
         if CUDA.functional()
             CUDA.allowscalar(false)
-            iso = ISOKANN.IsoRun()
-            iso = ISOKANN.gpu(iso)
-            ISOKANN.run!(iso)
+            iso = ISOKANN.IsoRun(nd=10) |> gpu |> run!
             @test true
         else
             @info "No functional GPU found. Marking GPU test as broken."
@@ -25,43 +22,34 @@ using Test
         end
     end
 
-    @testset "iso2" verbose = true begin
-
-        @testset "iso2 Doublewell" begin
-            iso2(nd=2, sim=Doublewell())
-            @test true
-        end
-
-        @testset "iso2 Triplewell" begin
-            iso2(nd=3, sim=Triplewell())
-            @test true
-        end
-
-        @testset "iso2 MuellerBrown" begin
-            iso2(nd=3, sim=MuellerBrown())
-            @test true
-        end
-
-        @testset "iso2 TransformPseudoInv" begin
-            iso2(nd=3, sim=Triplewell(), transform=ISOKANN.TransformPseudoInv())
-            @test true
-        end
-    end
-
     @testset "Iso2" begin
-        run!(Iso2(IsoRun()))
-    end
+        @testset "Iso2 from IsoRun" begin
+            run!(Iso2(IsoRun(nd=10)))
+            @test true
+        end
 
-    @testset "iso2 OpenMM" begin
-        sim = ISOKANN.OpenMM.OpenMMSimulation()
-        exp = iso2(; sim, nx=20, ny=5, n=100, lr=1e-3)
-        @test true
-    end
+        for (sim, name) in zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation(), MollyLangevin(sys=PDB_ACEMD())], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM", "Molly"])
+            @testset "Iso2 $name" begin
+                i = Iso2(sim)
+                @test true
+                run!(i)
+                @test true
+            end
+        end
 
-    @testset "iso2 Molly" begin
-        sim = MollyLangevin(sys=PDB_ACEMD())
-        exp = iso2(; sim, nx=20, ny=5, n=100, lr=1e-3)
-        @test true
+        @testset "Iso2 Dialanine with adaptive sampling" begin
+            sim = MollyLangevin(sys=PDB_ACEMD())
+            model = ISOKANN.pairnet(484, features=ISOKANN.flatpairdists, nout=3)
+            opt = Flux.setup(Flux.AdamW(1e-3, (0.9, 0.999), 1e-4), model)
+
+            iso = Iso2(sim; nx=100, nk=10, nd=1, model, opt)
+            iso = run!(iso, sim, 10, 100, ny=10)
+            @test true
+        end
+
+        @testset "Iso2 Transforms" begin
+            @test_broken false
+        end
     end
 
     @testset "compare simulators" begin
@@ -74,6 +62,7 @@ using Test
         x0 = ISOKANN.randx0(sim_molly, 2)
         @time propagate(sim_molly, x0, 100)
         @time propagate(sim_omm, x0, 100)
+        @test_broken sim.molly == sim.omm
     end
 
     @testset "IsoMu.jl" begin

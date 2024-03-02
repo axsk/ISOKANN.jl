@@ -2,14 +2,14 @@ module OpenMM
 
 using PyCall
 
-import ..ISOKANN: ISOKANN, propagate, dim, randx0, featurizer, defaultmodel, savecoords
+import ..ISOKANN: ISOKANN, propagate, dim, randx0, featurizer, defaultmodel, savecoords, IsoSimulation
 
 export OpenMMSimulation
 
 ###
 
 """ A Simulation wrapping the Python OpenMM Simulation object """
-struct OpenMMSimulation
+struct OpenMMSimulation <: IsoSimulation
     pysim::PyObject
     steps::Int
     features::Vector{Int}
@@ -71,7 +71,7 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Thre
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
     ys = @pycall py"threadedrun"(xs, s.pysim, s.steps, nthreads, mmthreads)::PyArray
     ys = reshape(ys, dim, nx, ny)
-    return newdataformat(ys) 
+    return newdataformat(ys)
 end
 
 newdataformat(ys::AbstractArray{<:Any,3}) = permutedims(ys, [1,3,2])
