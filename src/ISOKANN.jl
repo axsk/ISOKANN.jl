@@ -48,7 +48,6 @@ export AdamRegularized, pairnet#, Adam
 export plot_training, scatter_ramachandran
 export reactionpath
 export cpu, gpu
-export iso2
 export Iso2
 export Doublewell, Triplewell, MuellerBrown
 export chis

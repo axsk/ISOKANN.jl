@@ -5,7 +5,7 @@ using Test
 @testset "ISOKANN.jl" verbose = true begin
 
     @testset "IsoRun CPU" begin
-        iso = ISOKANN.IsoRun(nd=10) |> run!
+        iso = IsoRun(nd=10) |> run!
         @test true
     end
 
@@ -14,7 +14,7 @@ using Test
         using CUDA
         if CUDA.functional()
             CUDA.allowscalar(false)
-            iso = ISOKANN.IsoRun(nd=10) |> gpu |> run!
+            iso = IsoRun(nd=10) |> gpu |> run!
             @test true
         else
             @info "No functional GPU found. Marking GPU test as broken."
@@ -39,8 +39,8 @@ using Test
 
         @testset "Iso2 Dialanine with adaptive sampling" begin
             sim = MollyLangevin(sys=PDB_ACEMD())
-            model = ISOKANN.pairnet(484, features=ISOKANN.flatpairdists, nout=3)
-            opt = Flux.setup(Flux.AdamW(1e-3, (0.9, 0.999), 1e-4), model)
+            model = pairnet(484, features=ISOKANN.flatpairdists, nout=3)
+            opt = Flux.AdamW(1e-3, (0.9, 0.999), 1e-4)
 
             iso = Iso2(sim; nx=100, nk=10, nd=1, model, opt)
             iso = run!(iso, sim, 10, 100, ny=10)

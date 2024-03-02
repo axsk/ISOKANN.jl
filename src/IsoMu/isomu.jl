@@ -6,7 +6,7 @@
 Combine ISOKANN with a DataLink
 
 # Fields
-- `data::DataLink`: reference to the data 
+- `data::DataLink`: reference to the data
 - `learnrate::Float64=0.001`: learnrate for ADAM
 - `regularization::Float64=0.0001`: regularization of the NN
 - `hidden::Vector{Int}=[300, 100, 10]`: Size of hidden layers
@@ -65,7 +65,7 @@ pdbfile(mu::IMu) = pdbfile(mu.data)
 numobs(mu::IMu) = size(xs(mu), 2)
 
 
-""" 
+"""
     reactive_path(mu::IMu; kwargs...) where {T} -> (Vector{Int}, Matrix)
 
 Compute the shortest Onsager-Machlup path through the data with the χ value as time.
@@ -77,14 +77,15 @@ Compute the shortest Onsager-Machlup path through the data with the χ value as 
 - `sigma::Float64=0.1`: the temperature for the allowed trajectory
 - `window::Interval`: which coordinates to consider for the path
 - `method`: Either one of
-            `QuantilePath(quant)` for a top-bot quartile path 
+            `QuantilePath(quant)` for a top-bot quartile path
             `FromToPath(from::Int, to::Int)` specific frame numbers
             `FullPath()` from start to end
 
 # Returns
-- `inds::Vector`: indices of the selected path 
+- `inds::Vector`: indices of the selected path
 - `path::Matrix`: aligned coordinates of the path
 """
+# TODO: this should dispatch to ISOKANN.reactive_path
 function reactive_path(
     mu::IMu;
     sigma=0.1,
@@ -117,7 +118,7 @@ isincreasing(x) = sum(diff(x) .> 0) > length(x) / 2
     save_reactive_path(mu::IMu; out=joinpath(outdir(mu.data), "reactive_path.pdb"),
     kwargs...) -> Vector{Int}
 
-Compute the reactive path for the IMu object and save it as pdb 
+Compute the reactive path for the IMu object and save it as pdb
 (defaulting to the outdir of mu) see also `reactive_path` for further arguments
 
 # Arguments
@@ -130,6 +131,7 @@ Compute the reactive path for the IMu object and save it as pdb
 # Returns
 - `inds::Vector{Int}`: the indices of the selected path
 """
+# TODO: this should dispatch to ISOKANN.reactive_path
 function save_reactive_path(mu::IMu;
     out=joinpath(outdir(mu.data), "reactive_path.pdb"),
     kwargs...)
@@ -158,7 +160,7 @@ function meanvelocity(mu::IMu)
     title!(mu.data.dir)
 end
 
-function adjust!(mu::IMu, args...; kwargs...)
+function Flux.adjust!(mu::IMu, args...; kwargs...)
     mu.iso.opt isa NamedTuple || error("have to train! model once before tuning parameters")
     Flux.adjust!(mu.iso.opt, args...; kwargs...)
 end

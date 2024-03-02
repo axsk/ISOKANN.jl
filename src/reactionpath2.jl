@@ -97,6 +97,7 @@ end
 
 
 # TODO: check how this works with IsoMu
+# TODO: scaling by 10 shouldnt belong here
 function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
     sigma=1, out="out/reactive_path.pdb", source)
     chi = chis(iso) |> vec |> cpu
