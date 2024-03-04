@@ -41,10 +41,3 @@ centercoordscoords(xs::CuArray) = cu(centercoordscoords(collect(xs)))
 
 datastats(data::Tuple{<:CuArray,<:CuArray}) = datastats(collect.(data))
 
-""" move the ::System to the GPU, mirroring behavior of Flux.gpu """
-Flux.gpu(sys::System) = System(sys;
-    atoms=cu(sys.atoms),
-    atoms_data=cu(sys.atoms_data),
-    coords=cu(sys.coords),
-    velocities=cu(sys.velocities)
-)

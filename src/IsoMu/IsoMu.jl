@@ -16,7 +16,6 @@ import Flux
 import Chemfiles
 import Optimisers
 import Graphs
-import Molly
 
 export DataLink, isokann, train!, save_reactive_path, paperplot, adjust!, gpu!
 

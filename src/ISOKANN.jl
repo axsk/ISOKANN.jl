@@ -10,7 +10,6 @@ import Random
 
 using LinearAlgebra: norm, dot, cross, diag, svd
 using StatsBase: mean, sample, mean_and_std
-using Molly: Molly, System
 using StaticArrays: SVector
 using StatsBase: sample, quantile
 using CUDA: CuArray, CuMatrix, cu, CUDA
@@ -56,12 +55,12 @@ export chis
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
-include("simulators/simulation.jl")      # Langevin dynamic simulator (MollySystem+Integrator)
+include("simulators/simulation.jl")      # Interface for simulations
 include("models.jl")          # the neural network models/architectures
 include("simulators/molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
 include("data.jl")            # tools for handling the data (sampling, slicing, ...)
-include("iso1.jl")        # ISOKANN for Molly systems
+include("iso1.jl")        # ISOKANN - first implementation with adaptive sampling
 include("plots.jl")           # visualizations
 #include("loggers.jl")     # performance metric loggers
 #include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
