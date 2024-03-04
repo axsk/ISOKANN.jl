@@ -18,13 +18,13 @@ propagate
 ## Public API
 
 ```@autodocs
-Modules = [ISOKANN]
+Modules = [ISOKANN, ISOKANN.OpenMM]
 Private = false
 ```
 
 ## Internal API
 
 ```@autodocs
-Modules = [ISOKANN]
+Modules = [ISOKANN, ISOKANN.OpenMM]
 Public = false
 ```

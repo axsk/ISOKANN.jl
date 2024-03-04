@@ -1,5 +1,4 @@
-## Implementation of the Langevin dynamics using Molly as a backend
-
+## Interface for simulations
 
 ## This is supposed to contain the (Molecular) system + integrator
 abstract type IsoSimulation end
@@ -9,6 +8,7 @@ getcoords(sim::IsoSimulation) = getcoords(sim.sys)
 rotationhandles(sim::IsoSimulation) = rotationhandles(sim.sys)
 defaultmodel(sim::IsoSimulation; kwargs...) = pairnet(sim; kwargs...)
 
+# TODO: this should return a SimulationData
 function isodata(sim::IsoSimulation, nx, nk)
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, nk)
@@ -36,4 +36,24 @@ function randx0(sim::IsoSimulation, nx)
     x0 = reshape(getcoords(sim), :, 1)
     xs = reshape(propagate(sim, x0, nx), :, nx)
     return xs
+end
+
+struct SimulationData{S,D,C}
+    sim::S
+    data::D
+    coords::C
+end
+
+function SimulationData(sim::IsoSimulation, nx=10, nk=1)
+    xs = randx0(sim, nx)
+    ys = propagate(sim, xs, nk)
+    return SimulationData(sim, (xs, ys), xs)
+end
+
+function MLUtils.getobs(d::SimulationData)
+    return d.data
+end
+
+function adddata(d::SimulationData, model, ny)
+    adddata(d.data, model, d.sim, ny)
 end

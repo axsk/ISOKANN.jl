@@ -21,7 +21,8 @@ function bootstrap(sim::IsoSimulation, nx, ny)
     #xs = reshape(propagate(sim, x0, nx), :, nx)
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, ny)
-    centercoords(xs), centercoords(ys)  # TODO: centercoords shouldn't be here
+    #centercoords(xs), centercoords(ys)  # TODO: centercoords shouldn't be here
+    return xs, ys
 end
 
 """

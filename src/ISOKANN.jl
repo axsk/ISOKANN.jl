@@ -21,7 +21,6 @@ using Plots: plot, plot!, scatter, scatter!
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
 using Flux: cpu, gpu
 
-
 import Chemfiles
 import ProgressMeter
 import ChainRulesCore

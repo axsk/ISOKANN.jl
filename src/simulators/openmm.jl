@@ -38,9 +38,9 @@ end
 function OpenMMSimulation(;
     pdb="$(ENV["HOME"])/.julia/conda/3/share/openmm/examples/input.pdb",
     forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
-    temp=298,
-    friction=1,
-    step=0.002,
+    temp=298, # kelvin
+    friction=1,  # 1/picosecond
+    step=0.002, # picoseconds
     steps=1,
     features=calphas(pdb),
     minimize=false)

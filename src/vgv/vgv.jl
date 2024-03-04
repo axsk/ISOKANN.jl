@@ -35,6 +35,8 @@ function VGVData(dir=VGV_DATA_DIR; nx=500, nk=100, t=1, natoms=73)
   VGVData2(dir, data, coords)
 end
 
+MLUtils.getobs(v::VGVData) = v.data
+
 pdbfile(v::VGVData) = joinpath(v.dir, "input/initial_states/x0_1.pdb")
 getcoords(v::VGVData) = v.coords :: AbstractMatrix
 
@@ -132,7 +134,7 @@ function vgv_examplerun(v=VGV5000(nk=1), outdir="out/vgv_examplerun")
   savefig("$outdir/longtraj.png")
 
   save_sorted_path(iso, v, "$outdir/chisorted.pdb")
-  save_reactive_path(Iso2(iso), v.coords,
+  save_reactive_path(Iso2(iso), getcoords(v),
     sigma=1,
     out="$outdir/reactionpath.pdb",
     source=pdbfile(v))
