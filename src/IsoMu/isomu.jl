@@ -28,7 +28,7 @@ function IMu(data::Union{DataLink,Vector{DataLink}};
 
     idata = isodata(data)
     #model = getmodel(idata, layers=nlayers)
-    model = pairnet(size(idata[1], 1); networkargs...)
+    model = pairnet(idata; networkargs...)
 
     iso = ISOKANN.IsoRun(;
         nx=0, # no subsampling

@@ -90,7 +90,7 @@ function Optimisers.setup(iso::IsoRun)
 end
 
 Base.extrema(iso::IsoRun) = extrema(chis(iso))
-chis(iso::IsoRun) = iso.model(iso.data[1])
+chis(iso::IsoRun) = iso.model(getxs(iso.data))
 
 """ run the given `IsoRun` object """
 function run!(iso::IsoRun; showprogress=true)
@@ -268,7 +268,7 @@ function chi_exit_rate(x, Kx, tau)
     return α + β
 end
 
-chi_exit_rate(iso::IsoRun, tau) = chi_exit_rate(iso.model(iso.data[1]), koopman(iso.model, iso.data[2]), tau)
+chi_exit_rate(iso::IsoRun, tau) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), tau)
 
 
 function exit_rates(x, kx, tau)

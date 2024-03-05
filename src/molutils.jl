@@ -102,7 +102,7 @@ function writechemfile(filename, data::Array{<:Any,2}; source)
 end
 
 
-### alignment of pointclouds / trajectories using procrustes alignment 
+### alignment of pointclouds / trajectories using procrustes alignment
 function aligntrajectory(traj::AbstractVector)
     aligned = [centermean(traj[1])]
     for x in traj[2:end]
@@ -147,6 +147,6 @@ function merge_first_dimensions(A)
 end
 
 function split_first_dimension(A, d)
-    new_shape = (d, div(size(A, 1), d), size(A)[2:end]...)
-    reshape(A, new_shape)
+    s1, s2... = size(A)
+    reshape(A, (d, div(s1, d), s2...))
 end

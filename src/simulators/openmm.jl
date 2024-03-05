@@ -76,7 +76,7 @@ end
 
 newdataformat(ys::AbstractArray{<:Any,3}) = permutedims(ys, [1,3,2])
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)
+getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
 
 function getcoords(sim::PyObject)

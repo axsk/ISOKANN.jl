@@ -9,24 +9,25 @@ Returns the flattened pairwise distances as columns."
 function flatpairdists(x)
     d, s... = size(x)
     c = div(d, 3)
+    inds = halfinds(c)
     b = reshape(x, 3, c, :)
-    p = simplepairdists(b)
-    return reshape(p, c * c, s...)
+    p = simplepairdists(b)[inds, :]
+    return reshape(p, :, s...)
 end
 
 # TODO: note we return the squred distances here. we should take the sqrt but check whether aladip and so on still work fine
 function simplepairdists(x)
     p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
-    return p
+    return sqrt.(p)
 end
 
 using Distances: pairwise, Euclidean
 using LinearAlgebra: diagind, UpperTriangular
 # using Distances
-function batchedpairdists(x)
-    inds = halfinds(size(x, 2))
-    dropdims(mapslices(x -> pairwise(Euclidean(), x, dims=2)[inds], x, dims=(1, 2)), dims=2)
-end
+#function batchedpairdists(x)
+#    inds = halfinds(size(x, 2))
+#    dropdims(mapslices(x -> pairwise(Euclidean(), x, dims=2)[inds], x, dims=(1, 2)), dims=2)
+#end
 
 function halfinds(n)
     a = UpperTriangular(ones(n, n))

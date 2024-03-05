@@ -44,7 +44,7 @@ function run!(iso::Iso2, n=1, epochs=1)
         xs, ys = getobs(iso.data)
         target = isotarget(iso.model, xs, ys, iso.transform)
         for i in 1:epochs
-            loss = train_batch2!(iso.model, iso.data[1], target, iso.opt, iso.minibatch)
+            loss = train_batch2!(iso.model, xs, target, iso.opt, iso.minibatch)
             push!(iso.losses, loss)
         end
 
@@ -69,8 +69,8 @@ function train_batch2!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minib
     return ls / numobs(xs)
 end
 
-chis(iso::Iso2) = iso.model(iso.data[1])
-isotarget(iso::Iso2) = isotarget(iso.model, iso.data..., iso.transform)
+chis(iso::Iso2) = iso.model(getxs(iso.data))
+isotarget(iso::Iso2) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
 Optimisers.adjust!(iso::Iso2; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
 Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
@@ -84,7 +84,7 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
     println(io, " opt: $(optimizerstring(iso.opt))")
     println(io, " minibatch: $(iso.minibatch)")
     println(io, " loggers: $(length(iso.loggers))")
-    println(io, " data: $(size.(iso.data)), $(typeof(iso.data))")
+    #println(io, " data: $(size.(iso.data)), $(typeof(iso.data))")
     length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
 end
 

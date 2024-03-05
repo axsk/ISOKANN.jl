@@ -70,7 +70,7 @@ function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Ordinary
 end
 
 function reactionpath(iso::IsoRun; minimize=true, kwargs...)
-    xs, ys = iso.data
+    xs, ys = getobs(iso.data)
     x0 = xs[:, rand(1:size(xs, 2))]
     #println("minimizing energy")
     #x0 = energyminimization(iso.sim, x0)

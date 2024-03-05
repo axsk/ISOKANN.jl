@@ -164,7 +164,7 @@ function IsoLazyMu(d::DataLink;
     kwargs...)
 
     data = lazyisodata(d, nothing)
-    model = pairnet(size(data[1], 1); networkargs...)
+    model = pairnet(data; networkargs...)
     data = lazyisodata(d, model)
 
     iso = ISOKANN.IsoRun(;

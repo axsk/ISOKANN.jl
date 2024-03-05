@@ -24,6 +24,9 @@ Base.@kwdef mutable struct MollyLangevin{S} <: IsoSimulation
     n_threads::Int = 1  # number of threads for the force computations
 end
 
+""" Fallback to simulate MD dynamics on the CPU """
+propagate(ms::MollyLangevin, x0::CuMatrix, ny) = propagate(ms, collect(x0), ny)
+
 function Base.show(io::IO, mime::MIME"text/plain", sim::MollyLangevin)
     println(io, " System with $(div(dim(sim.sys),3)) atoms")
     println(io, " dt=$(sim.dt), T=$(sim.T), temp=$(sim.temp), gamma=$(sim.gamma)")

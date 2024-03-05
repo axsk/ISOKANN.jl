@@ -9,7 +9,10 @@ We represent data as a tuple of xs and ys.
 xs is a matrix of size (d, n) where d is the dimension of the system and n the number of samples.
 ys is a tensor of size (d, k, n) where k is the number of koopman samples.
 """
-DataTuple = Tuple{Matrix{T},Array{T,3}} where {T<:Number}
+DataTuple = Tuple{<:AbstractArray{T},<:AbstractArray{T,3}} where {T<:Number}
+
+getxs(d::Tuple) = d[1]
+getys(d::Tuple) = d[2]
 
 """
     bootstrap(sim, nx, ny) :: DataTuple
@@ -30,9 +33,9 @@ end
 
 Returns `n` indices of `xs` such that `model(xs[inds])` is approximately uniformly distributed.
 """
-function subsample_inds(model, xs, n)
+function subsample_inds(model, xs, n; keepedges=true)
     mapreduce(vcat, eachrow(model(xs))) do row
-        subsample_uniformgrid(shiftscale(row), n)
+        subsample_uniformgrid(shiftscale(row), n; keepedges)
     end::Vector{Int}
 end
 

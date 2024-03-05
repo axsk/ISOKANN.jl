@@ -47,7 +47,7 @@ function plot_training(iso; subdata=nothing)
     end
     =#
 
-    xs, ys = data
+    xs, ys = getobs(data)
     p2 = plot_chi(iso)
 
 
@@ -64,7 +64,7 @@ function plot_training(iso; subdata=nothing)
 end
 
 function plot_chi(iso; target=true)
-    xs, ys = iso.data
+    xs, ys = getobs(iso.data)
     chi = iso.model(xs) |> cpu
 
     if size(xs, 1) == 1
@@ -92,7 +92,7 @@ end
 
 """ fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
-    xs, ys = data
+    xs, ys = getobs(data)
     target = koopman(model, ys) |> vec |> Flux.cpu
     xs = model(xs) |> vec |> Flux.cpu
     lim = autolims(xs)
@@ -203,6 +203,7 @@ function makegrid(x, y)
     A
 end
 
+## DEPRECATED
 function vis_training(; model, data, target, losses, others...)
     p1 = visualize_diala(model, data[1],)
     p2 = scatter(eachrow(target)..., markersize=1)

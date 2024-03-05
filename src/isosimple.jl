@@ -1,5 +1,5 @@
 # a simple rewrite of the the top layer api
-# functionally equivalent (up to the plots, loggers, ...) to isomolly.jl
+
 
 using ProgressMeter
 using ISOKANN: koopman, shiftscale, train_step!, ISOKANN

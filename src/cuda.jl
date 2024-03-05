@@ -24,18 +24,21 @@ end
 
 propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
 
-""" Fallback to simulate MD dynamics on the CPU """
-propagate(ms::MollyLangevin, x0::CuMatrix, ny) = propagate(ms, collect(x0), ny)
+
 
 
 # given an (i,j,k) sized array compute the pairwise dists between j points in i dimensions,
 # batched along dimension k. return a (j,j,k) sized array.
 # in principle this also works for normal Arrays.
 # Its twice as slow however since it is not using the symmetry
-function batchedpairdists(x::CuArray)
-    p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
-    return p
-end
+#function batchedpairdists(x::CuArray{<:Any,3})
+#    p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
+#    return p
+#end
+
+#function batchedpairdists(x::CuArray{<:Any,4})
+#    gpu(batchedpairdists(cpu(x)))
+#end
 
 centercoordscoords(xs::CuArray) = cu(centercoordscoords(collect(xs)))
 
