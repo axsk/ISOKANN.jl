@@ -98,3 +98,20 @@ function run!(iso::Iso2, sim::IsoSimulation, generates=1, iter=1, epochs=1; ny)
     return iso
 end
 
+function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
+    for _ in 1:generations
+        iso = cpu(iso)
+        @time adddata!(iso, nx)
+        iso = gpu(iso)
+        @time run!(iso, iter)
+
+        if length(iso.data) > cutoff
+            iso.data = iso.data[end-cutoff+1:end]
+        end
+    end
+    iso
+end
+
+function adddata!(iso::Iso2, nx)
+    iso.data = ISOKANN.adddata(iso.data, iso.model, nx)
+end

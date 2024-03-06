@@ -62,7 +62,7 @@ model(mu::IMu, xs) = mu.iso.model(xs) |> collect
 chi(mu::IMu) = model(mu, mu.iso.data[1]) |> vec |> collect
 coords(mu::IMu) = coords(mu.data)
 pdbfile(mu::IMu) = pdbfile(mu.data)
-numobs(mu::IMu) = size(xs(mu), 2)
+MLUtils.numobs(mu::IMu) = size(xs(mu), 2)
 
 
 """

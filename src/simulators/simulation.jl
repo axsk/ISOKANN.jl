@@ -88,7 +88,7 @@ function adddata(d::SimulationData, model, n)
     coords = (c1, c2)
     data = d.featurizer.(coords)
 
-    data = joindata(d.data, data)
-    coords = joindata(d.coords, coords)
+    data = lastcat.(d.data, data)
+    coords = lastcat.(d.coords, coords)
     return SimulationData(d.sim, data, coords, d.featurizer)
 end

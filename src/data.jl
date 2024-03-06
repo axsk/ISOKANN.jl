@@ -14,6 +14,12 @@ DataTuple = Tuple{<:AbstractArray{T},<:AbstractArray{T,3}} where {T<:Number}
 getxs(d::Tuple) = d[1]
 getys(d::Tuple) = d[2]
 
+""" collapse the first and second dimension of the array `A` into the first dimension """
+function flattenfirst(A)
+    _, _, r... = size(A)
+    reshape(A, :, r...)
+end
+
 """
     bootstrap(sim, nx, ny) :: DataTuple
 
@@ -78,9 +84,9 @@ function adddata(data, model, sim, ny)
     return joindata(data, (xs, ys))
 end
 
-function joindata((x1, y1), (x2, y2))
-    return hcat(x1, x2), cat(y1, y2, dims=3)
-end
+@deprecate joindata (x, y) -> lastcat.(x, y)
+
+lastcat(x::T, y::T) where {N,T<:Array{<:Any,N}} = cat(x, y, dims=N)
 
 function datastats(data)
     xs, ys = data
@@ -168,3 +174,4 @@ end
 @deprecate extractdata(data, model, sys, path) exportdata(data, model, sys, path)
 
 uniqueidx(v) = unique(i -> v[i], eachindex(v))
+

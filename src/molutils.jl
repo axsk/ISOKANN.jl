@@ -141,6 +141,8 @@ function as3dmatrix(f, x...)
     merge_first_dimensions(f(split_first_dimension.(x, 3)...))
 end
 
+@deprecate merge_first_dimensions flattenfirst
+
 function merge_first_dimensions(A)
     new_shape = (prod(size(A)[1:2]), size(A)[3:end]...)
     return reshape(A, new_shape)
