@@ -30,18 +30,28 @@ function IMu(data::Union{DataLink,Vector{DataLink}};
     #model = getmodel(idata, layers=nlayers)
     model = pairnet(idata; networkargs...)
 
-    iso = ISOKANN.IsoRun(;
-        nx=0, # no subsampling
-        np=1, # no subreuse
-        nl=1, # no powerreuse
-        nres=0, # no resampling
-        minibatch=200,
-        sim=nothing,
-        model=model,
-        data=idata,
+    # iso = ISOKANN.IsoRun(;
+    #     nx=0, # no subsampling
+    #     np=1, # no subreuse
+    #     nl=1, # no powerreuse
+    #     nres=0, # no resampling
+    #     minibatch=200,
+    #     sim=nothing,
+    #     model=model,
+    #     data=idata,
+    #     opt=AdamRegularized(learnrate, regularization),
+    #     loggers=[ISOKANN.autoplot(5)],
+    #     kwargs...)
+
+    iso = ISOKANN.Iso2(idata,
         opt=AdamRegularized(learnrate, regularization),
-        loggers=[ISOKANN.autoplot(5)],
-        kwargs...)
+        model=model,
+        transform=ISOKANN.TransformShiftscale(),
+        minibatch=200,
+        loggers=[ISOKANN.autoplot(1)],
+    )
+
+
     mu = IMu(iso, data)
     gpu && gpu!(mu)
     return mu

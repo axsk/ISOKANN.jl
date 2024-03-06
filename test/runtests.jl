@@ -1,42 +1,38 @@
 using ISOKANN
 #using Flux
 using Test
+using CUDA
+
+if CUDA.functional()
+    CUDA.allowscalar(false)
+else
+    @info "No functional GPU found. Marking GPU test as broken."
+    @test_broken false
+end
+
+
+simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation()], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM"])
 
 @testset "ISOKANN.jl" verbose = true begin
-    for (sim, name) in zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation()], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM"])
-        @testset "Iso2 $name" begin
-            i = Iso2(sim)
-            @test true
-            run!(i)
-            @test true
-        end
-    end
 
-    @testset "Iso2 GPU" begin
-        using CUDA
-        if CUDA.functional()
-            CUDA.allowscalar(false)
-            iso = Iso2(MuellerBrown()) |> gpu |> run!
-            @test true
-        else
-            @info "No functional GPU found. Marking GPU test as broken."
-            @test_broken false
+    for backend in [cpu, gpu]
+        for (sim, name) in simulations
+            @testset "Testing ISOKANN with $name ($backend)" begin
+                i = Iso2(sim) |> backend
+                @test true
+                run!(i)
+                @test true
+                @test runadapative!(i, generations=2, nx=1, iter=1)
+                @test true
             end
         end
 
-        @testset "Iso2 Dialanine with adaptive sampling" begin
-        sim = OpenMMSimulation()
-        data = SimulationData(sim, 10, 10)
-        iso = Iso2(sim)
-        runadaptive!(iso)
-            @test true
-        end
-
-        @testset "Iso2 Transforms" begin
-        sim = MuellerBrown()
-        for t in [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()]
-            run!(Iso2(sim, transform=t))
-            @test true
+        @testset "Iso2 Transforms ($backend)" begin
+            sim = MuellerBrown()
+            for t in [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()]
+                run!(Iso2(sim, transform=t) |> backend)
+                @test true
+            end
         end
     end
 

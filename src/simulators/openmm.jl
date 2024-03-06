@@ -27,7 +27,7 @@ end
 
 function featurizer(sim::OpenMMSimulation)
     ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
-    n, features = ISOKANN.pairdistfeatures(ix)
+    ISOKANN.pairdistfeatures(ix)
 end
 
 function defaultmodel(sim::OpenMMSimulation; nout, kwargs...)
@@ -46,6 +46,10 @@ function OpenMMSimulation(;
     minimize=false)
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
+
+    if features == :all
+        features = collect(1:pysim.system.getNumParticles())
+    end
     return OpenMMSimulation(pysim, steps, features)
 end
 

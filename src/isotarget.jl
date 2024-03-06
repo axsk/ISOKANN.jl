@@ -83,6 +83,8 @@ function isotarget(model, xs, ys, t::TransformShiftscale)
   return target
 end
 
+
+# TODO: design decision: do we want this as outer type or as part of what we have inside the other transforms?
 """ TransformStabilize(transform, last=nothing)
 
 Wraps another transform and permutes its target to match the previous target

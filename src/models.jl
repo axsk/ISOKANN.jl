@@ -6,6 +6,9 @@ Regularized(opt, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(re
 """ Adam with L2 regularization. Note that this is different from AdamW (Adam+WeightDecay) (c.f. Decay vs L2 Reg.) """
 AdamRegularized(adam=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
 
+optimizerstring(opt) = typeof(opt)
+optimizerstring(opt::NamedTuple) = opt.layers[end-1].weight.rule
+
 """ obtain the input dimension of a Flux model """
 inputdim(model::Flux.Chain) = inputdim(model.layers[1])
 inputdim(model::Flux.Dense) = size(model.weight, 2)
@@ -29,26 +32,12 @@ function selectrows(x, inds)
 end
 
 """ returns a function `features(x)` which map the system coordinates to its features for the Flux model """
-
+#=
 function featurizer(sim)
     dim(sim), identity
 end
+=#
 
-function pairdistfeatures(inds::AbstractVector)
-    n = div(length(inds), 3)^2
-    function features(x)
-        x = selectrows(x, inds)
-        x = flatpairdists(x)
-        return x
-    end
-    n, features
-end
-
-" A `pairnet()` model with using the simulation's `featureinds()` particles pairwise positions as input for the first layer"
-function pairnet(sim; kwargs...)
-    n, features = featurizer(sim)
-    pairnet(n; features, kwargs...)
-end
 
 function pairnet((xs, ys)::Tuple; kwargs...)
     pairnet(size(xs, 1); kwargs...)

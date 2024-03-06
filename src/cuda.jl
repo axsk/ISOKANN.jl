@@ -2,6 +2,9 @@
 
 pickclosest(haystack::CuArray, needles::AbstractVector) = pickclosest(collect(haystack), needles)
 
+propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
+
+#=
 """ gpu(iso::IsoRun)
 
 move the model and data of the given `IsoRun` to the GPU for CUDA support
@@ -21,8 +24,8 @@ function Flux.cpu(iso::IsoRun)
     opt = Flux.cpu(opt)
     return IsoRun(; nd, nx, np, nl, nres, ny, nk, nxmax, sim, model, opt, data, losses, loggers, minibatch)
 end
+=#
 
-propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
 
 
 
@@ -40,7 +43,7 @@ propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = c
 #    gpu(batchedpairdists(cpu(x)))
 #end
 
-centercoordscoords(xs::CuArray) = cu(centercoordscoords(collect(xs)))
+#centercoordscoords(xs::CuArray) = cu(centercoordscoords(collect(xs)))
 
-datastats(data::Tuple{<:CuArray,<:CuArray}) = datastats(collect.(data))
+#datastats(data::Tuple{<:CuArray,<:CuArray}) = datastats(collect.(data))
 

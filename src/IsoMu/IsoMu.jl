@@ -16,6 +16,7 @@ import Flux
 import Chemfiles
 import Optimisers
 import Graphs
+import MLUtils
 
 export DataLink, isokann, train!, save_reactive_path, paperplot, adjust!, gpu!
 

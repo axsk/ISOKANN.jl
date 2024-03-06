@@ -30,3 +30,6 @@ We also provide different type of wrappers to load simulations [`vgv`] or genera
 Experimental support for adaptive sampling is provided by [`run(iso, sim; ny)`].
 
 
+# Design
+
+We have three base types `Iso2`, `

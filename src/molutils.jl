@@ -73,6 +73,7 @@ function readchemfile(source::String, steps=nothing)
     readchemfile(traj, steps)
 end
 
+# todo: should we return this wih flattened coords?
 function readchemfile(traj::Chemfiles.Trajectory, steps=nothing)
     isnothing(steps) && (steps = 1:length(traj))
     frame = Chemfiles.read_step(traj, 0)

@@ -64,8 +64,9 @@ function plot_training(iso; subdata=nothing)
 end
 
 function plot_chi(iso; target=true)
-    xs, ys = getobs(iso.data)
+    xs = getxs(iso.data)
     chi = iso.model(xs) |> cpu
+    xs = xs |> cpu
 
     if size(xs, 1) == 1
         scatter(xs', chi', xlabel="x", ylabel="χ")
@@ -219,4 +220,17 @@ function visualize_diala(mm, xs; kwargs...)
         scatter!(p1, p2, chi; kwargs..., markersize, markerstrokewidth=0)
     end
     plot!()
+end
+
+# note there is also plot_callback in isokann.jl
+function autoplot(secs=10)
+    Flux.throttle(
+        function plotcallback(; iso, subdata, kwargs...)
+            p = plot_training(iso; subdata)
+            try
+                display(p)
+            catch e
+                @warn "could not print ($e)"
+            end
+        end, secs)
 end

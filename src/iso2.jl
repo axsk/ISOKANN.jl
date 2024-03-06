@@ -1,7 +1,3 @@
-# test implementation of ISOKANN 2.0
-
-# for a simple demonstration try `test_dw()` and `test_tw()`
-
 import StatsBase
 import Flux
 import PCCAPlus
@@ -28,13 +24,7 @@ function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwarg
     return iso
 end
 
-function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
-    data = isodata(sim, nx, nk)
-    model = defaultmodel(sim; nout=nd)
-    return Iso2(data; model, kwargs...)
-end
-
-Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
+#Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
 
 function run!(iso::Iso2, n=1, epochs=1)
     p = ProgressMeter.Progress(n)
@@ -74,8 +64,8 @@ isotarget(iso::Iso2) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
 Optimisers.adjust!(iso::Iso2; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
 Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
-Flux.gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
-Flux.cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
 
 function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
     println(io, typeof(iso), ":")
@@ -84,12 +74,10 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
     println(io, " opt: $(optimizerstring(iso.opt))")
     println(io, " minibatch: $(iso.minibatch)")
     println(io, " loggers: $(length(iso.loggers))")
-    #println(io, " data: $(size.(iso.data)), $(typeof(iso.data))")
+    println(io, " data: $(size.(getobs(iso.data))), $(typeof(getobs(iso.data)))")
     length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
 end
 
-# TODO: rewrite for Iso2
-# with adaptive sampling
 function run!(iso::Iso2, sim::IsoSimulation, generates=1, iter=1, epochs=1; ny)
     for _ in 1:generates
         iso.data = adddata(iso.data, iso.model, sim, ny)
@@ -98,11 +86,17 @@ function run!(iso::Iso2, sim::IsoSimulation, generates=1, iter=1, epochs=1; ny)
     return iso
 end
 
+"""
+    runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
+
+Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
+`cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
+"""
 function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
     for _ in 1:generations
-        iso = cpu(iso)
+        #iso = cpu(iso)
         @time adddata!(iso, nx)
-        iso = gpu(iso)
+        #iso = gpu(iso)
         @time run!(iso, iter)
 
         if length(iso.data) > cutoff
@@ -115,3 +109,39 @@ end
 function adddata!(iso::Iso2, nx)
     iso.data = ISOKANN.adddata(iso.data, iso.model, nx)
 end
+
+"""
+    Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
+
+Convenience constructor which generates the `SimulationData` from the simulation `sim`
+and constructs the Iso2 object.
+
+## Arguments
+- `sim::IsoSimulation`: The `IsoSimulation` object.
+- `nx::Int`: The number of starting points.
+- `nk::Int`: The number of koopman samples.
+- `nd::Int`: Dimension of the χ function.
+"""
+function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
+    data = SimulationData(sim, nx, nk)
+    model = pairnet(dim(data); nout=nd)
+    return Iso2(data; model, kwargs...)
+end
+
+log(f::Function; kwargs...) = f(; kwargs...)
+log(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
+
+""" evluation of koopman by shiftscale(mean(model(data))) on the data """
+function koopman(model, ys)
+    #ys = Array(ys)
+    cs = model(ys)::AbstractArray{<:Number,3}
+    #ks = vec(StatsBase.mean(cs[1, :, :], dims=2))::AbstractVector
+    ks = dropdims(StatsBase.mean(cs, dims=2), dims=2)
+    return ks
+end
+
+""" empirical shift-scale operation """
+shiftscale(ks) =
+    let (a, b) = extrema(ks)
+        (ks .- a) ./ (b - a)
+    end

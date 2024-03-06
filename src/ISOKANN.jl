@@ -18,7 +18,6 @@ using Unitful: @u_str, unit
 using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
-using Flux: cpu, gpu
 
 import Chemfiles
 import ProgressMeter
@@ -39,9 +38,12 @@ import MLUtils: numobs
 import Flux: cpu, gpu
 
 export pairnet#, pairnetn
-export PDB_ACEMD, PDB_1UAO, PDB_diala_water
-export MollyLangevin, propagate, solve#, MollySDE
-export IsoRun, run!
+#export PDB_ACEMD, PDB_1UAO, PDB_diala_water
+#export MollyLangevin, propagate, solve#, MollySDE
+
+export propagate
+
+export run!, runadaptive!
 export AdamRegularized, pairnet#, Adam
 export plot_training, scatter_ramachandran
 export reactionpath
@@ -49,6 +51,8 @@ export cpu, gpu
 export Iso2
 export Doublewell, Triplewell, MuellerBrown
 export chis
+export SimulationData
+export getxs, getys
 
 
 
@@ -60,15 +64,15 @@ include("models.jl")          # the neural network models/architectures
 #include("simulators/molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
 include("data.jl")            # tools for handling the data (sampling, slicing, ...)
-include("iso1.jl")        # ISOKANN - first implementation with adaptive sampling
+#include("iso1.jl")        # ISOKANN - first implementation with adaptive sampling
 include("plots.jl")           # visualizations
 #include("loggers.jl")     # performance metric loggers
 #include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
-include("reactionpath.jl")
+
 
 include("simulators/langevin.jl")  # for the simulators
 
-include("isosimple.jl")
+#include("isosimple.jl")
 include("isotarget.jl")
 include("iso2.jl")
 include("simulators/potentials.jl")
@@ -84,6 +88,7 @@ include("cuda.jl")            # fixes for cuda
 
 #include("precompile.jl") # precompile for faster ttx
 
+include("reactionpath.jl")
 include("reactionpath2.jl")
 
 include("IsoMu/IsoMu.jl")

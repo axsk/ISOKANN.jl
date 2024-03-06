@@ -1,11 +1,8 @@
+"""
+    flatpairdists(x)
 
-
-
-# Take an array of shape (i,j...) where the i=3*n vectors are the flattened coords of n 3d points.
-# returns the flattened pairwise dists in an array of shape (n^2, j)
-" Threaded computation of pairwise dists for x::AbstractArray.
 Assumes each col of x to be a flattened representation of multiple 3d coords.
-Returns the flattened pairwise distances as columns."
+Returns the flattened pairwise distances as columns."""
 function flatpairdists(x)
     d, s... = size(x)
     c = div(d, 3)
@@ -15,13 +12,17 @@ function flatpairdists(x)
     return reshape(p, :, s...)
 end
 
-# TODO: note we return the squred distances here. we should take the sqrt but check whether aladip and so on still work fine
-function simplepairdists(x)
+"""
+    simplepairdists(x::AbstractArray{<:Any,3})
+
+Compute the pairwise distances between the columns of `x`, batched along the 3rd dimension.
+"""
+function simplepairdists(x::AbstractArray{<:Any,3})
     p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
     return sqrt.(p)
 end
 
-using Distances: pairwise, Euclidean
+#using Distances: pairwise, Euclidean
 using LinearAlgebra: diagind, UpperTriangular
 # using Distances
 #function batchedpairdists(x)
@@ -29,14 +30,32 @@ using LinearAlgebra: diagind, UpperTriangular
 #    dropdims(mapslices(x -> pairwise(Euclidean(), x, dims=2)[inds], x, dims=(1, 2)), dims=2)
 #end
 
+# return the indices of the upperdiagonal """
 function halfinds(n)
     a = UpperTriangular(ones(n, n))
     a[diagind(a)] .= 0
     findall(a .> 0)
 end
 
+""" 
+    pairdistfeatures(inds::AbstractVector)
+
+Returns a featurizer function which computes the pairwise distances between the particles specified by `inds` 
+"""
+function pairdistfeatures(inds::AbstractVector)
+    n = div(length(inds), 3)^2
+    function features(x)
+        x = selectrows(x, inds)
+        x = flatpairdists(x)
+        return x
+    end
+    features
+end
+
 
 ### custom implementation of multithreaded pairwise distances
+#=
+
 function batchedpairdists_threaded(x::AbstractArray)
     ChainRulesCore.@ignore_derivatives begin
         d, n, cols = size(x)
@@ -55,7 +74,7 @@ function pairdistkernel(out::AbstractMatrix, x::AbstractMatrix)
         out[i, j] = out[j, i] = ((x[1, i] - x[1, j])^2 + (x[2, i] - x[2, j])^2 + (x[3, i] - x[3, j])^2)
     end
 end
-
+=#
 
 ### alternative implementation using SliceMap.jl and Distances.jl, was a little bit slower
 

@@ -69,7 +69,7 @@ function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Ordinary
     u = hcat(bw[:, end:-1:1], fw)
 end
 
-function reactionpath(iso::IsoRun; minimize=true, kwargs...)
+function reactionpath(iso::Iso2; minimize=true, kwargs...)
     xs, ys = getobs(iso.data)
     x0 = xs[:, rand(1:size(xs, 2))]
     #println("minimizing energy")

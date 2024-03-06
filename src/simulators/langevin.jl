@@ -5,6 +5,8 @@ import ForwardDiff
 abstract type AbstractLangevin <: IsoSimulation end
 # interface methods: potential(l), sigma(l), dim(l)
 
+featurizer(::AbstractLangevin) = identity
+
 function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=tmax(l); dt=dt(l), alg=integrator(l), kwargs...)
     drift(x,p,t) = force(l, x)
     noise(x,p,t) = sigma(l, x)
@@ -14,6 +16,8 @@ end
 function force(l::AbstractLangevin, x)
     - ForwardDiff.gradient(x->potential(l, x), x)
 end
+
+propagate(l::AbstractLangevin, x0::CuArray, ny) = gpu(propagate(l, cpu(x0), ny))
 
 function propagate(l::AbstractLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)

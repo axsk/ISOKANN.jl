@@ -86,8 +86,9 @@ end
 
 @deprecate joindata (x, y) -> lastcat.(x, y)
 
-lastcat(x::T, y::T) where {N,T<:Array{<:Any,N}} = cat(x, y, dims=N)
+lastcat(x::T, y::T) where {N,T<:AbstractArray{<:Any,N}} = cat(x, y, dims=N)
 
+#=
 function datastats(data)
     xs, ys = data
     ext = extrema.(eachrow(xs))
@@ -95,6 +96,7 @@ function datastats(data)
     _, ks, n = size(ys)
     println("\n Dataset has $n entries (approx $uni unique) with $ks koop's. Extrema: $ext")
 end
+=#
 
 @deprecate stratified_x0(model, ys, n) subsample(model, ys, n)
 

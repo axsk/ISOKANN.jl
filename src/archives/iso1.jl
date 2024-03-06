@@ -151,8 +151,7 @@ end
 
 isotarget(iso::IsoRun, ys=iso.data[2]) = shiftscale(koopman(iso.model, ys)) |> vec
 
-log(f::Function; kwargs...) = f(; kwargs...)
-log(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
+
 
 function RateLogger()
     rates = Float64[]
@@ -162,27 +161,8 @@ function RateLogger()
 end
 
 
-# note there is also plot_callback in isokann.jl
-function autoplot(secs=10)
-    Flux.throttle(
-        function plotcallback(; iso, subdata, kwargs...)
-            p = plot_training(iso; subdata)
-            try
-                display(p)
-            catch e
-                @warn "could not print ($e)"
-            end
-        end, secs)
-end
 
-""" evluation of koopman by shiftscale(mean(model(data))) on the data """
-function koopman(model, ys)
-    #ys = Array(ys)
-    cs = model(ys)::AbstractArray{<:Number,3}
-    #ks = vec(StatsBase.mean(cs[1, :, :], dims=2))::AbstractVector
-    ks = dropdims(StatsBase.mean(cs, dims=2), dims=2)
-    return ks
-end
+
 
 
 
@@ -200,11 +180,7 @@ end
 
 scaleandshift(iso::IsoRun) = scaleandshift(iso.model, iso.data...)
 
-""" empirical shift-scale operation """
-shiftscale(ks) =
-    let (a, b) = extrema(ks)
-        (ks .- a) ./ (b - a)
-    end
+
 
 """ DEPRECATED - batched supervised learning for a given batchsize """
 function train_batch!(model, xs::AbstractMatrix, target::AbstractArray, opt, batchsize)
@@ -300,8 +276,7 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::IsoRun)
     length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
 end
 
-optimizerstring(opt) = typeof(opt)
-optimizerstring(opt::NamedTuple) = opt.layers[end-1].weight.rule
+
 
 function autotune!(iso::IsoRun, targets=[4, 1, 1, 4])
     (; nd, nx, ny, nk, np, nl, sim, model, opt, data, losses, nres) = iso
