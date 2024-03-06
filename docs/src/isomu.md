@@ -10,9 +10,8 @@ contact: a sikorski, s chewle
 1. run julia (install via: google juliaup)
 2. activate the project `julia> ]activate .`
 3. update ISOKANN to their github master branches
-- `julia> ]add https://github.com/JuliaMolSim/Molly.jl`
 - `julia> ]add https://github.com/axsk/ISOKANN.jl`
-4. load the module via `julia> using ISOKANN.IsoMu`
+4. load the module via `julia> using ISOKANN, ISOKANN.IsoMu`
 
 # Running the clustering
 ```julia
@@ -26,7 +25,7 @@ mu = isokann(link)
 train!(mu)
 
 # save the reactive path
-save_reactive_path(mu, out="out/path.pbd")
+save_reactive_path(mu, sigma=0.1, out="out/path.pbd", method=IsoMu.MaxPath())
 
 ```
 

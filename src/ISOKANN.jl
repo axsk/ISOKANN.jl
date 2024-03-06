@@ -46,7 +46,7 @@ export propagate
 export run!, runadaptive!
 export AdamRegularized, pairnet#, Adam
 export plot_training, scatter_ramachandran
-export reactionpath
+export reactive_path, save_reactive_path
 export cpu, gpu
 export Iso2
 export Doublewell, Triplewell, MuellerBrown

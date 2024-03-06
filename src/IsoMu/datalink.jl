@@ -49,6 +49,8 @@ end
 
 isodata(d::DataLink) = readdata(d).isodata
 
+ISOKANN.SimulationData(d::DataLink) = ISOKANN.SimulationData(d, isodata(d), coords(d), :implicit)
+
 function isodata(ds::Vector{DataLink})
   radius, cainds, reverse = let d1=ds[1]
     d1.radius, c_alpha_inds(d1), d1.reverse

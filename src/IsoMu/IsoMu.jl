@@ -17,8 +17,9 @@ import Chemfiles
 import Optimisers
 import Graphs
 import MLUtils
+import Optimisers: adjust!
 
-export DataLink, isokann, train!, save_reactive_path, paperplot, adjust!, gpu!
+export DataLink, isokann, train!, save_reactive_path, paperplot, adjust!, gpu!, cpu!
 
 include("datalink.jl")
 include("isomu.jl")

@@ -60,19 +60,18 @@ end
 """ see also IMu """
 isokann(link::Union{DataLink,Vector{DataLink}}; kwargs...) = IMu(link; kwargs...)
 
-function train!(mu::IMu, iter=nothing, upto=nothing)
-    !isnothing(iter) && (mu.iso.nd = iter)
-    ISOKANN.run!(mu.iso)
+function train!(mu::IMu, iter=nothing)
+    ISOKANN.run!(mu.iso, iter)
 end
 
-xs(mu::IMu) = mu.iso.data[1] |> collect
-ys(mu::IMu) = mu.iso.data[2] |> collect
+getxs(mu::IMu) = mu.iso.data[1] |> collect
+getys(mu::IMu) = mu.iso.data[2] |> collect
 model(mu::IMu) = mu.iso.model
 model(mu::IMu, xs) = mu.iso.model(xs) |> collect
 chi(mu::IMu) = model(mu, mu.iso.data[1]) |> vec |> collect
 coords(mu::IMu) = coords(mu.data)
 pdbfile(mu::IMu) = pdbfile(mu.data)
-MLUtils.numobs(mu::IMu) = size(xs(mu), 2)
+MLUtils.numobs(mu::IMu) = size(getxs(mu), 2)
 
 
 """
@@ -96,14 +95,14 @@ Compute the shortest Onsager-Machlup path through the data with the χ value as 
 - `path::Matrix`: aligned coordinates of the path
 """
 # TODO: this should dispatch to ISOKANN.reactive_path
-function reactive_path(
+#=function reactive_path(
     mu::IMu;
     sigma=0.1,
     window=1:numobs(mu),
     kwargs...
 )
 
-    xi = model(mu, xs(mu)[:, window]) |> vec
+    xi = model(mu, getxs(mu)[:, window]) |> vec
     co = flatten3d(coords(mu))[:, window]
 
     ids, _ = reactive_path(xi, co ./ norm(co, Inf), sigma; kwargs...)
@@ -149,12 +148,26 @@ function save_reactive_path(mu::IMu;
     mkpath(dirname(out))
     ids, path = reactive_path(mu; kwargs...)
     println("Found reactive path of length $(length(ids))")
-    xi = model(mu, xs(mu)) |> vec
+    xi = model(mu, getxs(mu)) |> vec
     plot_reactive_path(ids, xi) |> display
     writechemfile(out, path, source=pdbfile(mu))
     println("saved to $out")
     return ids
 end
+=#
+
+function ISOKANN.save_reactive_path(mu::IMu;
+    out=joinpath(outdir(mu.data), "reactive_path.pdb"),
+    sigma=0.1,
+    normalize=true,
+    kwargs...)
+
+    c = coords(mu) |> ISOKANN.flattenfirst
+    source = pdbfile(mu)
+
+    ISOKANN.save_reactive_path(mu.iso, c; source, out, sigma, normalize, kwargs...)
+end
+
 
 
 
@@ -166,21 +179,23 @@ function benchmark()
 end
 
 function meanvelocity(mu::IMu)
-    mean(abs2, diff(xs(mu), dims=2), dims=1)' |> plot
+    mean(abs2, diff(getxs(mu), dims=2), dims=1)' |> plot
     title!(mu.data.dir)
 end
 
-function Flux.adjust!(mu::IMu, args...; kwargs...)
+function adjust!(mu::IMu, args...; kwargs...)
     mu.iso.opt isa NamedTuple || error("have to train! model once before tuning parameters")
     Flux.adjust!(mu.iso.opt, args...; kwargs...)
 end
 
 function gpu!(mu::IMu)
     mu.iso = ISOKANN.gpu(mu.iso)
+    return mu
 end
 
 function cpu!(mu::IMu)
     mu.iso = ISOKANN.cpu(mu.iso)
+    return mu
 end
 
 function paperplot(mu::IMu)

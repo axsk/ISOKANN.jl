@@ -1,9 +1,13 @@
 # maximum likelihood path on given data
 
-function reactive_path(xi::AbstractVector, coords::Matrix, sigma; method=QuantilePath(0.05))
-    xi = Flux.cpu(xi)
+function reactive_path(xi::AbstractVector, coords::Matrix, sigma; method=QuantilePath(0.05), normalize=false)
+    xi = cpu(xi)
     from, to = fromto(method, xi)
-    ids = shortestchain(coords, xi, from, to; sigma)
+
+    nco = normalize ? coords ./ norm(coords, Inf) : coords
+
+    ids = shortestchain(nco, xi, from, to; sigma)
+
     path = coords[:, ids]
     return ids, path
 end
@@ -36,6 +40,7 @@ fromto(f::FromToPath, xi) = (f.s1, f.s2)
 fromto(::FullPath, xi) = (1, length(xi))
 fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
+using Distances: pairwise, Euclidean
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma=1)
@@ -96,15 +101,42 @@ function visualize_shortestpath(; n=1000, sigma=0.1)
 end
 
 
-# TODO: check how this works with IsoMu
-# TODO: scaling by 10 shouldnt belong here
+"""
+    save_reactive_path(iso::Iso2, coords::AbstractMatrix;
+        sigma=1,
+        out="out/reactive_path.pdb",
+        source,
+        kwargs...)
+
+Extract and save the reactive path of a given `iso`.
+
+Computes the maximum likelihood path with parameter `sigma` along the given data points, 
+aligns it and saves it to the `out` path.
+
+# Arguments
+- `iso::Iso2`: The isomer for which the reactive path is computed.
+- `coords::AbstractMatrix`: The coordinates corresponding to the samples in `iso`
+- `sigma=1`: The standard deviation used for the reactive path calculation.
+- `out="out/reactive_path.pdb"`: The output file path for saving the reactive path.
+- `source`: The source .pdb file
+= `kwargs...`: additional parameters passed to `reactive_path`.
+
+# Returns
+- `ids`: The IDs of the reactive path.
+
+"""
 function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
-    sigma=1, out="out/reactive_path.pdb", source)
+    sigma=1,
+    out="out/reactive_path.pdb",
+    source,
+    kwargs...)
+
     chi = chis(iso) |> vec |> cpu
-    ids, path = reactive_path(chi, coords ./ 10, sigma)
+    ids, path = reactive_path(chi, coords, sigma; kwargs...)
     plot_reactive_path(ids, chi) |> display
-    path = aligntrajectory(path) .* 10
+    path = aligntrajectory(path)
     println("saving reactive path of length $(length(ids)) to $out")
+    mkpath(dirname(out))
     writechemfile(out, path; source)
     return ids
 end

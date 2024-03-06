@@ -82,7 +82,7 @@ function readchemfile(traj::Chemfiles.Trajectory, steps=nothing)
         Chemfiles.read_step!(traj, s - 1, frame)
         xs[:, :, i] .= Chemfiles.positions(frame)
     end
-    return xs
+    return xs ./ 10 # convert from Angstom to nm
 end
 
 function writechemfile(filename, data::Array{<:Any,3}; source)
@@ -90,7 +90,7 @@ function writechemfile(filename, data::Array{<:Any,3}; source)
     frame = Chemfiles.read(trajectory)
     trajectory = Chemfiles.Trajectory(filename, 'w', uppercase(split(filename, ".")[end]))
     for i in 1:size(data, 3)
-        Chemfiles.positions(frame) .= data[:, :, i]
+        Chemfiles.positions(frame) .= data[:, :, i] .* 10 # convert from nm to Angstrom
         write(trajectory, frame)
     end
     close(trajectory)

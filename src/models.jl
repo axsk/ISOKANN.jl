@@ -38,6 +38,7 @@ function featurizer(sim)
 end
 =#
 
+pairnet(data; kwargs...) = pairnet(dim(data); kwargs...)
 
 function pairnet((xs, ys)::Tuple; kwargs...)
     pairnet(size(xs, 1); kwargs...)
