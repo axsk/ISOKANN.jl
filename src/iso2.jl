@@ -71,7 +71,7 @@ function run!(iso::Iso2, n=1, epochs=1)
 end
 
 function train_batch2!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
-    batchsize = minibatch == 0 ? size(ys, 2) : minibatch
+    batchsize = minibatch == 0 || size(xs, 2) < minibatch ? size(ys, 2) : minibatch
     data = Flux.DataLoader((xs, ys); batchsize, shuffle)
     ls = 0.0
     Flux.train!(model, data, opt) do m, x, y

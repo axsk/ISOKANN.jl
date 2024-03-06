@@ -21,6 +21,8 @@ struct VGVData2 <: VGVData
   coords
 end
 
+dim(v::VGVData) = size(v.data[1], 1)
+
 VGV_DATA_DIR = "/scratch/htc/ldonati/VGVAPG/implicit"
 VGV_DATA_5000 = "/scratch/htc/ldonati/VGVAPG/implicit5000"
 
@@ -63,7 +65,7 @@ end
 
 # a copy of lucas python model
 function vgv_luca(v::VGVData=VGVData(); kwargs...)
-  model = lucanet2(size(v.data, 1))
+  model = lucanet2(size(v.data[1], 1))
   opt = AdamRegularized(5e-4, 1e-5)
 
   iso = Iso2(v.data; model, opt, minibatch=100) |> gpu
@@ -136,7 +138,7 @@ function vgv_examplerun(v=VGV5000(nk=1), outdir="out/vgv_examplerun")
   savefig("$outdir/longtraj.png")
 
   save_sorted_path(iso, v, "$outdir/chisorted.pdb")
-  save_reactive_path(Iso2(iso), getcoords(v),
+  save_reactive_path(iso, getcoords(v),
     sigma=1,
     out="$outdir/reactionpath.pdb",
     source=pdbfile(v))

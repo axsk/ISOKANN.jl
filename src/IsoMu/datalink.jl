@@ -14,7 +14,7 @@ Base.@kwdef mutable struct DataLink
   dir::String
   stride::Int = 1
   startpos::Int = 1
-  radius::Float64 = 12
+  radius::Float64 = 1.2
   reverse::Bool = true
 end
 

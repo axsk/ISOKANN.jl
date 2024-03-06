@@ -11,6 +11,9 @@ ys is a tensor of size (d, k, n) where k is the number of koopman samples.
 """
 DataTuple = Tuple{<:AbstractArray{T},<:AbstractArray{T,3}} where {T<:Number}
 
+getxs(x) = getxs(getobs(x))
+getys(x) = getys(getobs(x))
+
 getxs(d::Tuple) = d[1]
 getys(d::Tuple) = d[2]
 

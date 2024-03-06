@@ -10,6 +10,7 @@ else
     @test_broken false
 end
 
+@time begin
 
 simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation()], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM"])
 
@@ -33,8 +34,10 @@ simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.Op
         @testset "Iso2 Transforms ($backend)" begin
             sim = MuellerBrown()
             for (d, t) in zip([1, 2, 2], [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()])
-                run!(Iso2(sim, model=pairnet(2, nout=d), transform=t) |> backend)
-                @test true
+                    @test begin
+                        run!(Iso2(sim, model=pairnet(2, nout=d), transform=t) |> backend)
+                        true
+                    end
             end
         end
 
@@ -68,4 +71,6 @@ simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.Op
         ISOKANN.vgv_examplerun(v, Base.Filesystem.tempname())
         @test true
     end
+end
+
 end
