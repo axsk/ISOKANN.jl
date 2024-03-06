@@ -59,7 +59,7 @@ export getxs, getys
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
-include("simulators/simulation.jl")      # Interface for simulations
+include("simulation.jl")      # Interface for simulations
 include("models.jl")          # the neural network models/architectures
 #include("simulators/molly.jl")           # interface to work with Molly Systems
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
@@ -88,7 +88,7 @@ include("cuda.jl")            # fixes for cuda
 
 #include("precompile.jl") # precompile for faster ttx
 
-include("reactionpath.jl")
+#include("reactionpath.jl")
 include("reactionpath2.jl")
 
 include("IsoMu/IsoMu.jl")

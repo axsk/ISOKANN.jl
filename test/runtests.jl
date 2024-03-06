@@ -16,24 +16,28 @@ simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.Op
 @testset "ISOKANN.jl" verbose = true begin
 
     for backend in [cpu, gpu]
-        for (sim, name) in simulations
-            @testset "Testing ISOKANN with $name ($backend)" begin
-                i = Iso2(sim) |> backend
-                @test true
-                run!(i)
-                @test true
-                @test runadapative!(i, generations=2, nx=1, iter=1)
-                @test true
+
+        @testset "Running basic system tests" begin
+            for (sim, name) in simulations
+                @testset "Testing ISOKANN with $name ($backend)" begin
+                    i = Iso2(sim) |> backend
+                    @test true
+                    run!(i)
+                    @test true
+                    runadaptive!(i, generations=2, nx=1, iter=1)
+                    @test true
+                end
             end
         end
 
         @testset "Iso2 Transforms ($backend)" begin
             sim = MuellerBrown()
-            for t in [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()]
-                run!(Iso2(sim, transform=t) |> backend)
+            for (d, t) in zip([1, 2, 2], [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()])
+                run!(Iso2(sim, model=pairnet(2, nout=d), transform=t) |> backend)
                 @test true
             end
         end
+
     end
 
     @testset "IsoMu.jl" begin
@@ -64,5 +68,4 @@ simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.Op
         ISOKANN.vgv_examplerun(v, Base.Filesystem.tempname())
         @test true
     end
-
 end

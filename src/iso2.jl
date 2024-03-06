@@ -15,6 +15,11 @@ using Plots
     minibatch = 0
 end
 
+
+""" 
+    Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
+
+"""
 function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
     opt = Flux.setup(opt, model)
     transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
@@ -22,6 +27,24 @@ function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwarg
     iso = Iso2(; model, opt, data, transform, kwargs...)
     gpu && (iso = ISOKANN.gpu(iso))
     return iso
+end
+
+"""
+    Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
+
+Convenience constructor which generates the `SimulationData` from the simulation `sim`
+and constructs the Iso2 object. See also Iso2(data; kwargs...)
+
+## Arguments
+- `sim::IsoSimulation`: The `IsoSimulation` object.
+- `nx::Int`: The number of starting points.
+- `nk::Int`: The number of koopman samples.
+- `nd::Int`: Dimension of the χ function.
+"""
+function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
+    data = SimulationData(sim, nx, nk)
+    model = pairnet(dim(data); nout=nd)  # maybe defaultmodel(data) makes sense here?
+    return Iso2(data; model, kwargs...)
 end
 
 #Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
@@ -94,10 +117,8 @@ Train iso with adaptive sampling. Sample `nx` new data points followed by `iter`
 """
 function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
     for _ in 1:generations
-        #iso = cpu(iso)
-        @time adddata!(iso, nx)
-        #iso = gpu(iso)
-        @time run!(iso, iter)
+        adddata!(iso, nx)
+        run!(iso, iter)
 
         if length(iso.data) > cutoff
             iso.data = iso.data[end-cutoff+1:end]
@@ -110,23 +131,7 @@ function adddata!(iso::Iso2, nx)
     iso.data = ISOKANN.adddata(iso.data, iso.model, nx)
 end
 
-"""
-    Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
 
-Convenience constructor which generates the `SimulationData` from the simulation `sim`
-and constructs the Iso2 object.
-
-## Arguments
-- `sim::IsoSimulation`: The `IsoSimulation` object.
-- `nx::Int`: The number of starting points.
-- `nk::Int`: The number of koopman samples.
-- `nd::Int`: Dimension of the χ function.
-"""
-function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
-    data = SimulationData(sim, nx, nk)
-    model = pairnet(dim(data); nout=nd)
-    return Iso2(data; model, kwargs...)
-end
 
 log(f::Function; kwargs...) = f(; kwargs...)
 log(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
