@@ -17,30 +17,28 @@ If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi))
   permute::Bool = true
 end
 
-function isotarget(model, xs, ys, t::TransformPseudoInv)
+function isotarget(model, xs::S, ys, t::TransformPseudoInv) where {S}
   (; normalize, direct, eigenvecs, permute) = t
-  chi = model(xs)
+  chi = model(xs) |> cpu
   size(chi, 1) > 1 || error("TransformPseudoInv does not work with one dimensional chi functions")
 
   cs = model(ys)::AbstractArray{<:Number,3}
-  kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
+  kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :] |> cpu
 
   if direct
     Kinv = chi * pinv(kchi)
-    s = schur(Kinv)
-    T = eigenvecs ? inv(s.vectors) : I
+    T = eigenvecs ? schur(Kinv).vectors : I
     target = T * Kinv * kchi
   else
     K = kchi * pinv(chi)
-    s = schur(K)
-    T = eigenvecs ? inv(s.vectors) : I
+    T = eigenvecs ? schur(K).vectors : I
     target = T * inv(K) * kchi
   end
 
   normalize && (target = target ./ norm.(eachrow(target), 1) .* size(target, 2))
   permute && (target = fixperm(target, chi))
 
-  return target
+  return S(target)
 end
 
 
