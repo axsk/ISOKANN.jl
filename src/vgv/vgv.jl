@@ -31,8 +31,8 @@ VGV5000(; kw...) = VGVData(VGV_DATA_5000, nx=5000, nk=10, t=1, natoms=73; kw...)
 function VGVData(dir=VGV_DATA_DIR; nx=500, nk=100, t=1, natoms=73)
   xs, ys = vgv_readdata(dir, nx, nk, t, natoms)
   coords = reshape(xs, :, size(xs,3))
-  dx = flatpairdists(flattenfirst(xs)) ./ 10
-  dy = flatpairdists(flattenfirst(ys)) ./ 10
+  dx = flatpairdists(flattenfirst(xs))
+  dy = flatpairdists(flattenfirst(ys))
   data = (dx, dy)
   VGVData2(dir, data, coords)
 end
@@ -109,7 +109,7 @@ end
 
 function plot_longtraj(iso, v::VGVData)
   xs = readchemfile("$(v.dir)/output/trajectory.dcd")
-  dx = flatpairdists(flattenfirst(xs)) ./ 10
+  dx = flatpairdists(flattenfirst(xs))
   vals = iso.model(dx |> gpu) |> cpu |> vec
   plot(vals, xlabel="frame #", ylabel="chi", title="long traj")
 end

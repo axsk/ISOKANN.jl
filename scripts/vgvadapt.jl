@@ -15,7 +15,7 @@ sim = ISOKANN.OpenMM.OpenMMSimulation(;
   friction=1)
 
 # create trainings data from the simulation
-data = ISOKANN.SimulationData(sim;
+@time data = ISOKANN.SimulationData(sim;
   nx=100, # number of data points
   nk=10 # number of koopman burst samplems
 )
@@ -52,3 +52,29 @@ scatter(chis(iso) |> vec |> cpu, ISOKANN.getxs(iso.data)[2416, :] |> vec |> cpu)
 
 # extract the reactive path from the sampling data
 save_reactive_path(iso, out="out/reactivepath.pdb", sigma=0.5)
+
+
+function scatter_rc(iso, a, b)
+  x = chis(iso) |> vec
+  natoms = div(ISOKANN.dim(iso.data.sim), 3)
+  hi = ISOKANN.halfinds(natoms)
+  i = findfirst(i -> i == CartesianIndex(a, b), hi)
+  scatter(ISOKANN.getxs(iso.data)[i, :] |> vec |> cpu, chis(iso) |> vec |> cpu, xlabel="distance $((a,b))", ylabel="χ")
+end
+
+function cor_rc(iso)
+  c = cor(ISOKANN.getxs(iso.data) |> cpu, ISOKANN.chis(iso) |> cpu, dims=2) |> vec
+  inds = sortperm(c, rev=true)
+  natoms = div(ISOKANN.dim(iso.data.sim), 3)
+  hi = ISOKANN.halfinds(natoms)
+  return zip(hi[inds], c[inds]) |> collect
+end
+
+function rc_plots(iso, n=1)
+  map(cor_rc(iso)[1:n]) do (a, b)
+    @show a, b
+    p = scatter_rc(iso, Tuple(a)...)
+    plot!(title="$(Tuple(a)), corr = $b") |> display
+  end
+end
+rc_plots(iso)

@@ -16,7 +16,7 @@ using Plots
 end
 
 
-""" 
+"""
     Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
 
 """
@@ -109,8 +109,8 @@ Train iso with adaptive sampling. Sample `nx` new data points followed by `iter`
 """
 function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
     for _ in 1:generations
-        adddata!(iso, nx)
-        run!(iso, iter)
+        @time adddata!(iso, nx)
+        @time run!(iso, iter)
 
         if length(iso.data) > cutoff
             iso.data = iso.data[end-cutoff+1:end]
@@ -142,3 +142,27 @@ shiftscale(ks) =
     let (a, b) = extrema(ks)
         (ks .- a) ./ (b - a)
     end
+
+""" compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
+function chi_exit_rate(x, Kx, tau)
+    @. shiftscale(x, p) = p[1] * x + p[2]
+    γ1, γ2 = LsqFit.coef(LsqFit.curve_fit(shiftscale, vec(x), vec(Kx), [1, 0.5]))
+    α = -1 / tau * Base.log(γ1)
+    β = α * γ2 / (γ1 - 1)
+    return α + β
+end
+
+chi_exit_rate(iso::Iso2, tau) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), tau)
+
+
+function exit_rates(x, kx, tau)
+    o = ones(length(x))
+    x = vec(x)
+    kx = vec(kx)
+    @show P = [x o .- x] \ [kx o .- kx]
+    return -1 / tau .* Base.log.(diag(P))
+end
+
+koopman(iso::Iso2) = koopman(iso.model, getys(iso.data))
+
+exit_rates(iso::Iso2) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), iso.data.sim.step * iso.data.sim.steps)

@@ -40,10 +40,10 @@ function halfinds(n)
     findall(a .> 0)
 end
 
-""" 
+"""
     pairdistfeatures(inds::AbstractVector)
 
-Returns a featurizer function which computes the pairwise distances between the particles specified by `inds` 
+Returns a featurizer function which computes the pairwise distances between the particles specified by `inds`
 """
 function pairdistfeatures(inds::AbstractVector)
     n = div(length(inds), 3)^2

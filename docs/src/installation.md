@@ -17,7 +17,8 @@ pkg> test ISOKANN
 
 Note that this can take a while on the first run as Julia downloads and precompiles all dependencies.
 
-We plan on installing openmm automatically with ISOKANN. Right now, if you want to use openmm with ISOKANN you will need to make it available to PyCall.jl.
+We plan on installing OpenMM automatically with ISOKANN. Right now, if you want to use openmm with ISOKANN you will need to make it available to PyCall.jl.
+This should work automatically, when using the Conda.jl Conda environment (i.e. starting julia with the env `PYTHON=""` and running `pkg> build PyCall.`). See also the [PyCall docs](https://github.com/JuliaPy/PyCall.jl?tab=readme-ov-file#specifying-the-python-version).
 
 ## Development
 

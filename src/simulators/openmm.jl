@@ -2,7 +2,8 @@ module OpenMM
 
 using PyCall
 
-import ..ISOKANN: ISOKANN, IsoSimulation,
+
+import ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdb
@@ -14,9 +15,13 @@ export OpenMMSimulation
 """ A Simulation wrapping the Python OpenMM Simulation object """
 struct OpenMMSimulation <: IsoSimulation
     pysim::PyObject
-    steps::Int
-    featurizer
     pdb
+    forcefields
+    temp
+    friction
+    step
+    steps
+    features
 end
 
 """ generate `n` random inintial points for the simulation `mm` """
@@ -30,7 +35,7 @@ function dim(mm::OpenMMSimulation)
 end
 
 function featurizer(sim::OpenMMSimulation)
-    if sim.featurizer isa (Vector{Int})
+    if sim.features isa (Vector{Int})
         ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
         return ISOKANN.pairdistfeatures(ix)
     else
@@ -56,7 +61,7 @@ function OpenMMSimulation(;
     minimize=false)
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
-    return OpenMMSimulation(pysim, steps, features, pdb)
+    return OpenMMSimulation(pysim::PyObject, pdb, forcefields, temp, friction, step, steps, features)
 end
 
 pdb(s::OpenMMSimulation) = s.pdb

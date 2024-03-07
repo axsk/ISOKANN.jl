@@ -10,7 +10,7 @@ The whole algorithm consists of three nested loop
 2. `np` iterations of the power iteration where the training target is determined with the current model and subdata
 3. `nl` iterations of the SGD updates to the neural network model to learn the current target
 
-On initialization it samples `ny` starting positions with `nk` Koopman samples each. 
+On initialization it samples `ny` starting positions with `nk` Koopman samples each.
 Furthermore if `nres` > 0 it samples `ny` new data points adaptively starting from χ-sampled positions every `nres` steps in the data loop.
 
 The `sim` field takes any simulation object that implements the data sampling interface (mainly the `propagate` method, see data.jl),
@@ -235,25 +235,7 @@ function estimate_K(x, Kx)
     lambda, a = LsqFit.coef(fit)
 end
 
-""" compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
-function chi_exit_rate(x, Kx, tau)
-    @. shiftscale(x, p) = p[1] * x + p[2]
-    γ1, γ2 = LsqFit.coef(LsqFit.curve_fit(shiftscale, vec(x), vec(Kx), [1, 0.5]))
-    α = -1 / tau * Base.log(γ1)
-    β = α * γ2 / (γ1 - 1)
-    return α + β
-end
 
-chi_exit_rate(iso::IsoRun, tau) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), tau)
-
-
-function exit_rates(x, kx, tau)
-    o = ones(length(x))
-    x = vec(x)
-    kx = vec(kx)
-    @show P = [x o .- x] \ [kx o .- kx]
-    return -1 / tau .* Base.log.(diag(P))
-end
 
 # TODO: remove, not used anywhere
 function gettarget(xs, ys, model)
