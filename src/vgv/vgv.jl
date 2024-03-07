@@ -21,7 +21,7 @@ struct VGVData2 <: VGVData
   coords
 end
 
-dim(v::VGVData) = size(v.data[1], 1)
+featuredim(v::VGVData) = size(v.data[1], 1)
 
 VGV_DATA_DIR = "/scratch/htc/ldonati/VGVAPG/implicit"
 VGV_DATA_5000 = "/scratch/htc/ldonati/VGVAPG/implicit5000"

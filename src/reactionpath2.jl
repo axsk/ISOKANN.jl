@@ -125,10 +125,10 @@ aligns it and saves it to the `out` path.
 - `ids`: The IDs of the reactive path.
 
 """
-function save_reactive_path(iso::Iso2, coords::AbstractMatrix;
+function save_reactive_path(iso::Iso2, coords::AbstractMatrix=getcoords(iso.data)[1] |> cpu;
     sigma=1,
     out="out/reactive_path.pdb",
-    source,
+    source=pdb(iso.data),
     kwargs...)
 
     chi = chis(iso) |> vec |> cpu

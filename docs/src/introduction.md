@@ -16,8 +16,8 @@ run!(iso)
 chis(iso)
 ```
 
-We also supply some basic simulations which can generate the data, e.g. [`Doublewell`](@ref), [`MuellerBrown`], [`Diffusion`], [`MollySimulation`] and [`OpenMMSimulation`].
-You can use the [`isodata`] function to sample data for ISOKANN.
+We also supply some basic simulations which can generate the data, e.g. [`Doublewell`](@ref), [`MuellerBrown`](@ref), [`Diffusion`](@ref), [`MollySimulation`](@ref) and [`OpenMMSimulation`](@ref).
+You can use the [`isodata`](@ref) function to sample data for ISOKANN.
 
 ```julia
 sim = Doublewell()
@@ -27,9 +27,4 @@ iso = Iso2(data)
 
 We also provide different type of wrappers to load simulations [`vgv`] or generate data from trajectories [`IsoMu`].
 
-Experimental support for adaptive sampling is provided by [`run(iso, sim; ny)`].
-
-
-# Design
-
-We have three base types `Iso2`, `
+For an advanced example take a look at the `scripts/vgvadapt.jl` file.

@@ -3,9 +3,9 @@
 
 using LinearAlgebra: normalize
 
-function reactionforce(sim, x, chi, direction=1, orth=0.01)
+function reactionforce(sim, x, chi, featurizer, direction=1, orth=0.01)
     # setcoords
-    f = force(sim, x)
+    f_sys = force(sim, x)
     #@show norm(f_sys)
 
     f_chi = Zygote.gradient(x -> first(chi(x)), x)[1]
@@ -29,6 +29,17 @@ function reactionforce(sim, x, chi, direction=1, orth=0.01)
     collect(f)
 end
 
+function dchidx(iso, x=getcoords(iso.data)[1][:, 1])
+    Zygote.gradient(x) do x
+        iso.model(features(iso.data, x)) |> first
+    end[1]
+end
+
+function test_dchidx()
+    data = SimulationData(OpenMMSimulation(), 10, 2, ISOKANN.flatpairdists)
+    iso = Iso2(data)
+    dchidx(iso)
+end
 
 
 function energyminforce(sim, x)

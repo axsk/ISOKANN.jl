@@ -42,8 +42,8 @@ and constructs the Iso2 object. See also Iso2(data; kwargs...)
 - `nd::Int`: Dimension of the χ function.
 """
 function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
-    data = SimulationData(sim, nx, nk)
-    model = pairnet(dim(data); nout=nd)  # maybe defaultmodel(data) makes sense here?
+    data = SimulationData(sim; nx, nk)
+    model = pairnet(data; nout=nd)  # maybe defaultmodel(data) makes sense here?
     return Iso2(data; model, kwargs...)
 end
 
@@ -57,7 +57,7 @@ function run!(iso::Iso2, n=1, epochs=1)
         xs, ys = getobs(iso.data)
         target = isotarget(iso.model, xs, ys, iso.transform)
         for i in 1:epochs
-            loss = train_batch2!(iso.model, xs, target, iso.opt, iso.minibatch)
+            loss = train_batch!(iso.model, xs, target, iso.opt, iso.minibatch)
             push!(iso.losses, loss)
         end
 
@@ -70,7 +70,7 @@ function run!(iso::Iso2, n=1, epochs=1)
     return iso
 end
 
-function train_batch2!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
+function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
     batchsize = minibatch == 0 || size(xs, 2) < minibatch ? size(ys, 2) : minibatch
     data = Flux.DataLoader((xs, ys); batchsize, shuffle)
     ls = 0.0
@@ -99,14 +99,6 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
     println(io, " loggers: $(length(iso.loggers))")
     println(io, " data: $(size.(getobs(iso.data))), $(typeof(getobs(iso.data)))")
     length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
-end
-
-function run!(iso::Iso2, sim::IsoSimulation, generates=1, iter=1, epochs=1; ny)
-    for _ in 1:generates
-        iso.data = adddata(iso.data, iso.model, sim, ny)
-        run!(iso, iter, epochs)
-    end
-    return iso
 end
 
 """

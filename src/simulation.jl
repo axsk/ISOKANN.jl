@@ -13,9 +13,9 @@ abstract type IsoSimulation end
 
 featurizer(::IsoSimulation) = identity
 
-dim(sim::IsoSimulation) = dim(sim.sys)
-getcoords(sim::IsoSimulation) = getcoords(sim.sys)
-rotationhandles(sim::IsoSimulation) = rotationhandles(sim.sys)
+#dim(sim::IsoSimulation) = dim(sim.sys)
+#getcoords(sim::IsoSimulation) = getcoords(sim.sys)
+#rotationhandles(sim::IsoSimulation) = rotationhandles(sim.sys)
 
 
 # TODO: this should return a SimulationData
@@ -79,7 +79,7 @@ end
 
 Generates ISOKANN trainingsdata with `nx` initial points and `nk` Koopman samples each.
 """
-function SimulationData(sim::IsoSimulation, nx::Int, nk::Int, featurizer=featurizer(sim))
+function SimulationData(sim::IsoSimulation; nx::Int, nk::Int, featurizer=featurizer(sim))
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, nk)
     coords = (xs, ys)
@@ -87,10 +87,12 @@ function SimulationData(sim::IsoSimulation, nx::Int, nk::Int, featurizer=featuri
     return SimulationData(sim, data, coords, featurizer)
 end
 
+features(sim::SimulationData, x) = sim.featurizer(x)
+
 gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.data), gpu(d.coords), d.featurizer)
 cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.data), cpu(d.coords), d.featurizer)
 
-dim(d::SimulationData) = size(d.data[1], 1)
+featuredim(d::SimulationData) = size(d.data[1], 1)
 
 Base.length(d::SimulationData) = size(d.data[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
@@ -104,6 +106,8 @@ flatend(x) = reshape(x, size(x, 1), :)
 
 getxs(d::SimulationData) = getxs(d.data)
 getys(d::SimulationData) = getys(d.data)
+
+pdb(s::SimulationData) = pdb(s.sim)
 
 
 """

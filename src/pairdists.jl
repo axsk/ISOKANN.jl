@@ -8,7 +8,8 @@ function flatpairdists(x)
     c = div(d, 3)
     inds = halfinds(c)
     b = reshape(x, 3, c, :)
-    p = simplepairdists(b)[inds, :]
+    p = sqpairdist(b)[inds, :]
+    p = sqrt.(p)
     return reshape(p, :, s...)
 end
 
@@ -17,9 +18,9 @@ end
 
 Compute the pairwise distances between the columns of `x`, batched along the 3rd dimension.
 """
-function simplepairdists(x::AbstractArray{<:Any,3})
+function sqpairdist(x::AbstractArray{<:Any,3})
     p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
-    return sqrt.(p)
+    return p
 end
 
 #using Distances: pairwise, Euclidean
@@ -33,7 +34,9 @@ using LinearAlgebra: diagind, UpperTriangular
 # return the indices of the upperdiagonal """
 function halfinds(n)
     a = UpperTriangular(ones(n, n))
-    a[diagind(a)] .= 0
+    ChainRulesCore.ignore_derivatives() do
+        a[diagind(a)] .= 0
+    end
     findall(a .> 0)
 end
 

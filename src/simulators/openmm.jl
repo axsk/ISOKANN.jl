@@ -2,7 +2,10 @@ module OpenMM
 
 using PyCall
 
-import ..ISOKANN: ISOKANN, propagate, dim, randx0, featurizer, defaultmodel, savecoords, IsoSimulation
+import ..ISOKANN: ISOKANN, IsoSimulation,
+    propagate, dim, randx0,
+    featurizer, defaultmodel,
+    savecoords, getcoords, force, pdb
 
 export OpenMMSimulation
 
@@ -12,7 +15,8 @@ export OpenMMSimulation
 struct OpenMMSimulation <: IsoSimulation
     pysim::PyObject
     steps::Int
-    features::Vector{Int}
+    featurizer
+    pdb
 end
 
 """ generate `n` random inintial points for the simulation `mm` """
@@ -26,33 +30,36 @@ function dim(mm::OpenMMSimulation)
 end
 
 function featurizer(sim::OpenMMSimulation)
-    ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
-    ISOKANN.pairdistfeatures(ix)
+    if sim.featurizer isa (Vector{Int})
+        ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
+        return ISOKANN.pairdistfeatures(ix)
+    else
+        return ISOKANN.flatpairdists
+    end
 end
 
 function defaultmodel(sim::OpenMMSimulation; nout, kwargs...)
     ISOKANN.pairnet(sim; nout, kwargs...)
 end
 
+DEFAULT_PDB = "$(@__DIR__)/../../data/systems/alanine dipeptide.pdb"
+
 """ Basic construction of a OpenMM Simulation, following the OpenMM documentation example """
 function OpenMMSimulation(;
-    pdb="$(ENV["HOME"])/.julia/conda/3/share/openmm/examples/input.pdb",
+    pdb=DEFAULT_PDB,
     forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
     temp=298, # kelvin
     friction=1,  # 1/picosecond
     step=0.002, # picoseconds
     steps=1,
-    features=calphas(pdb),
+    features=nothing,
     minimize=false)
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
-
-    if features == :all
-        features = collect(1:pysim.system.getNumParticles())
-    end
-    return OpenMMSimulation(pysim, steps, features)
+    return OpenMMSimulation(pysim, steps, features, pdb)
 end
 
+pdb(s::OpenMMSimulation) = s.pdb
 
 """
     propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
@@ -91,6 +98,19 @@ function setcoords(sim::PyObject, coords::AbstractArray{T}) where {T}
     sim.context.setPositions(reinterpret(Tuple{T,T,T}, coords))
 end
 
+function force(sim::OpenMMSimulation, x)
+    sim = sim.pysim
+    setcoords(sim, x)
+    f = sim.context.getState(getForces=true).getForces(asNumpy=true)
+    f = f.value_in_unit(f.unit) |> vec
+end
+
+function potential(sim::OpenMMSimulation, x)
+    sim = sim.pysim
+    setcoords(sim, x)
+    v = sim.context.getState(getEnergy=true).getPotentialEnergy()
+    v = v.value_in_unit(v.unit)
+end
 
 ### PYTHON CODE
 

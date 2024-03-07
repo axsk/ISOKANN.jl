@@ -180,3 +180,10 @@ end
 
 uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
+function exportsorted(iso, path="out/sorted.pdb")
+    xs = ISOKANN.getxs(iso.data)
+    p = iso.model(xs) |> vec |> sortperm
+    xs = ISOKANN.getcoords(iso.data)[1]
+    println("saving sorted data to $path")
+    ISOKANN.writechemfile(path, ISOKANN.aligntrajectory(xs[:, p] |> cpu); source=pdb(iso.data))
+end

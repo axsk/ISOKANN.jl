@@ -88,7 +88,7 @@ include("cuda.jl")            # fixes for cuda
 
 #include("precompile.jl") # precompile for faster ttx
 
-#include("reactionpath.jl")
+include("reactionpath.jl")
 include("reactionpath2.jl")
 
 include("IsoMu/IsoMu.jl")
