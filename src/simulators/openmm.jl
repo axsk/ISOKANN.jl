@@ -6,7 +6,8 @@ using PyCall
 import ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
-    savecoords, getcoords, force, pdb
+    savecoords, getcoords, force, pdb,
+    force, potential
 
 export OpenMMSimulation
 
@@ -22,6 +23,20 @@ struct OpenMMSimulation <: IsoSimulation
     step
     steps
     features
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", sim::IsoSimulation)#
+    println(
+        io, """
+        OpenMMSimulation(;
+            pdb="$(sim.pdb)",
+            forcefields=$(sim.forcefields),
+            temp=$(sim.temp),
+            friction=$(sim.friction),
+            step=$(sim.step),
+            steps=$(sim.steps),
+            features=$(sim.features))"""
+    )
 end
 
 """ generate `n` random inintial points for the simulation `mm` """
@@ -56,7 +71,7 @@ function OpenMMSimulation(;
     temp=298, # kelvin
     friction=1,  # 1/picosecond
     step=0.002, # picoseconds
-    steps=1,
+    steps=100,
     features=nothing,
     minimize=false)
 
@@ -107,7 +122,7 @@ function force(sim::OpenMMSimulation, x)
     sim = sim.pysim
     setcoords(sim, x)
     f = sim.context.getState(getForces=true).getForces(asNumpy=true)
-    f = f.value_in_unit(f.unit) |> vec
+    f = f.value_in_unit(f.unit) |> permutedims |> vec
 end
 
 function potential(sim::OpenMMSimulation, x)

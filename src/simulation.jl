@@ -74,7 +74,7 @@ struct SimulationData{S,D,C,F}
 end
 
 
-""" 
+"""
     SimulationData(sim::IsoSimulation, nx::Int, nk::Int, featurizer=featurizer(sim))
 
 Generates ISOKANN trainingsdata with `nx` initial points and `nk` Koopman samples each.
@@ -131,4 +131,19 @@ function adddata(d::SimulationData, model, n)
     data = lastcat.(d.data, data)
     coords = lastcat.(d.coords, coords)
     return SimulationData(d.sim, data, coords, d.featurizer)
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", data::SimulationData)#
+    println(
+        io, """
+        SimulationData(;
+            sim=$(data.sim),
+            data=$(size.(data.data)), $(split(string(typeof(data.coords[1])),",")[1]),
+            coords=$(size.(data.coords)), $(split(string(typeof(data.data[1])),",")[1]),
+            featurizer=$(data.featurizer))"""
+    )
+end
+
+function datasize((xs, ys)::Tuple)
+    return size(xs), size(ys)
 end

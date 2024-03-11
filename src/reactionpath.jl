@@ -42,6 +42,70 @@ function test_dchidx()
 end
 
 
+import Optim
+
+
+
+"""
+    reactionpath_minimum(iso::Iso2, x0, resolution=100)
+
+Compute the reaction path by integrating ∇χ with orthogonal energy minimization.
+
+# Arguments
+- `iso::Iso2`: The isomer for which the reaction path minimum is to be computed.
+- `x0`: The starting point for the reaction path computation.
+- `resolution=100`: The number of steps to take along the reaction path.
+
+# Returns
+The reaction path minimum as an array of coordinates.
+"""
+function reactionpath_minimum(iso::Iso2, x0, resolution=100)
+    @show chi = iso.model(iso.data.featurizer(x0)) |> only
+
+    steps2 = floor(Int, resolution * (1 - chi))
+    steps1 = floor(Int, resolution * chi)
+
+    x1 = reactionintegrator(iso, steps=steps1, stepsize=1 / resolution, x0=x0, direction=-1)[:, end:-1:1]
+    x2 = reactionintegrator(iso, steps=steps2, stepsize=1 / resolution, x0=x0, direction=1)
+
+    hcat(x1, x2)
+end
+
+function reactionintegrator(iso::Iso2; x0, steps=10, stepsize=0.01, direction=1)
+
+    U(x) = OpenMM.potential(iso.data.sim, x)
+
+    # energy minimization direction, orthogonal to chi
+    function dir(x)
+        du = -OpenMM.force(iso.data.sim, x)
+        dchi = dchidx(iso, x) |> normalize
+        return du - dot(du, dchi) * dchi
+    end
+
+    x = x0
+    xs = similar(x0, length(x0), steps)
+
+    iter = 0
+    p = Progress(steps)
+
+    for i in 1:steps
+        o = Optim.optimize(U, dir, x, Optim.LBFGS(; alphaguess=1e-8), Optim.Options(; x_tol=1e-8); inplace=false)
+        x = Optim.minimizer(o)
+        xs[:, i] .= x
+
+        dchi = dchidx(iso, x) * direction
+        x += stepsize / norm(dchi)^2 .* dchi  # adjust stepsize s.t. χ changes by `stepsize`
+
+        chi = iso.model(iso.data.featurizer(x)) |> only
+
+        iter += o.iterations
+        ProgressMeter.next!(p; showvalues=[(:iter, iter), (:V, o.minimum), (:chi, chi)])
+    end
+
+    return xs
+end
+
+
 function energyminforce(sim, x)
     f = force(sim, x)
     return f / norm(f)
@@ -80,11 +144,12 @@ function reactionpath(sim, x0, chi; extrapolate=0.00, orth=0.01, solver=Ordinary
     u = hcat(bw[:, end:-1:1], fw)
 end
 
-function reactionpath(iso::Iso2; minimize=true, kwargs...)
-    xs, ys = getobs(iso.data)
-    x0 = xs[:, rand(1:size(xs, 2))]
-    #println("minimizing energy")
-    #x0 = energyminimization(iso.sim, x0)
+function reactionpath_ode(iso::Iso2; x0, minimize=false, kwargs...)
+
+    if minimize
+        #println("minimizing energy")
+        #x0 = energyminimization(iso.sim, x0)
+    end
     println("computing reaction path")
     reactionpath(iso.sim, x0, iso.model; kwargs...)
 end
