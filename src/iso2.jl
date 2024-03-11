@@ -83,6 +83,7 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
 end
 
 chis(iso::Iso2) = iso.model(getxs(iso.data))
+chicoords(iso::Iso2, xs) = iso.model(iso.data.featurizer(xs))
 isotarget(iso::Iso2) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
 Optimisers.adjust!(iso::Iso2; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)

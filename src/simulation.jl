@@ -102,6 +102,13 @@ Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.data, i), g
 MLUtils.getobs(d::SimulationData) = d.data
 
 getcoords(d::SimulationData) = d.coords
+
+#getcoords(d::SimulationData) = d.coords[1]
+#getkoopcoords(d::SimulationData) = d.coords[2]
+#getfeatures(d::SimulationData) = d.features[1]
+#getkoopfeatures(d::SimulationData) = d.features[2]
+
+
 flatend(x) = reshape(x, size(x, 1), :)
 
 getxs(d::SimulationData) = getxs(d.data)
