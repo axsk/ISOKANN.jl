@@ -25,7 +25,7 @@ struct OpenMMSimulation <: IsoSimulation
     features
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", sim::IsoSimulation)#
+function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
     println(
         io, """
         OpenMMSimulation(;
@@ -64,7 +64,25 @@ end
 
 DEFAULT_PDB = "$(@__DIR__)/../../data/systems/alanine dipeptide.pdb"
 
-""" Basic construction of a OpenMM Simulation, following the OpenMM documentation example """
+"""
+    OpenMMSimulation(; pdb=DEFAULT_PDB, forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"], temp=298, friction=1, step=0.002, steps=100, features=nothing, minimize=false)
+
+Constructs an OpenMM simulation object.
+
+## Arguments
+- `pdb::String`: Path to the PDB file.
+- `forcefields::Vector{String}`: List of force field XML files.
+- `temp::Float64`: Temperature in Kelvin.
+- `friction::Float64`: Friction coefficient in 1/picosecond.
+- `step::Float64`: Integration step size in picoseconds.
+- `steps::Int`: Number of simulation steps.
+- `features`: Can be a vector of `Int` with the numbers of the atoms for pairwise distances. If `nothing` all pairwise distances are used.
+- `minimize::Bool`: Whether to perform energy minimization on first state.
+
+## Returns
+- `OpenMMSimulation`: An OpenMMSimulation object.
+
+"""
 function OpenMMSimulation(;
     pdb=DEFAULT_PDB,
     forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],

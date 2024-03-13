@@ -92,7 +92,7 @@ function reactionpath_ode(iso, x0; steps=101, minimize=false, extrapolate=0, ort
         OrdinaryDiffEq.ODEProblem((x, p, t) -> reactionforce(iso, sim, x, 1, orth),
             x0, (t0, 1 + extrapolate)), solver; saveat, dt, kwargs...)
 
-    return hcat(reduce.(hcat, (bw.u, fw.u))...)
+    return hcat(reduce.(hcat, (bw.u[end:-1:1], fw.u))...)
 end
 
 function reactionforce(iso, sim, x, direction, orth=1)
