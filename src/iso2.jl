@@ -112,10 +112,13 @@ function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
     for _ in 1:generations
         @time adddata!(iso, nx)
         @time run!(iso, iter)
+        #@show exit_rates(iso)
 
         if length(iso.data) > cutoff
             iso.data = iso.data[end-cutoff+1:end]
         end
+
+        CUDA.reclaim()
     end
     iso
 end
@@ -160,7 +163,7 @@ function exit_rates(x, kx, tau)
     o = ones(length(x))
     x = vec(x)
     kx = vec(kx)
-    @show P = [x o .- x] \ [kx o .- kx]
+    P = [x o .- x] \ [kx o .- kx]
     return -1 / tau .* Base.log.(diag(P))
 end
 

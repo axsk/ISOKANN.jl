@@ -97,6 +97,9 @@ function OpenMMSimulation(;
     return OpenMMSimulation(pysim::PyObject, pdb, forcefields, temp, friction, step, steps, features)
 end
 
+FORCE_AMBER = ["amber14-all.xml"]
+FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
+
 pdb(s::OpenMMSimulation) = s.pdb
 
 """

@@ -17,35 +17,37 @@ Compute the reaction path by integrating ∇χ with orthogonal energy minimizati
 - `x0`: The starting point for the reaction path computation.
 - `steps=100`: The number of steps to take along the reaction path.
 """
-function reactionpath_minimum(iso::Iso2, x0=getcoords(iso.data)[1][:, 1]; steps=101)
+function reactionpath_minimum(iso::Iso2, x0=getcoords(iso.data)[1][:, 1]; steps=101, xtol=1e-3)
 
-    x = energyminimization_hyperplane(iso, x0)
+    iso = cpu(iso) # TODO: find another solution
+
+    x = energyminimization_hyperplane(iso, x0; xtol)
     chi = chicoords(iso, x) |> only
 
     steps2 = floor(Int, steps * (1 - chi))
     steps1 = floor(Int, steps * chi)
     stepsize = 1 / steps
 
-    x1 = reactionintegrator(iso, x0; steps=steps1, stepsize, direction=-1)[:, end:-1:1]
-    x2 = reactionintegrator(iso, x0; steps=steps2, stepsize, direction=1)
+    x1 = reactionintegrator(iso, x0; steps=steps1, stepsize, direction=-1, xtol)[:, end:-1:1]
+    x2 = reactionintegrator(iso, x0; steps=steps2, stepsize, direction=1, xtol)
 
     hcat(x1, x, x2)
 end
 
-function reactionintegrator(iso::Iso2, x0; steps=10, stepsize=0.01, direction=1)
+function reactionintegrator(iso::Iso2, x0; steps=10, stepsize=0.01, direction=1, xtol)
     x = x0
     xs = similar(x0, length(x0), steps)
     @showprogress for i in 1:steps
         dchi = dchidx(iso, x)
         dchi .*= direction / norm(dchi)^2
         x += dchi .* stepsize
-        x = energyminimization_hyperplane(iso, x)
+        x = energyminimization_hyperplane(iso, x; xtol)
         xs[:, i] .= x
     end
     return xs
 end
 
-function energyminimization_hyperplane(iso, x; alpha=1e-5, x_tol=1e-6)
+function energyminimization_hyperplane(iso, x; alpha=1e-5, xtol=1e-6)
     U(x) = OpenMM.potential(iso.data.sim, x)
 
     # energy minimization direction, orthogonal to chi
@@ -55,7 +57,7 @@ function energyminimization_hyperplane(iso, x; alpha=1e-5, x_tol=1e-6)
         return du - dot(du, dchi) * dchi
     end
 
-    o = Optim.optimize(U, dir, x, Optim.LBFGS(; alphaguess=alpha), Optim.Options(; x_tol); inplace=false)
+    o = Optim.optimize(U, dir, x, Optim.LBFGS(; alphaguess=alpha), Optim.Options(; x_tol=xtol); inplace=false)
     return o.minimizer
 end
 
@@ -78,7 +80,9 @@ Compute the reaction path by integrating ∇χ as well as `orth` * F orthogonal 
 """
 function reactionpath_ode(iso, x0; steps=101, minimize=false, extrapolate=0, orth=0.01, solver=OrdinaryDiffEq.Tsit5(), dt=1e-3, kwargs...)
 
-    x0 = minimize ? energyminimization_hyperplane(iso, x0) : x0
+    iso = cpu(iso) # TODO: find another solution
+
+    x0 = minimize ? energyminimization_hyperplane(iso, x0, xtol=1e-4) : x0
 
     sim = iso.data.sim
     saveat = range(start=-extrapolate, stop=1 + extrapolate, length=steps)
@@ -92,11 +96,15 @@ function reactionpath_ode(iso, x0; steps=101, minimize=false, extrapolate=0, ort
         OrdinaryDiffEq.ODEProblem((x, p, t) -> reactionforce(iso, sim, x, 1, orth),
             x0, (t0, 1 + extrapolate)), solver; saveat, dt, kwargs...)
 
+    #return bw, fw
+
     return hcat(reduce.(hcat, (bw.u[end:-1:1], fw.u))...)
 end
 
 function reactionforce(iso, sim, x, direction, orth=1)
+
     f = force(sim, x)
+    #@show f[1]
     dchi = dchidx(iso, x)
     n2 = norm(dchi)^2
 

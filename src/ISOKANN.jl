@@ -54,6 +54,8 @@ export chis
 export SimulationData
 export getxs, getys
 
+export reactionpath_minimum, reactionpath_ode, writechemfile
+
 using ProgressMeter
 
 
