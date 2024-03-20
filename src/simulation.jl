@@ -13,10 +13,6 @@ abstract type IsoSimulation end
 
 featurizer(::IsoSimulation) = identity
 
-#dim(sim::IsoSimulation) = dim(sim.sys)
-#getcoords(sim::IsoSimulation) = getcoords(sim.sys)
-#rotationhandles(sim::IsoSimulation) = rotationhandles(sim.sys)
-
 
 # TODO: this should return a SimulationData
 # function isodata(sim::IsoSimulation, nx, nk)
@@ -101,7 +97,7 @@ Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.data, i), g
 
 MLUtils.getobs(d::SimulationData) = d.data
 
-getcoords(d::SimulationData) = d.coords
+getcoords(d::SimulationData) = d.coords[1]
 
 #getcoords(d::SimulationData) = d.coords[1]
 #getkoopcoords(d::SimulationData) = d.coords[2]

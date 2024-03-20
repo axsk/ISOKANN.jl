@@ -29,11 +29,8 @@ end
 compute initial data by propagating the molecules initial state
 to obtain the xs and propagating them further for the ys """
 function bootstrap(sim::IsoSimulation, nx, ny)
-    #x0 = reshape(getcoords(sim), :, 1)
-    #xs = reshape(propagate(sim, x0, nx), :, nx)
     xs = randx0(sim, nx)
     ys = propagate(sim, xs, ny)
-    #centercoords(xs), centercoords(ys)  # TODO: centercoords shouldn't be here
     return xs, ys
 end
 
@@ -183,7 +180,7 @@ uniqueidx(v) = unique(i -> v[i], eachindex(v))
 function exportsorted(iso, path="out/sorted.pdb")
     xs = ISOKANN.getxs(iso.data)
     p = iso.model(xs) |> vec |> sortperm
-    xs = ISOKANN.getcoords(iso.data)[1]
+    xs = ISOKANN.getcoords(iso.data)
     println("saving sorted data to $path")
     ISOKANN.writechemfile(path, ISOKANN.aligntrajectory(xs[:, p] |> cpu); source=pdb(iso.data))
 end

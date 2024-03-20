@@ -120,7 +120,7 @@ end
 # good colors
 # berlin, delta, roma, tofino, tokyo
 
-scatter_ramachandran(iso::Iso2) = scatter_ramachandran(getcoords(iso.data)[1] |> cpu, iso.model(getxs(iso.data)) |> cpu |> vec)
+scatter_ramachandran(iso::Iso2) = scatter_ramachandran(getcoords(iso.data) |> cpu, iso.model(getxs(iso.data)) |> cpu |> vec)
 
 scatter_ramachandran(x, model; kwargs...) = scatter_ramachandran(x, vec(model(x)))
 scatter_ramachandran(x, mat::Matrix; kwargs...) = plot(map(eachrow(mat)) do row
@@ -242,7 +242,7 @@ function autoplot(secs=10)
 end
 
 function plot_reactioncoords(iso)
-    coords = getcoords(iso.data)[1]
+    coords = getcoords(iso.data)
     dim = size(coords, 1)
     if dim == 66  # alanine dipeptide
         chi = chis(iso)

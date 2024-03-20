@@ -1,7 +1,7 @@
 import Optim
 using LinearAlgebra: normalize
 
-function dchidx(iso, x=getcoords(iso.data)[1][:, 1])
+function dchidx(iso, x=getcoords(iso.data)[:, 1])
     Zygote.gradient(x) do x
         iso.model(features(iso.data, x)) |> first
     end[1]
@@ -102,7 +102,7 @@ function reactionpath_ode(iso, x0; steps=101, minimize=false, extrapolate=0, ort
 end
 
 function randomcoords(iso)
-    c = getcoords(iso.data)[1]
+    c = getcoords(iso.data)
     n = size(c, 2)
     c[:, rand(1:n)]
 end
