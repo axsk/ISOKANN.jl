@@ -49,6 +49,16 @@ end
 
 #Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
 
+"""
+    run!(iso::Iso2, n=1, epochs=1)
+
+Run the training process for the Iso2 model.
+
+# Arguments
+- `iso::Iso2`: The Iso2 model to train.
+- `n::Int`: The number of (outer) Koopman iterations.
+- `epochs::Int`: The number of (inner) epochs to train the model for each Koopman evaluation.
+"""
 function run!(iso::Iso2, n=1, epochs=1)
     p = ProgressMeter.Progress(n)
     iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
@@ -68,6 +78,18 @@ function run!(iso::Iso2, n=1, epochs=1)
         ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
     end
     return iso
+end
+
+struct ValidationLossLogger
+    data
+    loss
+end
+
+function log(v::ValidationLossLogger; iso, kw...)
+    xs, ys = getobs(iso.data)
+    target = isotarget(iso.model, xs, ys, iso.transform)
+    loss = sum(abs2, iso.model(xs) .- target) / numobs(xs)
+    push!(v.loss, loss)
 end
 
 function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
@@ -108,9 +130,9 @@ end
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
+function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000, keepedges=false)
     for _ in 1:generations
-        @time adddata!(iso, nx)
+        @time adddata!(iso, nx; keepedges)
         @time run!(iso, iter)
         #@show exit_rates(iso)
 
@@ -118,13 +140,13 @@ function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
             iso.data = iso.data[end-cutoff+1:end]
         end
 
-        CUDA.reclaim()
+        #CUDA.reclaim()
     end
     iso
 end
 
-function adddata!(iso::Iso2, nx)
-    iso.data = ISOKANN.adddata(iso.data, iso.model, nx)
+function adddata!(iso::Iso2, nx; keepedges)
+    iso.data = ISOKANN.adddata(iso.data, iso.model, nx; keepedges)
 end
 
 
@@ -156,7 +178,7 @@ function chi_exit_rate(x, Kx, tau)
     return α + β
 end
 
-chi_exit_rate(iso::Iso2, tau) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), tau)
+chi_exit_rate(iso::Iso2, tau) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), iso.data.sim.step * iso.data.sim.steps)
 
 
 function exit_rates(x, kx, tau)
@@ -170,3 +192,10 @@ end
 koopman(iso::Iso2) = koopman(iso.model, getys(iso.data))
 
 exit_rates(iso::Iso2) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), iso.data.sim.step * iso.data.sim.steps)
+
+function simulationtime(iso::Iso2)
+    _, k, n = size(iso.data.data[2])
+    sim = iso.data.sim
+    t = k * n * sim.step * sim.steps / 1000
+    println("$t nanoseconds")
+end

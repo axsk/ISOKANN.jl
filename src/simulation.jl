@@ -122,14 +122,14 @@ pdb(s::SimulationData) = pdb(s.sim)
 
 χ-stratified subsampling. Select n samples amongst the provided ys/koopman points of `d` such that their χ-value according to `model` is approximately uniformly distributed and propagate them.
 Returns a new `SimulationData` which has the new data appended."""
-function adddata(d::SimulationData, model, n)
+function adddata(d::SimulationData, model, n; keepedges=false)
     y1 = d.data[2]
     c1 = d.coords[2]
 
     dim, nk, _ = size(y1)
     y1, c1 = flatend.((y1, c1))
 
-    c1 = c1[:, subsample_inds(model, y1, n, keepedges=false)]
+    c1 = c1[:, subsample_inds(model, y1, n; keepedges)]
     c2 = propagate(d.sim, c1, nk)
 
     coords = (c1, c2)

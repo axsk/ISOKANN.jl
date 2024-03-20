@@ -39,6 +39,10 @@ function plot_training(iso; subdata=nothing)
     !isnothing(subdata) && (data = subdata)
 
     p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss", xlabel="iter")
+
+    for v in filter(x -> isa(x, ValidationLossLogger), iso.loggers)
+        p1 = plot!(v.loss, label="validation")
+    end
     #=
     for tl in filter(l -> isa(l, TrainlossLogger), iso.loggers)
         if length(tl.losses) > 1
@@ -115,6 +119,8 @@ end
 
 # good colors
 # berlin, delta, roma, tofino, tokyo
+
+scatter_ramachandran(iso::Iso2) = scatter_ramachandran(getcoords(iso.data)[1] |> cpu, iso.model(getxs(iso.data)) |> cpu |> vec)
 
 scatter_ramachandran(x, model; kwargs...) = scatter_ramachandran(x, vec(model(x)))
 scatter_ramachandran(x, mat::Matrix; kwargs...) = plot(map(eachrow(mat)) do row
@@ -234,3 +240,19 @@ function autoplot(secs=10)
             end
         end, secs)
 end
+
+function plot_reactioncoords(iso)
+    coords = getcoords(iso.data)[1]
+    dim = size(coords, 1)
+    if dim == 66  # alanine dipeptide
+        chi = chis(iso)
+        scatter_ramachandran(coords, chi)
+    elseif dim == 219
+        inds = (41, 49)
+        inds = (20, 62)
+        i = findfirst(CartesianIndex(inds...) .== halfinds(73))
+        scatter(iso.data.data[1][i, :] |> vec, chis(iso) |> vec)
+    end
+end
+
+pdb(id::String) = Base.download("https://files.rcsb.org/download/$id.pdb")

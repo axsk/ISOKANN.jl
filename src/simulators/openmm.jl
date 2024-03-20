@@ -85,7 +85,7 @@ Constructs an OpenMM simulation object.
 """
 function OpenMMSimulation(;
     pdb=DEFAULT_PDB,
-    forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"],
+    forcefields=["amber14-all.xml"],
     temp=298, # kelvin
     friction=1,  # 1/picosecond
     step=0.002, # picoseconds
@@ -206,5 +206,19 @@ function calphas(pdbfile)
     end
     return inds
 end
+
+function filteratoms(pdbfile, pred)
+    inds = Int[]
+    for l in readlines(pdbfile)
+        s = split(l)
+        length(s) < 3 && continue
+        s[1] == "ATOM" || continue
+        pred(s[3]) && push!(inds, parse(Int, s[2]))
+    end
+    return inds
+end
+
+noHatoms(pdbfile) = filteratoms(pdbfile, !contains("H"))
+
 
 end

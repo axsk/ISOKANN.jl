@@ -17,21 +17,21 @@ Compute the reaction path by integrating ∇χ with orthogonal energy minimizati
 - `x0`: The starting point for the reaction path computation.
 - `steps=100`: The number of steps to take along the reaction path.
 """
-function reactionpath_minimum(iso::Iso2, x0=getcoords(iso.data)[1][:, 1]; steps=101, xtol=1e-3)
+function reactionpath_minimum(iso::Iso2, x0=randomcoords(cpu(iso)); steps=101, xtol=1e-3)
 
     iso = cpu(iso) # TODO: find another solution
 
-    x = energyminimization_hyperplane(iso, x0; xtol)
-    chi = chicoords(iso, x) |> only
+    xs = energyminimization_hyperplane(iso, x0; xtol)
+    chi = chicoords(iso, xs) |> only
 
     steps2 = floor(Int, steps * (1 - chi))
     steps1 = floor(Int, steps * chi)
     stepsize = 1 / steps
 
-    x1 = reactionintegrator(iso, x0; steps=steps1, stepsize, direction=-1, xtol)[:, end:-1:1]
-    x2 = reactionintegrator(iso, x0; steps=steps2, stepsize, direction=1, xtol)
+    x1 = reactionintegrator(iso, xs; steps=steps1, stepsize, direction=-1, xtol)[:, end:-1:1]
+    x2 = reactionintegrator(iso, xs; steps=steps2, stepsize, direction=1, xtol)
 
-    hcat(x1, x, x2)
+    hcat(x1, xs, x2)
 end
 
 function reactionintegrator(iso::Iso2, x0; steps=10, stepsize=0.01, direction=1, xtol)
@@ -99,6 +99,12 @@ function reactionpath_ode(iso, x0; steps=101, minimize=false, extrapolate=0, ort
     #return bw, fw
 
     return hcat(reduce.(hcat, (bw.u[end:-1:1], fw.u))...)
+end
+
+function randomcoords(iso)
+    c = getcoords(iso.data)[1]
+    n = size(c, 2)
+    c[:, rand(1:n)]
 end
 
 function reactionforce(iso, sim, x, direction, orth=1)
