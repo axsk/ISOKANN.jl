@@ -68,7 +68,6 @@ include("models.jl")          # the neural network models/architectures
 include("molutils.jl")        # molecular utilities: dihedrals, rotation
 include("data.jl")            # tools for handling the data (sampling, slicing, ...)
 #include("iso1.jl")        # ISOKANN - first implementation with adaptive sampling
-include("plots.jl")           # visualizations
 #include("loggers.jl")     # performance metric loggers
 #include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
 
@@ -78,6 +77,7 @@ include("simulators/langevin.jl")  # for the simulators
 #include("isosimple.jl")
 include("isotarget.jl")
 include("iso2.jl")
+include("plots.jl")           # visualizations
 include("simulators/potentials.jl")
 
 include("simulators/openmm.jl")

@@ -22,7 +22,7 @@ import Optimisers: adjust!
 export DataLink, isokann, train!, save_reactive_path, paperplot, adjust!, gpu!, cpu!
 
 include("datalink.jl")
-include("isomu.jl")
+include("imu.jl")
 include("dataloader.jl")
 
 end

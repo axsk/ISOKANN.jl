@@ -2,8 +2,12 @@ import Optim
 using LinearAlgebra: normalize
 
 function dchidx(iso, x=getcoords(iso.data)[:, 1])
+    dchidx(iso.data, iso.model, x)
+end
+
+function dchidx(data, model, x)
     Zygote.gradient(x) do x
-        iso.model(features(iso.data, x)) |> first
+        model(features(data, x)) |> first
     end[1]
 end
 
@@ -107,15 +111,23 @@ function randomcoords(iso)
     c[:, rand(1:n)]
 end
 
-function reactionforce(iso, sim, x, direction, orth=1)
 
+"""
+    reactionforce(iso, sim, x, direction, orth=1)
+
+
+Compute the vector `f` with colinear component to dchi/dx such that dchi/dx * f = 1
+and orth*forcefield in the orthogonal space
+"""
+function reactionforce(iso, sim, x, direction, orth=1)
     f = force(sim, x)
     #@show f[1]
     dchi = dchidx(iso, x)
     n2 = norm(dchi)^2
 
+    # remove component of f pointing into dchi
     f .-= dchi .* (dot(f, dchi) / n2)
-    dchi ./= n2
 
-    return direction * dchi + f * orth
+    @. f = f * orth + (direction / n2) * dchi
+    return f
 end

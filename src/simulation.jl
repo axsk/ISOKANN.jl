@@ -136,6 +136,33 @@ function adddata(d::SimulationData, model, n; keepedges=false)
     return SimulationData(d.sim, data, coords, d.featurizer)
 end
 
+function exploredata(d::SimulationData, model, n, step, steps)
+    y1 = d.data[2]
+    c1 = d.coords[2]
+
+    dim, nk, _ = size(y1)
+    y1, c1 = flatend.((y1, c1))
+
+    p = sortperm(model(y1))
+    inds = [p[1:n]; p[end-n+1:end]]
+
+    map(inds) do i
+        extrapolate(d, model, c1[:, inds])
+    end
+end
+
+extrapolate(d, model, x::AbstractMatrix) = map(x -> extrapolate(d, model, x), eachcol(x))
+
+function extrapolate(d, model, x::AbstractVector, step=0.001, steps=100)
+    x = copy(x)
+    for _ in 1:steps
+        grad = dchidx(d, model, x)
+        x .+= grad ./ norm(grad)^2 .* step
+        @show model(x)
+    end
+    return x
+end
+
 function Base.show(io::IO, mime::MIME"text/plain", data::SimulationData)#
     println(
         io, """
