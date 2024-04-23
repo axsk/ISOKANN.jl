@@ -178,7 +178,7 @@ function chi_exit_rate(x, Kx, tau)
     return α + β
 end
 
-chi_exit_rate(iso::Iso2, tau) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), iso.data.sim.step * iso.data.sim.steps)
+chi_exit_rate(iso::Iso2) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), iso.data.sim.step * iso.data.sim.steps)
 
 
 function exit_rates(x, kx, tau)
