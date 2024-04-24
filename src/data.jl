@@ -87,6 +87,7 @@ end
 @deprecate joindata (x, y) -> lastcat.(x, y)
 
 lastcat(x::T, y::T) where {N,T<:AbstractArray{<:Any,N}} = cat(x, y, dims=N)
+lastcat(x::T, y) where {T} = lastcat(x, convert(T, y))
 
 #=
 function datastats(data)

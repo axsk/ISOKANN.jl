@@ -85,6 +85,7 @@ function pdists(coords::AbstractMatrix, inds)
   return dists
 end
 
+# batched variant
 function pdists(x::AbstractArray, inds)
   d, s... = size(x)
   b = reshape(x, d, :)
@@ -92,7 +93,7 @@ function pdists(x::AbstractArray, inds)
   return reshape(p, :, s...)
 end
 
-
+# convenience wrapper
 function localpdists(coords, radius)
   inds = localpdistinds(coords, radius)
   dists = pdists(coords, inds)

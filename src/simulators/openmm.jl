@@ -179,14 +179,15 @@ function __init__()
     end
 end
 
-function savecoords(path, sim::OpenMMSimulation, coords)
+function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}) where {T}
+    coords = ISOKANN.cpu(coords)
     s = sim.pysim
     p = py"pdbfile.PDBFile"
     #file = py"open("$(path)', 'w')"
     file = py"open"(path, "w")
     p.writeHeader(s.topology, file)
     for (i, coords) in enumerate(eachcol(coords))
-        pos = reinterpret(Tuple{Float64,Float64,Float64}, coords .* 10)
+        pos = reinterpret(Tuple{T,T,T}, coords .* 10)
         p.writeModel(s.topology, pos, file, modelIndex=i)
     end
     p.writeFooter(s.topology, file)

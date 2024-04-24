@@ -12,7 +12,7 @@ end
 
 @time begin
 
-simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation()], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM"])
+simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation(), ISOKANN.OpenMM.OpenMMSimulation(features=0.3)], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM", "OpenMM localdists"])
 
 @testset "ISOKANN.jl" verbose = true begin
 
@@ -40,7 +40,6 @@ simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.Op
                     end
             end
         end
-
     end
 
     @testset "IsoMu.jl" begin

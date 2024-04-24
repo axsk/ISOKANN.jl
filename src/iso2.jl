@@ -125,12 +125,12 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
 end
 
 """
-    runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000)
+    runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf)
 
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=100, nx=10, iter=100, cutoff=1000, keepedges=false)
+function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false)
     for _ in 1:generations
         @time adddata!(iso, nx; keepedges)
         @time run!(iso, iter)
