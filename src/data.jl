@@ -169,7 +169,7 @@ function exportdata(data::AbstractArray, model, sys, path="out/data.pdb")
     i = uniqueidx(dd[1, :] |> vec)
     dd = dd[:, i]
     dd = standardform(dd)
-    savecoords(sys, dd, path)
+    savecoords(path, sys, dd)
     dd
 end
 

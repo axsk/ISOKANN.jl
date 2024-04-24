@@ -221,7 +221,7 @@ function saveall(iso::IsoRun, pathlength=300)
     (; model, losses, data, sim) = iso
     xs, ys = data
     zs = standardform(subsample(model, xs, pathlength))
-    savecoords(sim, zs, "out/latest/path.pdb")
+    savecoords("out/latest/path.pdb", sim, zs)
     savefig(plot_training(iso), "out/latest/learning.png")
 
     JLD2.save("out/latest/iso.jld2", "iso", iso)

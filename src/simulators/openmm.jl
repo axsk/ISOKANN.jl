@@ -167,7 +167,7 @@ function __init__()
     end
 end
 
-function savecoords(sim::OpenMMSimulation, coords, path)
+function savecoords(path, sim::OpenMMSimulation, coords)
     s = sim.pysim
     p = py"pdbfile.PDBFile"
     #file = py"open("$(path)', 'w')"

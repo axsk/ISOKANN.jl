@@ -38,9 +38,6 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::IsoSimulation)#
     println(io, "$(typeof(sim)) with $(dim(sim)) dimensions")
 end
 
-function savecoords(sim::IsoSimulation, data::AbstractArray, path; kwargs...)
-    savecoords(sim.sys, data, path; kwargs...)
-end
 
 function randx0(sim::IsoSimulation, nx)
     x0 = reshape(getcoords(sim), :, 1)

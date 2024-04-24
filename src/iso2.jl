@@ -193,9 +193,47 @@ koopman(iso::Iso2) = koopman(iso.model, getys(iso.data))
 
 exit_rates(iso::Iso2) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), iso.data.sim.step * iso.data.sim.steps)
 
+
+"""
+    simulationtime(iso::Iso2)
+
+print and return the total simulation time contained in the data of `iso` in nanoseconds.
+"""
 function simulationtime(iso::Iso2)
     _, k, n = size(iso.data.data[2])
     sim = iso.data.sim
     t = k * n * sim.step * sim.steps / 1000
     println("$t nanoseconds")
+    return t
 end
+
+
+
+"""
+    savecoords(path::String, iso::Iso2, inds=1:numobs(iso.data))
+
+Save the coordinates of the specified observation indices from the data of of `iso` to the file `path`.
+
+    savecoords(path::String, iso::Iso2, coords::AbstractArray)
+
+Save the coordinates of the specified matrix of coordinates to a file, using the molecule in `iso` as a template.
+"""
+function savecoords(path::String, iso::Iso2, inds=1:numobs(iso.data))
+    coords = getcoords(iso.data)[:,inds]
+    savecoords(path, iso, coords)
+end
+
+function savecoords(path::String, iso::Iso2, coords::AbstractMatrix)
+    savecoords(path, iso.data.sim, coords)
+end
+
+"""
+    saveextrema(path::String, iso::Iso2)
+
+Save the two extermal configurations (metastabilities) to the file `path`.
+"""
+function saveextrema(path::String, iso::Iso2)
+    c = vec(chis(iso))
+    savecoords(path, iso, [argmin(c), argmax(c)])
+end
+    
