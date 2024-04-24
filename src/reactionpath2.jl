@@ -133,6 +133,10 @@ function save_reactive_path(iso::Iso2, coords::AbstractMatrix=getcoords(iso.data
 
     chi = chis(iso) |> vec |> cpu
     ids, path = reactive_path(chi, coords, sigma; kwargs...)
+    if length(ids) == 0
+        @warn "The computed reactive path is empty. Try adjusting the `sigma` parameter."
+        return ids
+    end
     plot_reactive_path(ids, chi) |> display
     path = aligntrajectory(path)
     println("saving reactive path of length $(length(ids)) to $out")
