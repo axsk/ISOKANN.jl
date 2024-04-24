@@ -53,8 +53,13 @@ function featurizer(sim::OpenMMSimulation)
     if sim.features isa (Vector{Int})
         ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
         return ISOKANN.pairdistfeatures(ix)
-    else
+    elseif sim.features isa (Vector{CartesianIndex{2}}) # local pairwise distances
+        inds = sim.features
+        return coords->ISOKANN.pdists(coords, inds)
+    elseif sim.features == nothing
         return ISOKANN.flatpairdists
+    else
+        error("unknown featurizer")
     end
 end
 
@@ -76,7 +81,11 @@ Constructs an OpenMM simulation object.
 - `friction::Float64`: Friction coefficient in 1/picosecond.
 - `step::Float64`: Integration step size in picoseconds.
 - `steps::Int`: Number of simulation steps.
-- `features`: Can be a vector of `Int` with the numbers of the atoms for pairwise distances. If `nothing` all pairwise distances are used.
+- `features`: Which features to use for learning the chi function.
+              -  A vector of `Int` denotes the indices of all atoms to compute the pairwise distances from.
+              -  A vector of CartesianIndex{2} computes the specific distances between the atom pairs.
+              -  A number denotes the radius below which all pairs of atoms will be used (computed only on the starting configuration)
+              -  If `nothing` all pairwise distances are used.
 - `minimize::Bool`: Whether to perform energy minimization on first state.
 
 ## Returns
@@ -94,6 +103,9 @@ function OpenMMSimulation(;
     minimize=false)
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
+    if features isa Number
+        features = ISOKANN.localpdistinds(reshape(getcoords(pysim), :, 1), features)
+    end
     return OpenMMSimulation(pysim::PyObject, pdb, forcefields, temp, friction, step, steps, features)
 end
 

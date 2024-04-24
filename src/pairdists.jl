@@ -23,13 +23,8 @@ function sqpairdist(x::AbstractArray{<:Any,3})
     return p
 end
 
-#using Distances: pairwise, Euclidean
 using LinearAlgebra: diagind, UpperTriangular
-# using Distances
-#function batchedpairdists(x)
-#    inds = halfinds(size(x, 2))
-#    dropdims(mapslices(x -> pairwise(Euclidean(), x, dims=2)[inds], x, dims=(1, 2)), dims=2)
-#end
+
 
 # return the indices of the upperdiagonal """
 function halfinds(n)
@@ -56,49 +51,50 @@ function pairdistfeatures(inds::AbstractVector)
 end
 
 
-### custom implementation of multithreaded pairwise distances
-#=
+### Localized pairwise distances
 
-function batchedpairdists_threaded(x::AbstractArray)
-    ChainRulesCore.@ignore_derivatives begin
-        d, n, cols = size(x)
-        out = similar(x, n, n, cols)
-        @views Threads.@threads for i in 1:cols
-            pairdistkernel(@views(out[:, :, i]), x[:, :, i])
-        end
-        out
-    end
+"""
+    localpdistinds(coords::AbstractMatrix, radius)
+
+Given `coords` of shape ( 3n x frames ) return the pairs of indices whose minimal distance along all frames is at least once lower then radius
+"""
+function localpdistinds(coords::AbstractMatrix, radius)
+  traj = reshape(coords, 3, :, size(coords,2))
+  elmin(x, y) = min.(x, y)
+  d = mapreduce(elmin, eachslice(traj, dims=3)) do coords
+    UpperTriangular(pairwise(Euclidean(), coords, dims=2))
+  end
+  inds = findall(0 .< d .<= radius)
+  return inds
 end
 
-function pairdistkernel(out::AbstractMatrix, x::AbstractMatrix)
-    @assert size(x, 1) == 3
-    n, k = size(out)
-    @views for i in 1:n, j in i:k
-        out[i, j] = out[j, i] = ((x[1, i] - x[1, j])^2 + (x[2, i] - x[2, j])^2 + (x[3, i] - x[3, j])^2)
+"""
+    pdists(traj::Array{<:Any, 3}, inds)
+
+Compute the pairwise distances between the particles specified by the tuples `inds` over all frames in `traj`.
+"""
+function pdists(coords::AbstractMatrix, inds)
+  n = size(coords, 2)
+  traj = reshape(coords, 3, :, n)
+  dists = zeros(eltype(traj), length(inds), n)
+  for j in 1:n
+    for (i, ind) in enumerate(inds)
+      dists[i, j] = @views norm(traj[:, ind[1], j] - traj[:, ind[2], j])
     end
-end
-=#
-
-### alternative implementation using SliceMap.jl and Distances.jl, was a little bit slower
-
-#=
-import SliceMap  # provides slicemap == mapslices but with zygote gradients
-using Distances
-
-" Threaded computation of pairwise dists using SliceMap.jl and Distances.jl"
-function threadpairdists(x)
-    ChainRulesCore.@ignore_derivatives begin
-        d, s... = size(x)
-        x = reshape(x, d, :)
-        pd = SliceMap.ThreadMapCols(pairwisevec, x)
-        pd = reshape(pd, :, s...)
-        return pd
-    end
+  end
+  return dists
 end
 
-" Non-threaded computation of pairwise dists using SliceMap.jl and Distances.jl"
-slicemapdist(x) = ChainRulesCore.@ignore_derivatives SliceMap.slicemap(pairwisevec, x, dims=1)
+function pdists(x::AbstractArray, inds)
+  d, s... = size(x)
+  b = reshape(x, d, :)
+  p = pdists(b, inds)
+  return reshape(p, :, s...)
+end
 
-pairwisevec(col::AbstractVector) = vec(pairwise(SqEuclidean(), reshape(col,3,:), dims=2))
 
-=#
+function localpdists(coords, radius)
+  inds = localpdistinds(coords, radius)
+  dists = pdists(coords, inds)
+  dists, inds
+end
