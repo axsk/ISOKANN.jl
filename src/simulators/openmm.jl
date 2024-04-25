@@ -23,6 +23,8 @@ struct OpenMMSimulation <: IsoSimulation
     step
     steps
     features
+    nthreads
+    mmthreads
 end
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
@@ -87,6 +89,8 @@ Constructs an OpenMM simulation object.
               -  A number denotes the radius below which all pairs of atoms will be used (computed only on the starting configuration)
               -  If `nothing` all pairwise distances are used.
 - `minimize::Bool`: Whether to perform energy minimization on first state.
+- `nthreads`: The number of threads to use for parallelization of multiple simulations.
+- `mmthreads`: The number of threads to use for each OpenMM simulation. Set to "gpu" to use the GPU platform.
 
 ## Returns
 - `OpenMMSimulation`: An OpenMMSimulation object.
@@ -100,13 +104,15 @@ function OpenMMSimulation(;
     step=0.002, # picoseconds
     steps=100,
     features=nothing,
-    minimize=false)
+    minimize=false,
+    nthreads=Threads.nthreads(),
+    mmthreads=1)
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
     if features isa Number
         features = ISOKANN.localpdistinds(reshape(getcoords(pysim), :, 1), features)
     end
-    return OpenMMSimulation(pysim::PyObject, pdb, forcefields, temp, friction, step, steps, features)
+    return OpenMMSimulation(pysim::PyObject, pdb, forcefields, temp, friction, step, steps, features, nthreads, mmthreads)
 end
 
 FORCE_AMBER = ["amber14-all.xml"]
@@ -129,7 +135,7 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 - `mmthreads`: The number of threads to use for each OpenMM simulation. Set to "gpu" to use the GPU platform.
 
 """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
@@ -183,7 +189,6 @@ function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}) where
     coords = ISOKANN.cpu(coords)
     s = sim.pysim
     p = py"pdbfile.PDBFile"
-    #file = py"open("$(path)', 'w')"
     file = py"open"(path, "w")
     p.writeHeader(s.topology, file)
     for (i, coords) in enumerate(eachcol(coords))

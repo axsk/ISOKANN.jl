@@ -132,8 +132,8 @@ Train iso with adaptive sampling. Sample `nx` new data points followed by `iter`
 """
 function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false)
     for _ in 1:generations
-        @time adddata!(iso, nx; keepedges)
-        @time run!(iso, iter)
+        @time "simulating:" adddata!(iso, nx; keepedges)
+        @time "training:  " run!(iso, iter)
         #@show exit_rates(iso)
 
         if length(iso.data) > cutoff
