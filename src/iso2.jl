@@ -59,7 +59,7 @@ Run the training process for the Iso2 model.
 - `n::Int`: The number of (outer) Koopman iterations.
 - `epochs::Int`: The number of (inner) epochs to train the model for each Koopman evaluation.
 """
-function run!(iso::Iso2, n=1, epochs=1)
+function run!(iso::Iso2, n=1, epochs=1; showprogress=true)
     p = ProgressMeter.Progress(n)
     iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
@@ -75,7 +75,7 @@ function run!(iso::Iso2, n=1, epochs=1)
             log(logger; iso, subdata=nothing)
         end
 
-        ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
+        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
     end
     return iso
 end
@@ -131,14 +131,26 @@ Train iso with adaptive sampling. Sample `nx` new data points followed by `iter`
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
 function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false)
-    for _ in 1:generations
-        @time "simulating:" adddata!(iso, nx; keepedges)
-        @time "training:  " run!(iso, iter)
-        #@show exit_rates(iso)
+    p = ProgressMeter.Progress(generations)
+    t_sim = 0.
+    t_train = 0.
+    for g in 1:generations
+        t_sim += @elapsed adddata!(iso, nx; keepedges)
 
         if length(iso.data) > cutoff
             iso.data = iso.data[end-cutoff+1:end]
         end
+
+        t_train += @elapsed run!(iso, iter, showprogress=false)
+
+        ProgressMeter.next!(p; showvalues=() -> [
+            (:generation, g),
+            (:loss, iso.losses[end]),
+            (:iterations, length(iso.losses)),
+            (:data, size(getys(iso.data))),
+            ("t_sim, t_train", (t_sim, t_train)),
+            ("simulated time", "$(simulationtime(iso))ns"), #TODO: doesnt work with cutoff
+            (:macrorates, exit_rates(iso))])
 
         #CUDA.reclaim()
     end
@@ -203,7 +215,7 @@ function simulationtime(iso::Iso2)
     _, k, n = size(iso.data.data[2])
     sim = iso.data.sim
     t = k * n * sim.step * sim.steps / 1000
-    println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?
+    #println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?
     return t
 end
 
