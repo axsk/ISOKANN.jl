@@ -70,6 +70,17 @@ simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.Op
         ISOKANN.vgv_examplerun(v, Base.Filesystem.tempname())
         @test true
     end
+
+    @testset "Iso2 and IsoSimulation operations" begin
+        iso = Iso2(OpenMMSimulation(), nx=10)
+        iso.data = iso.data[6:10] # data slicing
+        path =  Base.Filesystem.tempname() * ".jld2"
+        ISOKANN.save(path, iso)
+        isol = ISOKANN.load(path, iso)
+        @assert iso.data.coords == isol.data.coords
+        runadaptive!(isol, generations=1, nx=1, iter=1)
+        @test true
+    end
 end
 
 end

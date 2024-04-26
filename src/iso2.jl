@@ -203,7 +203,7 @@ function simulationtime(iso::Iso2)
     _, k, n = size(iso.data.data[2])
     sim = iso.data.sim
     t = k * n * sim.step * sim.steps / 1000
-    println("$t nanoseconds")
+    println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?
     return t
 end
 
@@ -236,4 +236,30 @@ function saveextrema(path::String, iso::Iso2)
     c = vec(chis(iso))
     savecoords(path, iso, [argmin(c), argmax(c)])
 end
-    
+
+"""
+    save(path::String, iso::Iso2)
+
+Save the complete Iso2 object to a JLD2 file """
+function save(path::String, iso::Iso2)
+    if iso.data.sim isa OpenMMSimulation
+        @warn "currently only the OpenMM `defaultsystem` is supported, any custom OpenMM simulations will not be reconstructed"
+    end
+    iso = cpu(iso)
+    JLD2.save(path, "iso", iso)
+end
+
+"""
+    load(path::String, iso::Iso2)
+
+Load the Iso2 object from a JLD2 file
+Note that it will be loaded to the CPU, even if it was saved on the GPU.
+An OpenMMSimulation will be reconstructed anew from the saved pdb file.
+"""
+function load(path::String, iso::Iso2)
+    iso = JLD2.load(path, "iso")
+    if iso.data.sim isa OpenMMSimulation
+        @warn "currently only the OpenMM `defaultsystem` is supported, any custom OpenMM simulations will not be reconstructed"
+    end
+    return iso
+end

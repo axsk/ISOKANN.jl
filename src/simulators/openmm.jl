@@ -9,6 +9,8 @@ import ISOKANN: ISOKANN, IsoSimulation,
     savecoords, getcoords, force, pdb,
     force, potential
 
+import JLD2
+
 export OpenMMSimulation
 
 ###
@@ -238,5 +240,42 @@ end
 
 noHatoms(pdbfile) = filteratoms(pdbfile, !contains("H"))
 
+struct OpenMMSimulationSerialized
+    pdb
+    forcefields
+    temp
+    friction
+    step
+    steps
+    features
+    nthreads
+    mmthreads
+end
+
+JLD2.writeas(::Type{OpenMMSimulation}) = OpenMMSimulationSerialized
+
+Base.convert(::Type{OpenMMSimulationSerialized}, a::OpenMMSimulation) =
+    OpenMMSimulationSerialized(
+        a.pdb,
+        a.forcefields,
+        a.temp,
+        a.friction,
+        a.step,
+        a.steps,
+        a.features,
+        a.nthreads,
+        a.mmthreads)
+
+Base.convert(::Type{OpenMMSimulation}, a::OpenMMSimulationSerialized) =
+    OpenMMSimulation(;
+        pdb=a.pdb,
+        forcefields=a.forcefields,
+        temp=a.temp,
+        friction=a.friction,
+        step=a.step,
+        steps=a.steps,
+        features=a.features,
+        nthreads=a.nthreads,
+        mmthreads=a.mmthreads)
 
 end
