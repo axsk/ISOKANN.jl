@@ -59,7 +59,7 @@ A struct combining a simulation with the simulated coordinates and corresponding
 - `featurizer::F`: A function mapping coordinates to ISOKANN features.
 
 """
-struct SimulationData{S,D,C,F}
+mutable struct SimulationData{S,D,C,F}
     sim::S
     data::D
     coords::C

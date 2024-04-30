@@ -268,7 +268,7 @@ Load the Iso2 object from a JLD2 file
 Note that it will be loaded to the CPU, even if it was saved on the GPU.
 An OpenMMSimulation will be reconstructed anew from the saved pdb file.
 """
-function load(path::String, iso::Iso2)
+function load(path::String)
     iso = JLD2.load(path, "iso")
     if iso.data.sim isa OpenMMSimulation
         @warn "currently only the OpenMM `defaultsystem` is supported, any custom OpenMM simulations will not be reconstructed"
