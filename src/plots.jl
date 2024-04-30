@@ -236,6 +236,7 @@ function autoplot(secs=10)
             try
                 display(p)
             catch e
+                e isa InterruptException && rethrow(e)
                 @warn "could not print ($e)"
             end
         end, secs)

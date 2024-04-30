@@ -11,7 +11,7 @@ import ISOKANN: ISOKANN, IsoSimulation,
 
 import JLD2
 
-export OpenMMSimulation
+export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 
 ###
 
@@ -112,10 +112,15 @@ function OpenMMSimulation(;
 
     pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
     if features isa Number
-        features = ISOKANN.localpdistinds(reshape(getcoords(pysim), :, 1), features)
+        radius=features
+        features = calphas_and_spheres(pdb, pysim, radius)
     end
     return OpenMMSimulation(pysim::PyObject, pdb, forcefields, temp, friction, step, steps, features, nthreads, mmthreads)
 end
+
+localpdistinds(pysim::PyObject, radius) = ISOKANN.localpdistinds(reshape(getcoords(pysim), :, 1), radius)
+localpdistinds(sim::OpenMMSimulation, radius) = localpdistinds(sim.pysim, radius)
+
 
 FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
@@ -136,6 +141,8 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 - `nthreads`: The number of threads to use for parallelization of multiple simulations.
 - `mmthreads`: The number of threads to use for each OpenMM simulation. Set to "gpu" to use the GPU platform.
 
+Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
+With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
     dim, nx = size(x0)
@@ -226,6 +233,14 @@ function calphas(pdbfile)
     end
     return inds
 end
+
+function calphas_and_spheres(pdbfile::String, pysim::PyObject, radius)
+    cind = calphas(pdbfile)
+    cpairs = [CartesianIndex(x,y) for x in cind, y in cind][ISOKANN.halfinds(length(cind))]
+    return unique(localpdistinds(pysim, radius))
+end
+
+calphas_and_spheres(sim::OpenMMSimulation, radius) = calphas_and_spheres(sim.pdb, sim.pysim, radius)
 
 function filteratoms(pdbfile, pred)
     inds = Int[]

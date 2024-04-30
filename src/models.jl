@@ -6,6 +6,8 @@ Regularized(opt, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(re
 """ Adam with L2 regularization. Note that this is different from AdamW (Adam+WeightDecay) (c.f. Decay vs L2 Reg.) """
 AdamRegularized(adam=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
 
+NesterovRegularized(lr=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Nesterov(lr))
+
 optimizerstring(opt) = typeof(opt)
 optimizerstring(opt::NamedTuple) = opt.layers[end-1].weight.rule
 
