@@ -61,7 +61,7 @@ A struct combining a simulation with the simulated coordinates and corresponding
 """
 mutable struct SimulationData{S,D,C,F}
     sim::S
-    data::D
+    features::D
     coords::C
     featurizer::F
 end
@@ -72,27 +72,31 @@ end
 
 Generates ISOKANN trainingsdata with `nx` initial points and `nk` Koopman samples each.
 """
-function SimulationData(sim::IsoSimulation; nx::Int, nk::Int, featurizer=featurizer(sim))
-    xs = randx0(sim, nx)
-    ys = propagate(sim, xs, nk)
+SimulationData(sim::IsoSimulation; nx::Int, nk::Int, kwargs...) = 
+    SimulationData(sim, randx0(sim, nx); nk, kwargs...)
+
+SimulationData(sim::IsoSimulation, xs::AbstractMatrix; nk::Int, kwargs...) =
+    SimulationData(sim, (xs, propagate(sim, xs, nk)); kwargs...)
+
+function SimulationData(sim::IsoSimulation, (xs, ys); featurizer=featurizer(sim))
     coords = (xs, ys)
-    data = featurizer.(coords)
-    return SimulationData(sim, data, coords, featurizer)
+    features = featurizer.(coords)
+    return SimulationData(sim, features, coords, featurizer)
 end
 
-features(sim::SimulationData, x) = sim.featurizer(x)
+#features(sim::SimulationData, x) = sim.featurizer(x)
 
-gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.data), gpu(d.coords), d.featurizer)
-cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.data), cpu(d.coords), d.featurizer)
+gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), gpu(d.coords), d.featurizer)
+cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), cpu(d.coords), d.featurizer)
 
-featuredim(d::SimulationData) = size(d.data[1], 1)
+featuredim(d::SimulationData) = size(d.features[1], 1)
 
-Base.length(d::SimulationData) = size(d.data[1], 2)
+Base.length(d::SimulationData) = size(d.features[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
 
-Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.data, i), getobs(d.coords, i), d.featurizer)
+Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
 
-MLUtils.getobs(d::SimulationData) = d.data
+MLUtils.getobs(d::SimulationData) = d.features
 
 getcoords(d::SimulationData) = d.coords[1]
 
@@ -104,8 +108,8 @@ getcoords(d::SimulationData) = d.coords[1]
 
 flatend(x) = reshape(x, size(x, 1), :)
 
-getxs(d::SimulationData) = getxs(d.data)
-getys(d::SimulationData) = getys(d.data)
+getxs(d::SimulationData) = getxs(d.features)
+getys(d::SimulationData) = getys(d.features)
 
 pdb(s::SimulationData) = pdb(s.sim)
 
@@ -116,7 +120,7 @@ pdb(s::SimulationData) = pdb(s.sim)
 χ-stratified subsampling. Select n samples amongst the provided ys/koopman points of `d` such that their χ-value according to `model` is approximately uniformly distributed and propagate them.
 Returns a new `SimulationData` which has the new data appended."""
 function adddata(d::SimulationData, model, n; keepedges=false)
-    y1 = d.data[2]
+    y1 = d.features[2]
     c1 = d.coords[2]
 
     dim, nk, _ = size(y1)
@@ -126,15 +130,15 @@ function adddata(d::SimulationData, model, n; keepedges=false)
     c2 = propagate(d.sim, c1, nk)
 
     coords = (c1, c2)
-    data = d.featurizer.(coords)
+    features = d.featurizer.(coords)
 
-    data = lastcat.(d.data, data)
+    features = lastcat.(d.features, features)
     coords = lastcat.(d.coords, coords)
-    return SimulationData(d.sim, data, coords, d.featurizer)
+    return SimulationData(d.sim, features, coords, d.featurizer)
 end
 
 function exploredata(d::SimulationData, model, n, step, steps)
-    y1 = d.data[2]
+    y1 = d.features[2]
     c1 = d.coords[2]
 
     dim, nk, _ = size(y1)
@@ -160,14 +164,14 @@ function extrapolate(d, model, x::AbstractVector, step=0.001, steps=100)
     return x
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", data::SimulationData)#
+function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
     println(
         io, """
         SimulationData(;
-            sim=$(data.sim),
-            data=$(size.(data.data)), $(split(string(typeof(data.coords[1])),",")[1]),
-            coords=$(size.(data.coords)), $(split(string(typeof(data.data[1])),",")[1]),
-            featurizer=$(data.featurizer))"""
+            sim=$(d.sim),
+            features=$(size.(d.features)), $(split(string(typeof(d.features[1])),",")[1]),
+            coords=$(size.(d.coords)), $(split(string(typeof(d.coords[1])),",")[1]),
+            featurizer=$(d.featurizer))"""
     )
 end
 

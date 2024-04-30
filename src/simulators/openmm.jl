@@ -39,7 +39,7 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
             friction=$(sim.friction),
             step=$(sim.step),
             steps=$(sim.steps),
-            features=$(sim.features))"""
+            features=$(length(sim.features)))"""
     )
 end
 
@@ -237,7 +237,8 @@ end
 function calphas_and_spheres(pdbfile::String, pysim::PyObject, radius)
     cind = calphas(pdbfile)
     cpairs = [CartesianIndex(x,y) for x in cind, y in cind][ISOKANN.halfinds(length(cind))]
-    return unique(localpdistinds(pysim, radius))
+    rpairs = localpdistinds(pysim, radius)
+    return unique([rpairs; cpairs])
 end
 
 calphas_and_spheres(sim::OpenMMSimulation, radius) = calphas_and_spheres(sim.pdb, sim.pysim, radius)
