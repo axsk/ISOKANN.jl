@@ -212,7 +212,7 @@ exit_rates(iso::Iso2) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), iso.data.s
 print and return the total simulation time contained in the data of `iso` in nanoseconds.
 """
 function simulationtime(iso::Iso2)
-    _, k, n = size(iso.data.data[2])
+    _, k, n = size(iso.data.features[2])
     sim = iso.data.sim
     t = k * n * sim.step * sim.steps / 1000
     #println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?

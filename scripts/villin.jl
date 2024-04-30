@@ -25,7 +25,7 @@ sim = OpenMMSimulation(;
   nthreads=1,
   mmthreads="gpu")
 
-data = SimulationData(sim; nx, nk)
+@time "generating initial data" data = SimulationData(sim; nx, nk)
 
 iso = Iso2(data;
   opt, minibatch,
@@ -35,4 +35,10 @@ iso = Iso2(data;
 
 run!(iso, iter)
 
- 
+for i in 1:1_000 # one microsecond
+  @time "generation" runadaptive!(iso; generations, nx, iter, cutoff)
+  time = length(iso.losses) / iter * simtime_per_gen
+  save_reactive_path(iso, out="out/villin_fold_$(time)ns.pdb"; sigma)
+  ISOKANN.Plots.savefig(plot_training(iso), "out/villin_fold_$(time)ns.png")
+  ISOKANN.save("out/villin_fold.jld2", iso)
+end
