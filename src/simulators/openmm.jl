@@ -1,6 +1,6 @@
 module OpenMM
 
-using PyCall
+using PyCall, CUDA
 
 
 import ISOKANN: ISOKANN, IsoSimulation,
@@ -145,6 +145,7 @@ Note: For CPU we observed better performance with nthreads = num cpus, mmthreads
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
+    CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
@@ -236,7 +237,7 @@ end
 
 function calphas_and_spheres(pdbfile::String, pysim::PyObject, radius)
     cind = calphas(pdbfile)
-    cpairs = [CartesianIndex(x,y) for x in cind, y in cind][ISOKANN.halfinds(length(cind))]
+    cpairs = [(x,y) for x in cind, y in cind][ISOKANN.halfinds(length(cind))]
     rpairs = localpdistinds(pysim, radius)
     return unique([rpairs; cpairs])
 end

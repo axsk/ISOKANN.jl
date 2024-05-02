@@ -2,13 +2,13 @@ using ISOKANN
 using ISOKANN.OpenMM
 
 pdb = "data/villin nowater.pdb"
-steps = 2500
+steps = 5000  # 10 ps
 features = 0 # 0 => backbone only
 iter = 1000
 generations = 10
-cutoff = 1000
+cutoff = 3000
 nx = 10
-nk = 2
+nk = 4
 minibatch = 100
 opt = ISOKANN.NesterovRegularized(1e-3, 1e-4)
 layers = 4

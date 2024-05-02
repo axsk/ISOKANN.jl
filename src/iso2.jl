@@ -42,7 +42,7 @@ and constructs the Iso2 object. See also Iso2(data; kwargs...)
 - `nd::Int`: Dimension of the χ function.
 """
 function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
-    data = SimulationData(sim; nx, nk)
+    data = SimulationData(sim, nx, nk)
     model = pairnet(data; nout=nd)  # maybe defaultmodel(data) makes sense here?
     return Iso2(data; model, kwargs...)
 end

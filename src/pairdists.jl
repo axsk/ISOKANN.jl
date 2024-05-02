@@ -64,7 +64,7 @@ function localpdistinds(coords::AbstractMatrix, radius)
   d = mapreduce(elmin, eachslice(traj, dims=3)) do coords
     UpperTriangular(pairwise(Euclidean(), coords, dims=2))
   end
-  inds = findall(0 .< d .<= radius)
+  inds = Tuple.(findall(0 .< d .<= radius))
   return inds
 end
 
@@ -77,11 +77,13 @@ function pdists(coords::AbstractMatrix, inds)
   n = size(coords, 2)
   traj = reshape(coords, 3, :, n)
   dists = zeros(eltype(traj), length(inds), n)
+  dists = Zygote.Buffer(dists)  # Workaroud for mutating with Zygote
   for j in 1:n
     for (i, ind) in enumerate(inds)
       dists[i, j] = @views norm(traj[:, ind[1], j] - traj[:, ind[2], j])
     end
   end
+  dists = copy(dists)
   return dists
 end
 

@@ -13,31 +13,11 @@ abstract type IsoSimulation end
 
 featurizer(::IsoSimulation) = identity
 
-
-# TODO: this should return a SimulationData
-# function isodata(sim::IsoSimulation, nx, nk)
-#     xs = randx0(sim, nx)
-#     ys = propagate(sim, xs, nk)
-#     return xs, ys
-# end
-
 @deprecate isodata SimulationData
-
-#=
-function featurizer(sim::IsoSimulation)
-    if dim(sim) == 8751 # diala with water?
-        return pairdistfeatures(1:66)
-    else
-        #n = div(dim(sim), 3)^2
-        return flatpairdists
-    end
-end
-=#
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::IsoSimulation)#
     println(io, "$(typeof(sim)) with $(dim(sim)) dimensions")
 end
-
 
 function randx0(sim::IsoSimulation, nx)
     x0 = reshape(getcoords(sim), :, 1)
@@ -68,17 +48,22 @@ end
 
 
 """
-    SimulationData(sim::IsoSimulation, nx::Int, nk::Int, featurizer=featurizer(sim))
+    SimulationData(sim::IsoSimulation, nx::Int, nk::Int; ...)
+    SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; ...)
+    SimulationData(sim::IsoSimulation, (xs,ys); ...)
 
-Generates ISOKANN trainingsdata with `nx` initial points and `nk` Koopman samples each.
+Generates SimulationData from a simulation with either
+- `nx` initial points and `nk` Koopman samples
+- `xs` as initial points and `nk` Koopman sample
+- `xs` as inintial points and `ys` as Koopman samples
 """
-SimulationData(sim::IsoSimulation; nx::Int, nk::Int, kwargs...) = 
-    SimulationData(sim, randx0(sim, nx); nk, kwargs...)
+SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) = 
+    SimulationData(sim, randx0(sim, nx), nk; kwargs...)
 
-SimulationData(sim::IsoSimulation, xs::AbstractMatrix; nk::Int, kwargs...) =
+SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...) =
     SimulationData(sim, (xs, propagate(sim, xs, nk)); kwargs...)
 
-function SimulationData(sim::IsoSimulation, (xs, ys); featurizer=featurizer(sim))
+function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim))
     coords = (xs, ys)
     features = featurizer.(coords)
     return SimulationData(sim, features, coords, featurizer)
@@ -89,7 +74,10 @@ end
 gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), gpu(d.coords), d.featurizer)
 cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), cpu(d.coords), d.featurizer)
 
+features(d::SimulationData, x) = d.featurizer(x)
+
 featuredim(d::SimulationData) = size(d.features[1], 1)
+nk(d::SimulationData) = size(d.features[2], 2)
 
 Base.length(d::SimulationData) = size(d.features[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
@@ -114,52 +102,67 @@ getys(d::SimulationData) = getys(d.features)
 pdb(s::SimulationData) = pdb(s.sim)
 
 
+""" 
+    merge(d1::SimulationData, d2::SimulationData)
+
+Merge the data and features of `d1` and `d2`, keeping the simulation and features of `d1`.
+Note that there is no check if simulation features agree.
+"""
+function Base.merge(d1::SimulationData, d2::SimulationData)
+    features = lastcat.(d1.features, d2.features)
+    coords = lastcat.(d1.coords, d2.coords)
+    return SimulationData(d1.sim, features, coords, d1.featurizer)
+end
+
+function addcoords(d::SimulationData, coords::AbstractMatrix)
+    merge(d, SimulationData(d.sim, coords, nk(d)))
+end
+
+
 """
     adddata(d::SimulationData, model, n)
 
 χ-stratified subsampling. Select n samples amongst the provided ys/koopman points of `d` such that their χ-value according to `model` is approximately uniformly distributed and propagate them.
 Returns a new `SimulationData` which has the new data appended."""
 function adddata(d::SimulationData, model, n; keepedges=false)
-    y1 = d.features[2]
-    c1 = d.coords[2]
-
-    dim, nk, _ = size(y1)
-    y1, c1 = flatend.((y1, c1))
-
-    c1 = c1[:, subsample_inds(model, y1, n; keepedges)]
-    c2 = propagate(d.sim, c1, nk)
-
-    coords = (c1, c2)
-    features = d.featurizer.(coords)
-
-    features = lastcat.(d.features, features)
-    coords = lastcat.(d.coords, coords)
-    return SimulationData(d.sim, features, coords, d.featurizer)
+    xs = chistratcoords(d, model, n; keepedges)
+    addcoords(d, xs)
 end
 
-function exploredata(d::SimulationData, model, n, step, steps)
-    y1 = d.features[2]
-    c1 = d.coords[2]
+function chistratcoords(d::SimulationData, model, n; keepedges=false)
+    fs = d.features[2]
+    cs = d.coords[2]
 
-    dim, nk, _ = size(y1)
-    y1, c1 = flatend.((y1, c1))
+    dim, nk, _ = size(fs)
+    fs, cs = flatend.((fs, cs))
 
-    p = sortperm(model(y1))
+    xs = cs[:, subsample_inds(model, fs, n; keepedges)]
+end
+
+function exploredata(d::SimulationData, model, n, step=0.01, steps=1)
+    fs = d.features[2]
+    cs = d.coords[2]
+
+    dim, nk, _ = size(fs)
+    fs, cs = flatend.((fs, cs))
+
+    p = sortperm(model(fs) |> vec)
     inds = [p[1:n]; p[end-n+1:end]]
 
-    map(inds) do i
-        extrapolate(d, model, c1[:, inds])
-    end
+    xs = hcat(
+        extrapolate(d, model, cs[:, p[1:n]], -step, steps),
+        extrapolate(d, model, cs[:, p[end-n+1:end]], step, steps)
+    )
 end
 
-extrapolate(d, model, x::AbstractMatrix) = map(x -> extrapolate(d, model, x), eachcol(x))
+extrapolate(d, model, x::AbstractMatrix, args...) = mapreduce(x -> extrapolate(d, model, x, args...), hcat,eachcol(x))
 
-function extrapolate(d, model, x::AbstractVector, step=0.001, steps=100)
+function extrapolate(d, model, x::AbstractVector, step, steps)
     x = copy(x)
     for _ in 1:steps
         grad = dchidx(d, model, x)
         x .+= grad ./ norm(grad)^2 .* step
-        @show model(x)
+        #@show model(features(d,x))
     end
     return x
 end
