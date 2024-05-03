@@ -2,7 +2,6 @@ module OpenMM
 
 using PyCall, CUDA
 
-
 import ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
@@ -39,7 +38,7 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
             friction=$(sim.friction),
             step=$(sim.step),
             steps=$(sim.steps),
-            features=$(length(sim.features)))"""
+            features=$(sim.features))"""
     )
 end
 
@@ -57,7 +56,7 @@ function featurizer(sim::OpenMMSimulation)
     if sim.features isa (Vector{Int})
         ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
         return ISOKANN.pairdistfeatures(ix)
-    elseif sim.features isa (Vector{CartesianIndex{2}}) # local pairwise distances
+    elseif sim.features isa (Vector{Tuple{Int,Int}}) # local pairwise distances
         inds = sim.features
         return coords->ISOKANN.pdists(coords, inds)
     elseif sim.features == nothing
@@ -108,9 +107,10 @@ function OpenMMSimulation(;
     features=nothing,
     minimize=false,
     nthreads=Threads.nthreads(),
-    mmthreads=1)
+    mmthreads=1,
+    addwater=false)
 
-    pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize)::PyObject
+    pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize;addwater)::PyObject
     if features isa Number
         radius=features
         features = calphas_and_spheres(pdb, pysim, radius)
@@ -123,6 +123,7 @@ localpdistinds(sim::OpenMMSimulation, radius) = localpdistinds(sim.pysim, radius
 
 
 FORCE_AMBER = ["amber14-all.xml"]
+FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber14/tip3pfb.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 
 pdb(s::OpenMMSimulation) = s.pdb
@@ -144,12 +145,12 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
     CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, s.pysim, s.steps, nthreads, mmthreads)::PyArray
+    ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads)::PyArray
     ys = reshape(ys, dim, nx, ny)
     return newdataformat(ys)
 end
@@ -255,6 +256,11 @@ function filteratoms(pdbfile, pred)
     return inds
 end
 
+
+function residue_atoms(sim::OpenMMSimulation)
+    [res.name => [parse(Int,a.id) for a in res.atoms()] for res in sim.pysim.topology.residues()]
+end
+
 noHatoms(pdbfile) = filteratoms(pdbfile, !contains("H"))
 
 struct OpenMMSimulationSerialized
@@ -294,5 +300,4 @@ Base.convert(::Type{OpenMMSimulation}, a::OpenMMSimulationSerialized) =
         features=a.features,
         nthreads=a.nthreads,
         mmthreads=a.mmthreads)
-
 end

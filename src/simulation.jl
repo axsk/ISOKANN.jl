@@ -57,7 +57,7 @@ Generates SimulationData from a simulation with either
 - `xs` as initial points and `nk` Koopman sample
 - `xs` as inintial points and `ys` as Koopman samples
 """
-SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) = 
+SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, randx0(sim, nx), nk; kwargs...)
 
 SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...) =
@@ -102,7 +102,7 @@ getys(d::SimulationData) = getys(d.features)
 pdb(s::SimulationData) = pdb(s.sim)
 
 
-""" 
+"""
     merge(d1::SimulationData, d2::SimulationData)
 
 Merge the data and features of `d1` and `d2`, keeping the simulation and features of `d1`.
@@ -137,6 +137,36 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
     fs, cs = flatend.((fs, cs))
 
     xs = cs[:, subsample_inds(model, fs, n; keepedges)]
+end
+
+"""
+    addextrapolates!(iso, n, stepsize=0.01, steps=10)
+
+Sample new data starting points obtained by extrapolating the chi function beyond
+the current extrema and attach it to the `iso` objects data.
+
+Samples `n` points at the lower and upper end each, resulting in 2n new points.
+`step`` is the magnitude of chi-value-change per step and `steps`` is the number of steps to take.
+E.g. 10 steps of stepsize 0.01 result in a change in chi of about 0.1.
+
+The obtained data is filtered such that unstable simulations should be removed,
+which may result in less then 2n points being added.
+"""
+function addextrapolates!(iso, n, stepsize=0.01, steps=10)
+    d = iso.data
+    model = iso.model
+    xs = exploredata(d, model, n, stepsize, steps)
+    nd = SimulationData(d.sim, xs, nk(d))
+    select = Int[]
+    for i in 1:length(nd)
+        if isapprox(
+                std(nd.coords[1][:,i]),
+                std(nd.coords[2][:,:,i]),
+                rtol=1e-2)
+            push!(select, i)
+        end
+    end
+    iso.data = merge(iso.data, nd[select])
 end
 
 function exploredata(d::SimulationData, model, n, step=0.01, steps=1)
