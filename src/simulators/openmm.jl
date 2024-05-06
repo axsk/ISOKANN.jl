@@ -6,7 +6,7 @@ import ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdb,
-    force, potential
+    force, potential, lagtime
 
 import JLD2
 
@@ -152,16 +152,27 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads, overflow=100) where {T}
     #CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
     ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads)::PyArray
     ys = reshape(ys, dim, nx, ny)
-    return newdataformat(ys)
+    ys = permutedims(ys, (1,3,2))
+    any(@.(abs(ys) > overflow || isnan(ys))) && throw(OpenMMOverflow(ys))
+    return ys
 end
 
+struct OpenMMOverflow{T} <: Exception where {T}
+    result::T
+end
+
+""" 
+    trajectory(s::OpenMMSimulation, x0, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads)
+
+Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.
+"""
 function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads) where T
     x0 = reinterpret(Tuple{T,T,T}, x0)
     xs = py"trajectory"(s.pysim, x0, stepsize, steps, saveevery, mmthreads)
@@ -169,8 +180,6 @@ function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}, steps=s.steps, s
     xs = reshape(xs, :, size(xs,3))
     return xs
 end
-
-newdataformat(ys::AbstractArray{<:Any,3}) = permutedims(ys, [1,3,2])
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
@@ -197,18 +206,7 @@ function potential(sim::OpenMMSimulation, x)
     v = v.value_in_unit(v.unit)
 end
 
-#=
-function energy(sim::OpenMMSimulation, x)
-    setcoords(sim, coords)
-    sim.pysim.context.getState(getEnergy=true).getPotentialEnergy()._value
-end
-
-function forces(sim::OpenMMSimulation, x)
-    setcoords(sim, coords)
-    f = sim.pysim.context.getState(getForces=true).getForces(asNumpy=True)
-    vec(f.value_in_unit(f.unit)')
-end
-=#
+lagtime(sim::OpenMMSimulation) = sim.step * sim.steps
 
 ### PYTHON CODE
 

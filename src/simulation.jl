@@ -1,3 +1,5 @@
+import PyCall
+
 ## Interface for simulations
 
 ## This is supposed to contain the (Molecular) system + integrator
@@ -177,7 +179,6 @@ function filterinstabilities(data::SimulationData; rtol=1e-1)
     return data[select]
 end
 
-import PyCall
 
 
 """
@@ -214,34 +215,6 @@ function extrapolate(iso, n, stepsize=.1, steps=1, minimize=true)
             length(xs) == N && break
         end
     end
-    #=
-    for i in cpu(p)
-       try
-            x = extrapolate(data, model, coords[:, i], -stepsize, steps)
-            minimize && (x = energyminimization_chilevel(iso, x))
-            push!(xs, x)
-       catch e
-            if isa(e, PyCall.PyError) || isa(e, DomainError)
-                skips += 1
-                continue
-            end
-            rethrow(e)
-       end
-        length(xs) == n && break
-    end
-
-    for i in reverse(p)
-        try
-            x = extrapolate(data, model, coords[:, i], stepsize, steps)
-            minimize && (x = energyminimization_chilevel(iso, x))
-            push!(xs, x)
-        catch e
-            !isa(e, PyCall.PyError) && rethrow(e)
-            skips += 1
-        end
-        length(xs) == 2*n && break
-    end
-    =#
 
     skips > 0 && @warn("skipped $skips extrapolations")
 
@@ -275,21 +248,18 @@ function datasize((xs, ys)::Tuple)
     return size(xs), size(ys)
 end
 
-struct Levelset2{T} <: Optim.Manifold
+struct Levelset{T} <: Optim.Manifold
     f::T
     target::Float64
 end
 
-XHIST=[]
-
-function Optim.project_tangent!(M::Levelset2,g,x)
-    push!(XHIST, x)
+function Optim.project_tangent!(M::Levelset,g,x)
     u = Zygote.gradient(M.f, x) |> only
     u ./= norm(u)
     g .-= dot(g,u) * u
 end
 
-function Optim.retract!(M::Levelset2,x)
+function Optim.retract!(M::Levelset,x)
     g = Zygote.withgradient(M.f, x)
     u = g.grad |> only
     h = M.target - g.val
@@ -302,7 +272,7 @@ function energyminimization_chilevel(iso, x0; x_tol=1e-6, alphaguess=0.1, iterat
     x = copy(x0)
 
     chi = x->myonly(chicoords(iso, x))  # here we had a gpu(x), need clever cuda branching
-    chilevel = Levelset2(chi, Float64(chi(x0)))
+    chilevel = Levelset(chi, Float64(chi(x0)))
 
 
     U(x) = OpenMM.potential(sim, cpu(x))

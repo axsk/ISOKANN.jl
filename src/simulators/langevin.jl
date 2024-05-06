@@ -6,6 +6,7 @@ abstract type AbstractLangevin <: IsoSimulation end
 # interface methods: potential(l), sigma(l), dim(l)
 
 featurizer(::AbstractLangevin) = identity
+lagtime(l::AbstractLangevin) = tmax(l)
 
 function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=tmax(l); dt=dt(l), alg=integrator(l), kwargs...)
     drift(x,p,t) = force(l, x)

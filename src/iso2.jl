@@ -156,7 +156,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
                 (:iterations, length(iso.losses)),
                 (:data, size(getys(iso.data))),
                 ("t_sim, t_train, t_extra", (t_sim, t_train, t_extra)),
-                ("simulated time", "$(simulationtime(iso))ns"), #TODO: doesnt work with cutoff
+                ("simulated time", "$(simulationtime(iso))"), #TODO: doesnt work with cutoff
                 (:macrorates, exit_rates(iso))],
             ignore_predictor=true)
 
@@ -211,7 +211,7 @@ end
 
 koopman(iso::Iso2) = koopman(iso.model, getys(iso.data))
 
-exit_rates(iso::Iso2) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), iso.data.sim.step * iso.data.sim.steps)
+exit_rates(iso::Iso2) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso.data.sim))
 
 
 """
@@ -221,13 +221,10 @@ print and return the total simulation time contained in the data of `iso` in nan
 """
 function simulationtime(iso::Iso2)
     _, k, n = size(iso.data.features[2])
-    sim = iso.data.sim
-    t = k * n * sim.step * sim.steps / 1000
+    t = k * n * lagtime(iso.data.sim) 
     #println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?
     return t
 end
-
-
 
 """
     savecoords(path::String, iso::Iso2, inds=1:numobs(iso.data))
