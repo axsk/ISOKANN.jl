@@ -130,7 +130,7 @@ end
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false)
+function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01)
     p = ProgressMeter.Progress(generations)
     t_sim = 0.
     t_train = 0.
@@ -141,16 +141,24 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
             iso.data = iso.data[end-cutoff+1:end]
         end
 
+        t_extra = @elapsed if extrapolates > 0
+            iso = cpu(iso)
+            iso = ISOKANN.addextrapolates!(iso, extrapolates, stepsize = extrapolation)
+            iso = gpu(iso)
+        end
+
         t_train += @elapsed run!(iso, iter, showprogress=false)
 
-        ProgressMeter.next!(p; showvalues=() -> [
-            (:generation, g),
-            (:loss, iso.losses[end]),
-            (:iterations, length(iso.losses)),
-            (:data, size(getys(iso.data))),
-            ("t_sim, t_train", (t_sim, t_train)),
-            ("simulated time", "$(simulationtime(iso))ns"), #TODO: doesnt work with cutoff
-            (:macrorates, exit_rates(iso))])
+        ProgressMeter.next!(p;
+            showvalues=() -> [
+                (:generation, g),
+                (:loss, iso.losses[end]),
+                (:iterations, length(iso.losses)),
+                (:data, size(getys(iso.data))),
+                ("t_sim, t_train, t_extra", (t_sim, t_train, t_extra)),
+                ("simulated time", "$(simulationtime(iso))ns"), #TODO: doesnt work with cutoff
+                (:macrorates, exit_rates(iso))],
+            ignore_predictor=true)
 
         #CUDA.reclaim()
     end

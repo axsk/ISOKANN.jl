@@ -1,4 +1,3 @@
-import Optim
 using LinearAlgebra: normalize
 
 function dchidx(iso, x=getcoords(iso.data)[:, 1])
@@ -7,8 +6,17 @@ end
 
 function dchidx(data, model, x)
     Zygote.gradient(x) do x
-        model(features(data, x)) |> first
+        model(features(data, x)) |> myonly
     end[1]
+end
+
+## works on gpu as well
+function myonly(x)
+    if length(x) == 1
+        return sum(x)
+    else
+        error("only scalar net is supported here")
+    end
 end
 
 """

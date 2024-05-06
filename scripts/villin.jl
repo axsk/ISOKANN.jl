@@ -4,14 +4,15 @@ using ISOKANN.OpenMM
 ## Config
 
 pdb = "data/villin nowater.pdb"
-steps = 50000  # 100 ps
+steps = 10000  # 20 ps
 features = 0 # 0 => backbone only
 iter = 1000
 generations = 2
 cutoff = 3000
 nx = 10
+extrapolates = 5 # *2
 nk = 4
-keepedges = true
+keepedges = false
 minibatch = 100
 opt = ISOKANN.NesterovRegularized(1e-3, 1e-4)
 layers = 4
@@ -45,10 +46,13 @@ run!(iso, iter)
 ## Running
 
 for i in 1:1_000 # one microsecond
-  @time "generation" runadaptive!(iso; generations, nx, iter, cutoff, keepedges)
+
+  @time "generation" runadaptive!(iso; generations, nx, iter, cutoff, keepedges, extrapolates)
 
   time = length(iso.losses) / iter * simtime_per_gen
   time = round(time, digits=2)
+  time = ISOKANN.simulationtime(iso)
+
   save_reactive_path(iso, out="out/$hash/villin_fold_$(time)ns.pdb"; sigma)
   ISOKANN.Plots.savefig(plot_training(iso), "out/$hash/villin_fold_$(time)ns.png")
   ISOKANN.save("out/villin_fold.jld2", iso)

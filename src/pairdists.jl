@@ -76,16 +76,19 @@ Compute the pairwise distances between the particles specified by the tuples `in
 function pdists(coords::AbstractMatrix, inds)
   n = size(coords, 2)
   traj = reshape(coords, 3, :, n)
-  dists = zeros(eltype(traj), length(inds), n)
+  dists = similar(traj, length(inds), n)
   dists = Zygote.Buffer(dists)  # Workaroud for mutating with Zygote
   for j in 1:n
     for (i, ind) in enumerate(inds)
-      dists[i, j] = @views norm(traj[:, ind[1], j] - traj[:, ind[2], j])
+      a,b = ind
+      dists[i, j] = @views norm(traj[:, a, j] - traj[:, b, j])
     end
   end
   dists = copy(dists)
   return dists
 end
+
+pdists(coords::CuArray, inds) = cu(pdists(cpu(coords), inds))
 
 # batched variant
 function pdists(x::AbstractArray, inds)

@@ -33,6 +33,7 @@ import Zygote
 import OrdinaryDiffEq
 import Graphs
 import Optimisers
+import Optim
 
 import MLUtils: numobs
 import Flux: cpu, gpu

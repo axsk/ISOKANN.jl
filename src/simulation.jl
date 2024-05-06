@@ -125,6 +125,7 @@ end
 χ-stratified subsampling. Select n samples amongst the provided ys/koopman points of `d` such that their χ-value according to `model` is approximately uniformly distributed and propagate them.
 Returns a new `SimulationData` which has the new data appended."""
 function adddata(d::SimulationData, model, n; keepedges=false)
+    n == 0 && return d
     xs = chistratcoords(d, model, n; keepedges)
     addcoords(d, xs)
 end
@@ -152,40 +153,102 @@ E.g. 10 steps of stepsize 0.01 result in a change in chi of about 0.1.
 The obtained data is filtered such that unstable simulations should be removed,
 which may result in less then 2n points being added.
 """
-function addextrapolates!(iso, n, stepsize=0.01, steps=10)
-    d = iso.data
-    model = iso.model
-    xs = exploredata(d, model, n, stepsize, steps)
-    nd = SimulationData(d.sim, xs, nk(d))
+function addextrapolates!(iso, n; stepsize=0.01, steps=1)
+
+    xs = extrapolate(iso, n, stepsize, steps)
+    nd = SimulationData(iso.data.sim, xs, nk(iso.data)) |> filterinstabilities
+    iso.data = merge(iso.data, nd)
+    iso
+end
+
+function filterinstabilities(data::SimulationData; rtol=1e-1)
+    coords = data.coords
     select = Int[]
-    for i in 1:length(nd)
+    for i in 1:size(coords[1], 2)
         if isapprox(
-                std(nd.coords[1][:,i]),
-                std(nd.coords[2][:,:,i]),
-                rtol=1e-2)
+                std(coords[1][:,i]),
+                std(coords[2][:,:,i]),
+                rtol=rtol)
             push!(select, i)
+        else
+            @warn "instability detected"
         end
     end
-    iso.data = merge(iso.data, nd[select])
+    return data[select]
 end
 
-function exploredata(d::SimulationData, model, n, step=0.01, steps=1)
-    fs = d.features[2]
-    cs = d.coords[2]
+import PyCall
 
-    dim, nk, _ = size(fs)
-    fs, cs = flatend.((fs, cs))
 
-    p = sortperm(model(fs) |> vec)
-    inds = [p[1:n]; p[end-n+1:end]]
+"""
+    extrapolate(iso, n, stepsize=0.1, steps=1, minimize=true)
 
-    xs = hcat(
-        extrapolate(d, model, cs[:, p[1:n]], -step, steps),
-        extrapolate(d, model, cs[:, p[end-n+1:end]], step, steps)
-    )
+Take the `n` most extreme points of the chi-function of the `iso` object and
+extrapolate them by `stepsize` for `steps` steps beyond their extrema,
+resulting in 2n new points.
+If `minimize` is true, the new points are energy minimized.
+"""
+function extrapolate(iso, n, stepsize=.1, steps=1, minimize=true)
+    data = iso.data
+    model = iso.model
+    coords = flatend(data.coords[2])
+    features = flatend(data.features[2])
+    xs = []
+    skips = 0
+
+    p = sortperm(model(features) |> vec) |> cpu
+
+    for (p, dir, N) in [(p, -1, n), (reverse(p), 1, 2*n)]
+        for i in p
+            try
+                x = extrapolate(data, model, coords[:, i], dir*stepsize, steps)
+                minimize && (x = energyminimization_chilevel(iso, x))
+                push!(xs, x)
+            catch e
+                if isa(e, PyCall.PyError) || isa(e, DomainError)
+                    skips += 1
+                    continue
+                end
+                rethrow(e)
+            end
+            length(xs) == N && break
+        end
+    end
+    #=
+    for i in cpu(p)
+       try
+            x = extrapolate(data, model, coords[:, i], -stepsize, steps)
+            minimize && (x = energyminimization_chilevel(iso, x))
+            push!(xs, x)
+       catch e
+            if isa(e, PyCall.PyError) || isa(e, DomainError)
+                skips += 1
+                continue
+            end
+            rethrow(e)
+       end
+        length(xs) == n && break
+    end
+
+    for i in reverse(p)
+        try
+            x = extrapolate(data, model, coords[:, i], stepsize, steps)
+            minimize && (x = energyminimization_chilevel(iso, x))
+            push!(xs, x)
+        catch e
+            !isa(e, PyCall.PyError) && rethrow(e)
+            skips += 1
+        end
+        length(xs) == 2*n && break
+    end
+    =#
+
+    skips > 0 && @warn("skipped $skips extrapolations")
+
+    @show length(xs)
+    xs = reduce(hcat, xs)
+    return xs
 end
-
-extrapolate(d, model, x::AbstractMatrix, args...) = mapreduce(x -> extrapolate(d, model, x, args...), hcat,eachcol(x))
 
 function extrapolate(d, model, x::AbstractVector, step, steps)
     x = copy(x)
@@ -210,4 +273,40 @@ end
 
 function datasize((xs, ys)::Tuple)
     return size(xs), size(ys)
+end
+
+struct Levelset2{T} <: Optim.Manifold
+    f::T
+    target::Float64
+end
+
+XHIST=[]
+
+function Optim.project_tangent!(M::Levelset2,g,x)
+    push!(XHIST, x)
+    u = Zygote.gradient(M.f, x) |> only
+    u ./= norm(u)
+    g .-= dot(g,u) * u
+end
+
+function Optim.retract!(M::Levelset2,x)
+    g = Zygote.withgradient(M.f, x)
+    u = g.grad |> only
+    h = M.target - g.val
+    x .+= h .* u ./ (norm(u)^2)
+end
+
+function energyminimization_chilevel(iso, x0; x_tol=1e-6, alphaguess=0.1, iterations=3)
+    sim = iso.data.sim
+
+    x = copy(x0)
+
+    chi = x->myonly(chicoords(iso, x))  # here we had a gpu(x), need clever cuda branching
+    chilevel = Levelset2(chi, Float64(chi(x0)))
+
+
+    U(x) = OpenMM.potential(sim, cpu(x))
+    dU(x) =  -OpenMM.force(sim, cpu(x))
+    o = Optim.optimize(U, dU, x, Optim.LBFGS(; alphaguess, manifold = chilevel), Optim.Options(;  iterations, x_tol); inplace=false)
+    return o.minimizer
 end
