@@ -162,6 +162,14 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.st
     return newdataformat(ys)
 end
 
+function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads) where T
+    x0 = reinterpret(Tuple{T,T,T}, x0)
+    xs = py"trajectory"(s.pysim, x0, stepsize, steps, saveevery, mmthreads)
+    xs = permutedims(xs, (3,2,1))
+    xs = reshape(xs, :, size(xs,3))
+    return xs
+end
+
 newdataformat(ys::AbstractArray{<:Any,3}) = permutedims(ys, [1,3,2])
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector
