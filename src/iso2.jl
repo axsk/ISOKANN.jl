@@ -141,10 +141,8 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
             iso.data = iso.data[end-cutoff+1:end]
         end
 
-        t_extra = @elapsed if extrapolates > 0
-            iso = cpu(iso)
-            iso = ISOKANN.addextrapolates!(iso, extrapolates, stepsize = extrapolation)
-            iso = gpu(iso)
+        t_extra += @elapsed if extrapolates > 0
+            ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
         end
 
         t_train += @elapsed run!(iso, iter, showprogress=false)
@@ -162,7 +160,6 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
 
         #CUDA.reclaim()
     end
-    iso
 end
 
 function adddata!(iso::Iso2, nx; keepedges)

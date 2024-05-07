@@ -164,6 +164,8 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.st
     return convert(AbstractArray{Float32}, ys)
 end
 
+propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
+
 struct OpenMMOverflow{T} <: Exception where {T}
     result::T
     select::Vector{Bool}
@@ -225,6 +227,7 @@ function __init__()
     # install / load OpenMM
     try
         pyimport_conda("openmm", "openmm", "conda-forge")
+        pyimport_conda("openmmforcefields", "openmmforcefields", "conda-forge")
         pyimport_conda("joblib", "joblib")
 
         @pyinclude("$(@__DIR__)/mopenmm.py")

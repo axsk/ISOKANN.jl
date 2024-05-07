@@ -13,6 +13,7 @@ function subsample_uniformgrid(ys, n; keepedges=true)
 end
 
 pickclosest(hs::AbstractVector, ns::AbstractVector) = pickclosestloop(hs, ns)
+pickclosest(haystack::CuArray, needles::AbstractVector) = pickclosest(collect(haystack), needles)
 
 " pickclosest(haystack, needles)
 

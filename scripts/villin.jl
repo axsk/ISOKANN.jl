@@ -1,5 +1,6 @@
 using ISOKANN
 using ISOKANN.OpenMM
+using Dates
 
 ## Config
 
@@ -10,7 +11,7 @@ iter = 1000
 generations = 2
 cutoff = 3000
 nx = 10
-extrapolates = 5 # *2
+extrapolates = 1 # *2
 extrapolate = 0.02
 nk = 4
 keepedges = false
@@ -22,7 +23,7 @@ forcefields = OpenMM.FORCE_AMBER_IMPLICIT
 
 ## Initialisation
 
-hash = "$(time())"[4:11]
+hash = "$(now())"[1:end-4]
 
 burstlength = steps * 0.002 / 1000 # in nanoseconds
 simtime_per_gen = burstlength * nx * nk # in nanoseconds
@@ -46,21 +47,17 @@ run!(iso, iter)
 
 ## Running
 
-function runloop()
-  for i in 1:1_000 # one microsecond
-    global iso
-    @time "generation" iso = runadaptive!(iso; generations, nx, iter, cutoff, keepedges, extrapolates)
+for i in 1:1_000 # one microsecond
+    @time "running" runadaptive!(iso; generations, nx, iter, cutoff, keepedges, extrapolates)
 
-    time = length(iso.losses) / iter * simtime_per_gen
-    time = round(time, digits=2)
+    #time = length(iso.losses) / iter * simtime_per_gen
+    #time = round(time, digits=2)
     time = ISOKANN.simulationtime(iso)
     @time "saving" begin
-      save_reactive_path(iso, out="out/$hash/villin_fold_$(time)ps.pdb"; sigma)
-      ISOKANN.savecoords("out/$hash/data.pdb", iso)
-      ISOKANN.Plots.savefig(plot_training(iso), "out/$hash/villin_fold_$(time)ps.png")
-      ISOKANN.save("out/$hash/iso.jld2", iso)
+        save_reactive_path(iso, out="out/$hash/villin_fold_$(time)ps.pdb"; sigma)
+        ISOKANN.savecoords("out/$hash/data.pdb", iso)
+        ISOKANN.Plots.savefig(plot_training(iso), "out/$hash/villin_fold_$(time)ps.png")
+        ISOKANN.save("out/$hash/iso.jld2", iso)
     end
-  end
 end
 
-runloop()

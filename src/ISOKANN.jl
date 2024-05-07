@@ -86,11 +86,12 @@ include("simulators/openmm.jl")
 import .OpenMM.OpenMMSimulation
 export OpenMMSimulation
 
-include("cuda.jl")            # fixes for cuda
 
 #include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx
+
+include("extrapolate.jl")
 
 include("reactionpath.jl")
 include("reactionpath2.jl")
