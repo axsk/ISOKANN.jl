@@ -2,7 +2,11 @@ from joblib import Parallel, delayed
 from openmm import *
 from openmm.app import *
 from openmm.unit import *
+from openff.toolkit import Molecule
+from openmmforcefields.generators import SystemGenerator
 import numpy as np
+from openmm import app, unit, LangevinIntegrator, Vec3
+from openmm.app import PDBFile, Simulation, Modeller, PDBReporter, StateDataReporter, DCDReporter
 
 def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1):
     context = sim.context
@@ -36,19 +40,47 @@ def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1):
     return np.array(out).flatten()
 
 # from the OpenMM documentation
-def defaultsystem(pdb, forcefields, temp, friction, step, minimize, platform='CPU', properties={'Threads': '1'}, addwater=False):
+def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, platform='CPU', properties={'Threads': '1'}, addwater=False, padding=3, ionicstrength=0, forcefield_kwargs={}):
     platform = Platform.getPlatformByName(platform)
     pdb = PDBFile(pdb)
-    forcefield = ForceField(*forcefields)
-    modeller = Modeller(pdb.topology, pdb.positions)
-    if addwater:
-      modeller.addSolvent(forcefield)
-    system = forcefield.createSystem(modeller.topology,
-            nonbondedMethod=CutoffNonPeriodic,
-            nonbondedCutoff=1*nanometer,
-            constraints=None)
-    integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
-    simulation = Simulation(modeller.topology, system, integrator, platform, properties)
+
+    if ligand != "":
+        ligand_mol = Molecule.from_file(ligand)
+        ligand_mol.assign_partial_charges(partial_charge_method="mmff94", use_conformers=ligand_mol.conformers)
+        water_force_field = "amber/tip3p_standard.xml"
+        ligand_force_field = "gaff-2.11"
+        system_generator = SystemGenerator(
+            forcefields=[*forcefields, water_force_field],
+            small_molecule_forcefield=ligand_force_field,
+            molecules=[ligand_mol],
+            forcefield_kwargs=forcefield_kwargs)
+        modeller = Modeller(pdb.topology, pdb.positions)
+        lig_top = ligand_mol.to_topology()
+        modeller.add(lig_top.to_openmm(), lig_top.get_positions().to_openmm())
+        if addwater:
+            modeller.addSolvent(system_generator.forcefield, model="tip3p",
+                                padding=padding * unit.angstroms,
+                                positiveIon="Na+", negativeIon="Cl-",
+                                ionicStrength=ionicstrength * unit.molar, neutralize=True)
+        system = system_generator.create_system(modeller.topology, molecules=ligand_mol)
+        integrator = LangevinMiddleIntegrator(temp * kelvin, friction / picosecond, step * picoseconds)
+        simulation = Simulation(modeller.topology, system, integrator, platform=platform)
+
+    else:
+        forcefield = ForceField(*forcefields)
+        modeller = Modeller(pdb.topology, pdb.positions)
+        if addwater:
+            modeller.addSolvent(system_generator.forcefield, model="tip3p",
+                                padding=padding * unit.angstroms,
+                                positiveIon="Na+", negativeIon="Cl-",
+                                ionicStrength=ionicstrength * unit.molar, neutralize=True)
+        system = forcefield.createSystem(modeller.topology,
+                nonbondedMethod=CutoffNonPeriodic,
+                nonbondedCutoff=1*nanometer,
+                **forcefield_kwargs)
+        integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
+        simulation = Simulation(modeller.topology, system, integrator, platform, properties)
+
     simulation.context.setPositions(modeller.positions)
     simulation.context.setVelocitiesToTemperature(simulation.integrator.getTemperature())
     if minimize:

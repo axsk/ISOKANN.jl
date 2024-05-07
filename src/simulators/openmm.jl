@@ -18,6 +18,7 @@ export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 struct OpenMMSimulation <: IsoSimulation
     pysim::PyObject
     pdb
+    ligand
     forcefields
     temp
     friction
@@ -33,6 +34,7 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
         io, """
         OpenMMSimulation(;
             pdb="$(sim.pdb)",
+            ligand="$(sim.ligand)",
             forcefields=$(sim.forcefields),
             temp=$(sim.temp),
             friction=$(sim.friction),
@@ -73,12 +75,13 @@ end
 DEFAULT_PDB = "$(@__DIR__)/../../data/systems/alanine dipeptide.pdb"
 
 """
-    OpenMMSimulation(; pdb=DEFAULT_PDB, forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"], temp=298, friction=1, step=0.002, steps=100, features=nothing, minimize=false)
+    OpenMMSimulation(; pdb=DEFAULT_PDB, ligand="", forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"], temp=298, friction=1, step=0.002, steps=100, features=nothing, minimize=false)
 
 Constructs an OpenMM simulation object.
 
 ## Arguments
 - `pdb::String`: Path to the PDB file.
+- `ligand::String`: Path to ligand file.
 - `forcefields::Vector{String}`: List of force field XML files.
 - `temp::Float64`: Temperature in Kelvin.
 - `friction::Float64`: Friction coefficient in 1/picosecond.
@@ -99,6 +102,7 @@ Constructs an OpenMM simulation object.
 """
 function OpenMMSimulation(;
     pdb=DEFAULT_PDB,
+    ligand="",
     forcefields=["amber14-all.xml"],
     temp=298, # kelvin
     friction=1,  # 1/picosecond
@@ -108,14 +112,17 @@ function OpenMMSimulation(;
     minimize=false,
     nthreads=Threads.nthreads(),
     mmthreads=1,
-    addwater=false)
+    addwater=false,
+    padding=3,
+    ionicstrength=0.15,
+    forcefield_kwargs=Dict())
 
-    pysim = @pycall py"defaultsystem"(pdb, forcefields, temp, friction, step, minimize;addwater)::PyObject
+    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize;addwater, padding, ionicstrength, forcefield_kwargs)::PyObject
     if features isa Number
         radius=features
         features = calphas_and_spheres(pdb, pysim, radius)
     end
-    return OpenMMSimulation(pysim::PyObject, pdb, forcefields, temp, friction, step, steps, features, nthreads, mmthreads)
+    return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads)
 end
 
 localpdistinds(pysim::PyObject, radius) = ISOKANN.localpdistinds(reshape(getcoords(pysim), :, 1), radius)
@@ -265,6 +272,7 @@ noHatoms(pdbfile) = filteratoms(pdbfile, !contains("H"))
 
 struct OpenMMSimulationSerialized
     pdb
+    ligand
     forcefields
     temp
     friction
@@ -280,6 +288,7 @@ JLD2.writeas(::Type{OpenMMSimulation}) = OpenMMSimulationSerialized
 Base.convert(::Type{OpenMMSimulationSerialized}, a::OpenMMSimulation) =
     OpenMMSimulationSerialized(
         a.pdb,
+        a.ligand,
         a.forcefields,
         a.temp,
         a.friction,
@@ -292,6 +301,7 @@ Base.convert(::Type{OpenMMSimulationSerialized}, a::OpenMMSimulation) =
 Base.convert(::Type{OpenMMSimulation}, a::OpenMMSimulationSerialized) =
     OpenMMSimulation(;
         pdb=a.pdb,
+        ligand=a.ligand,
         forcefields=a.forcefields,
         temp=a.temp,
         friction=a.friction,
