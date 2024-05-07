@@ -2,11 +2,7 @@ from joblib import Parallel, delayed
 from openmm import *
 from openmm.app import *
 from openmm.unit import *
-from openff.toolkit import Molecule
-from openmmforcefields.generators import SystemGenerator
 import numpy as np
-from openmm import app, unit, LangevinIntegrator, Vec3
-from openmm.app import PDBFile, Simulation, Modeller, PDBReporter, StateDataReporter, DCDReporter
 
 def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1):
     def singlerun(i):
@@ -52,6 +48,8 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
     pdb = PDBFile(pdb)
 
     if ligand != "":
+        from openff.toolkit import Molecule
+        from openmmforcefields.generators import SystemGenerator
         ligand_mol = Molecule.from_file(ligand)
         ligand_mol.assign_partial_charges(partial_charge_method="mmff94", use_conformers=ligand_mol.conformers)
         water_force_field = "amber/tip3p_standard.xml"
@@ -66,9 +64,9 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
         modeller.add(lig_top.to_openmm(), lig_top.get_positions().to_openmm())
         if addwater:
             modeller.addSolvent(system_generator.forcefield, model="tip3p",
-                                padding=padding * unit.angstroms,
+                                padding=padding * angstroms,
                                 positiveIon="Na+", negativeIon="Cl-",
-                                ionicStrength=ionicstrength * unit.molar, neutralize=True)
+                                ionicStrength=ionicstrength * molar, neutralize=True)
         system = system_generator.create_system(modeller.topology, molecules=ligand_mol)
         integrator = LangevinMiddleIntegrator(temp * kelvin, friction / picosecond, step * picoseconds)
         simulation = Simulation(modeller.topology, system, integrator, platform=platform)
@@ -77,10 +75,12 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
         forcefield = ForceField(*forcefields)
         modeller = Modeller(pdb.topology, pdb.positions)
         if addwater:
-            modeller.addSolvent(system_generator.forcefield, model="tip3p",
-                                padding=padding * unit.angstroms,
+            water_force_field = "amber/tip3p_standard.xml"
+            forcefield = ForceField(*forcefields, water_force_field)
+            modeller.addSolvent(forcefield, model="tip3p",
+                                padding=padding * angstroms,
                                 positiveIon="Na+", negativeIon="Cl-",
-                                ionicStrength=ionicstrength * unit.molar, neutralize=True)
+                                ionicStrength=ionicstrength * molar, neutralize=True)
         system = forcefield.createSystem(modeller.topology,
                 nonbondedMethod=CutoffNonPeriodic,
                 nonbondedCutoff=1*nanometer,
