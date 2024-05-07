@@ -11,6 +11,7 @@ generations = 2
 cutoff = 3000
 nx = 10
 extrapolates = 5 # *2
+extrapolate = 0.02
 nk = 4
 keepedges = false
 minibatch = 100
@@ -45,15 +46,21 @@ run!(iso, iter)
 
 ## Running
 
-for i in 1:1_000 # one microsecond
+function runloop()
+  for i in 1:1_000 # one microsecond
+    global iso
+    @time "generation" iso = runadaptive!(iso; generations, nx, iter, cutoff, keepedges, extrapolates)
 
-  @time "generation" runadaptive!(iso; generations, nx, iter, cutoff, keepedges, extrapolates)
-
-  time = length(iso.losses) / iter * simtime_per_gen
-  time = round(time, digits=2)
-  time = ISOKANN.simulationtime(iso)
-
-  save_reactive_path(iso, out="out/$hash/villin_fold_$(time)ns.pdb"; sigma)
-  ISOKANN.Plots.savefig(plot_training(iso), "out/$hash/villin_fold_$(time)ns.png")
-  ISOKANN.save("out/villin_fold.jld2", iso)
+    time = length(iso.losses) / iter * simtime_per_gen
+    time = round(time, digits=2)
+    time = ISOKANN.simulationtime(iso)
+    @time "saving" begin
+      save_reactive_path(iso, out="out/$hash/villin_fold_$(time)ps.pdb"; sigma)
+      ISOKANN.savecoords("out/$hash/data.pdb", iso)
+      ISOKANN.Plots.savefig(plot_training(iso), "out/$hash/villin_fold_$(time)ps.png")
+      ISOKANN.save("out/$hash/iso.jld2", iso)
+    end
+  end
 end
+
+runloop()

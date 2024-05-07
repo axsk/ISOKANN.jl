@@ -152,7 +152,7 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads, overflow=100) where {T}
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
     #CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
@@ -160,15 +160,23 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.st
     ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads)::PyArray
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1,3,2))
-    any(@.(abs(ys) > overflow || isnan(ys))) && throw(OpenMMOverflow(ys))
+    checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
     return ys
 end
 
 struct OpenMMOverflow{T} <: Exception where {T}
     result::T
+    select::Vector{Bool}
 end
 
-""" 
+function checkoverflow(ys, overflow=100)
+    select = map(eachslice(ys, dims=3)) do y
+        !any(@.(abs(y) > overflow || isnan(y)))
+    end
+    !all(select) && throw(OpenMMOverflow(ys, select))
+end
+
+"""
     trajectory(s::OpenMMSimulation, x0, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads)
 
 Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.

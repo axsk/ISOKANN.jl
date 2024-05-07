@@ -28,7 +28,7 @@ end
                     @test true
                     runadaptive!(i, generations=2, nx=1, iter=1)
                     @test true
-                    ISOKANN.addextrapolates!(i, 1, stepsize=0.1, steps=1)
+                    ISOKANN.addextrapolates!(i, 1, stepsize=0.01, steps=1)
                     @test true
                 end
             end

@@ -62,8 +62,23 @@ Generates SimulationData from a simulation with either
 SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, randx0(sim, nx), nk; kwargs...)
 
-SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...) =
+function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...)
+    try
+        ys = propagate(sim, xs, nk)
+    catch e
+        if e isa OpenMM.OpenMMOverflow
+            nx = size(xs, 2)
+            xs = xs[:, e.select]
+            ys = e.result[:, :, e.select]
+            @warn "SimulationData: discarded $(nx-sum(e.select))/$nx starting points due to simulation errors."
+        else
+            rethrow(e)
+        end
+    end
     SimulationData(sim, (xs, propagate(sim, xs, nk)); kwargs...)
+end
+
+
 
 function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim))
     coords = (xs, ys)
@@ -156,30 +171,11 @@ The obtained data is filtered such that unstable simulations should be removed,
 which may result in less then 2n points being added.
 """
 function addextrapolates!(iso, n; stepsize=0.01, steps=1)
-
     xs = extrapolate(iso, n, stepsize, steps)
-    nd = SimulationData(iso.data.sim, xs, nk(iso.data)) |> filterinstabilities
+    nd = SimulationData(iso.data.sim, xs, nk(iso.data))
     iso.data = merge(iso.data, nd)
     iso
 end
-
-function filterinstabilities(data::SimulationData; rtol=1e-1)
-    coords = data.coords
-    select = Int[]
-    for i in 1:size(coords[1], 2)
-        if isapprox(
-                std(coords[1][:,i]),
-                std(coords[2][:,:,i]),
-                rtol=rtol)
-            push!(select, i)
-        else
-            @warn "instability detected"
-        end
-    end
-    return data[select]
-end
-
-
 
 """
     extrapolate(iso, n, stepsize=0.1, steps=1, minimize=true)
@@ -194,7 +190,7 @@ function extrapolate(iso, n, stepsize=.1, steps=1, minimize=true)
     model = iso.model
     coords = flatend(data.coords[2])
     features = flatend(data.features[2])
-    xs = []
+    xs = Vector{eltype(coords)}[]
     skips = 0
 
     p = sortperm(model(features) |> vec) |> cpu
@@ -216,9 +212,7 @@ function extrapolate(iso, n, stepsize=.1, steps=1, minimize=true)
         end
     end
 
-    skips > 0 && @warn("skipped $skips extrapolations")
-
-    @show length(xs)
+    skips > 0 && @warn("extrapolate: skipped $skips extrapolates due to instabilities")
     xs = reduce(hcat, xs)
     return xs
 end
@@ -266,7 +260,7 @@ function Optim.retract!(M::Levelset,x)
     x .+= h .* u ./ (norm(u)^2)
 end
 
-function energyminimization_chilevel(iso, x0; x_tol=1e-6, alphaguess=0.1, iterations=3)
+function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-6, iterations=100)
     sim = iso.data.sim
 
     x = copy(x0)
@@ -274,9 +268,8 @@ function energyminimization_chilevel(iso, x0; x_tol=1e-6, alphaguess=0.1, iterat
     chi = x->myonly(chicoords(iso, x))  # here we had a gpu(x), need clever cuda branching
     chilevel = Levelset(chi, Float64(chi(x0)))
 
-
     U(x) = OpenMM.potential(sim, cpu(x))
     dU(x) =  -OpenMM.force(sim, cpu(x))
-    o = Optim.optimize(U, dU, x, Optim.LBFGS(; alphaguess, manifold = chilevel), Optim.Options(;  iterations, x_tol); inplace=false)
+    o = Optim.optimize(U, dU, x, Optim.LBFGS(; alphaguess, manifold=chilevel), Optim.Options(; iterations, f_tol); inplace=false)
     return o.minimizer
 end

@@ -10,7 +10,7 @@ function flatpairdists(x)
     b = reshape(x, 3, c, :)
     p = sqpairdist(b)[inds, :]
     p = sqrt.(p)
-    return reshape(p, :, s...)
+    return reshape(p, length(inds), s...)
 end
 
 """
