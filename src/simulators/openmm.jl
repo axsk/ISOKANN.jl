@@ -161,7 +161,7 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.st
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1,3,2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
-    return ys
+    return convert(AbstractArray{Float32}, ys)
 end
 
 struct OpenMMOverflow{T} <: Exception where {T}
@@ -206,6 +206,9 @@ function force(sim::OpenMMSimulation, x)
     f = sim.context.getState(getForces=true).getForces(asNumpy=true)
     f = f.value_in_unit(f.unit) |> permutedims |> vec
 end
+
+force(sim::OpenMMSimulation, x::CuArray) = force(sim, Array(x)) |> cu
+potential(sim::OpenMMSimulation, x::CuArray) = potential(sim, Array(x))
 
 function potential(sim::OpenMMSimulation, x)
     sim = sim.pysim

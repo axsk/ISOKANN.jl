@@ -263,13 +263,17 @@ end
 function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-6, iterations=100)
     sim = iso.data.sim
 
+
     x = copy(x0)
+
 
     chi = x->myonly(chicoords(iso, x))  # here we had a gpu(x), need clever cuda branching
     chilevel = Levelset(chi, Float64(chi(x0)))
 
-    U(x) = OpenMM.potential(sim, cpu(x))
-    dU(x) =  -OpenMM.force(sim, cpu(x))
+    U(x) = OpenMM.potential(sim, x)
+    dU(x) = -OpenMM.force(sim, x)
+    @show typeof(dU(x))
+
     o = Optim.optimize(U, dU, x, Optim.LBFGS(; alphaguess, manifold=chilevel), Optim.Options(; iterations, f_tol); inplace=false)
     return o.minimizer
 end

@@ -4,11 +4,14 @@
 Assumes each col of x to be a flattened representation of multiple 3d coords.
 Returns the flattened pairwise distances as columns."""
 function flatpairdists(x)
-    d, s... = size(x)
+    d = size(x, 1)
+    s = size(x)[2:end]
+    #d, s... = size(x)  # slower for zygote autodiff
     c = div(d, 3)
     inds = halfinds(c)
     b = reshape(x, 3, c, :)
-    p = sqpairdist(b)[inds, :]
+    p = sqpairdist(b)
+    p = p[inds, :]
     p = sqrt.(p)
     return reshape(p, length(inds), s...)
 end
