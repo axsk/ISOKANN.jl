@@ -153,7 +153,7 @@ Note: For CPU we observed better performance with nthreads = num cpus, mmthreads
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
-    #CUDA.reclaim()
+    CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
@@ -203,6 +203,7 @@ function setcoords(sim::PyObject, coords::AbstractArray{T}) where {T}
 end
 
 function force(sim::OpenMMSimulation, x)
+    CUDA.reclaim()
     sim = sim.pysim
     setcoords(sim, x)
     f = sim.context.getState(getForces=true).getForces(asNumpy=true)
@@ -213,6 +214,7 @@ force(sim::OpenMMSimulation, x::CuArray) = force(sim, Array(x)) |> cu
 potential(sim::OpenMMSimulation, x::CuArray) = potential(sim, Array(x))
 
 function potential(sim::OpenMMSimulation, x)
+    CUDA.reclaim()
     sim = sim.pysim
     setcoords(sim, x)
     v = sim.context.getState(getEnergy=true).getPotentialEnergy()
