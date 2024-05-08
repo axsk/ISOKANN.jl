@@ -12,7 +12,7 @@ iter = 1000
 generations = 1000
 cutoff = 3000
 nx = 8
-extrapolates = 1 # *2
+extrapolates = 0 # *2
 extrapolate = 0.05
 nk = 4
 keepedges = false
@@ -58,6 +58,11 @@ run!(iso, iter)
 
 mkpath(path)
 cp(@__FILE__, "$path/script.jl")
+
+open("$path/script.jl", "a") do io
+    sha = readchomp(`git rev-parse HEAD`)
+    write(io, "\n#git-commit: $sha")
+end
 
 ## Running
 

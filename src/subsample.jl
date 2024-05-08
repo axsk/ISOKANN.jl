@@ -91,7 +91,7 @@ function kde_needles(chis, n=10)
     needles = []
     for _ in 1:n
         k = KernelDensity.kde(chis, boundary=(0, 1))
-        plot(k.x, k.density) |> display
+        #plot(k.x, k.density) |> display
         c = k.x[argmin(k.density)]
         push!(needles, c)
         push!(chis, c)

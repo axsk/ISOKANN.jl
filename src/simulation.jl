@@ -158,10 +158,11 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
 end
 
 
-function resample_kde(data, model, ny)
-    chix = data.features[1] |> model |> vec
-    chiy = data.features[2] |> model |> vec
-    needles = kde_needles(chix, ny)
+function resample_kde(data, model, n)
+    n == 0 && return data
+    chix = data.features[1] |> model |> vec |> cpu
+    chiy = data.features[2] |> model |> vec |> cpu
+    needles = kde_needles(chix, n)
     inds = pickclosest(chiy, needles)
     ys = data.coords[2] |> flattenlast
     newdata = addcoords(data, ys[:, inds])

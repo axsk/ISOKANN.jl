@@ -143,9 +143,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
             iso.data = iso.data[end-cutoff+1:end]
         end
 
-        t_extra += @elapsed if extrapolates > 0
-            ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
-        end
+        t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
 
         t_train += @elapsed run!(iso, iter, showprogress=false)
 

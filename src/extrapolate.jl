@@ -13,6 +13,7 @@ The obtained data is filtered such that unstable simulations should be removed,
 which may result in less then 2n points being added.
 """
 function addextrapolates!(iso, n; stepsize=0.01, steps=1)
+    n == 0 && return
     xs = extrapolate(iso, n, stepsize, steps)
     nd = SimulationData(iso.data.sim, xs, nk(iso.data))
     iso.data = merge(iso.data, nd)
