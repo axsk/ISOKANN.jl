@@ -147,10 +147,6 @@ function adddata(d::SimulationData, model, n; keepedges=false)
     addcoords(d, xs)
 end
 
-function adddata!(iso::Iso2, nx; keepedges)
-    iso.data = adddata(iso.data, iso.model, nx; keepedges)
-end
-
 function chistratcoords(d::SimulationData, model, n; keepedges=false)
     fs = d.features[2]
     cs = d.coords[2]
@@ -171,14 +167,6 @@ function resample_kde(data, model, ny)
     newdata = addcoords(data, ys[:, inds])
     return newdata
 end
-
-function resample_kde!(iso, ny)
-    iso.data = resample_kde(iso.data, iso.model, ny)
-end
-
-
-
-
 
 function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
     println(

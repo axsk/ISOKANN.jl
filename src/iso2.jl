@@ -277,3 +277,11 @@ function load(path::String)
     end
     return iso
 end
+
+function adddata!(iso::Iso2, nx; keepedges)
+    iso.data = adddata(iso.data, iso.model, nx; keepedges)
+end
+
+function resample_kde!(iso, ny)
+    iso.data = resample_kde(iso.data, iso.model, ny)
+end
