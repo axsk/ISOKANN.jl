@@ -134,6 +134,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
     p = ProgressMeter.Progress(generations)
     t_sim = 0.
     t_train = 0.
+    t_extra = 0.0
     for g in 1:generations
         t_sim += @elapsed adddata!(iso, nx; keepedges)
 
@@ -218,7 +219,7 @@ print and return the total simulation time contained in the data of `iso` in nan
 """
 function simulationtime(iso::Iso2)
     _, k, n = size(iso.data.features[2])
-    t = k * n * lagtime(iso.data.sim) 
+    t = k * n * lagtime(iso.data.sim)
     #println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?
     return t
 end
