@@ -30,8 +30,8 @@ If `minimize` is true, the new points are energy minimized.
 function extrapolate(iso, n, stepsize=0.1, steps=1, minimize=true)
     data = iso.data
     model = iso.model
-    coords = flatend(data.coords[2])
-    features = flatend(data.features[2])
+    coords = flattenlast(data.coords[2])
+    features = flattenlast(data.features[2])
     xs = Vector{eltype(coords)}[]
     skips = 0
 

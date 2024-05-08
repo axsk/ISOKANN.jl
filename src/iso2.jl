@@ -136,6 +136,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
     t_train = 0.
     t_extra = 0.0
     for g in 1:generations
+        GC.gc()
         t_sim += @elapsed adddata!(iso, nx; keepedges)
 
         if length(iso.data) > cutoff
@@ -163,9 +164,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
     end
 end
 
-function adddata!(iso::Iso2, nx; keepedges)
-    iso.data = ISOKANN.adddata(iso.data, iso.model, nx; keepedges)
-end
+
 
 
 

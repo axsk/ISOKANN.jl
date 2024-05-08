@@ -111,7 +111,7 @@ getcoords(d::SimulationData) = d.coords[1]
 #getkoopfeatures(d::SimulationData) = d.features[2]
 
 
-flatend(x) = reshape(x, size(x, 1), :)
+flattenlast(x) = reshape(x, size(x, 1), :)
 
 getxs(d::SimulationData) = getxs(d.features)
 getys(d::SimulationData) = getys(d.features)
@@ -147,15 +147,37 @@ function adddata(d::SimulationData, model, n; keepedges=false)
     addcoords(d, xs)
 end
 
+function adddata!(iso::Iso2, nx; keepedges)
+    iso.data = adddata(iso.data, iso.model, nx; keepedges)
+end
+
 function chistratcoords(d::SimulationData, model, n; keepedges=false)
     fs = d.features[2]
     cs = d.coords[2]
 
     dim, nk, _ = size(fs)
-    fs, cs = flatend.((fs, cs))
+    fs, cs = flattenlast.((fs, cs))
 
     xs = cs[:, subsample_inds(model, fs, n; keepedges)]
 end
+
+
+function resample_kde(data, model, ny)
+    chix = data.features[1] |> model |> vec
+    chiy = data.features[2] |> model |> vec
+    needles = kde_needles(chix, ny)
+    inds = pickclosest(chiy, needles)
+    ys = data.coords[2] |> flattenlast
+    newdata = addcoords(data, ys[:, inds])
+    return newdata
+end
+
+function resample_kde!(iso, ny)
+    iso.data = resample_kde(iso.data, iso.model, ny)
+end
+
+
+
 
 
 function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#

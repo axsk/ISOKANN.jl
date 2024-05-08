@@ -21,10 +21,10 @@ opt = ISOKANN.NesterovRegularized(1e-3, 1e-4)
 layers = 4
 sigma = 2
 forcefields = OpenMM.FORCE_AMBER_IMPLICIT
+path = "out/villin/$(now())"[1:end-4]
 
 ## Initialisation
 
-path = "$(now())"[1:end-4]
 
 
 burstlength = steps * 0.002 / 1000 # in nanoseconds

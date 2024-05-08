@@ -60,6 +60,8 @@ subsample(model, ys::AbstractArray{<:Any,3}, n) =
 
 subsample(model, data::Tuple, n) = getobs(data, subsample_inds(model, first(data), n))
 
+
+## TODO: this seems to be deprecated by addata in simulation.jl
 """
     adddata(data::D, model, sim, ny, lastn=1_000_000)::D
 
