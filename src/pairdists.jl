@@ -72,29 +72,25 @@ function localpdistinds(coords::AbstractMatrix, radius)
 end
 
 """
-    pdists(traj::Array{<:Any, 3}, inds)
+    pdists(coords::AbstractArray, inds::Vector{<:Tuple})
 
 Compute the pairwise distances between the particles specified by the tuples `inds` over all frames in `traj`.
+Assumes a column contains all 3n coordinates.
 """
-function pdists(coords::AbstractMatrix, inds)
+function pdists(coords::AbstractMatrix, inds::Vector{Tuple{T,T}}) where {T}
+  a = first.(inds)
+  b = last.(inds)
   n = size(coords, 2)
   traj = reshape(coords, 3, :, n)
-  dists = similar(traj, length(inds), n)
-  dists = Zygote.Buffer(dists)  # Workaroud for mutating with Zygote
-  for j in 1:n
-    for (i, ind) in enumerate(inds)
-      a,b = ind
-      dists[i, j] = @views norm(traj[:, a, j] - traj[:, b, j])
-    end
-  end
-  dists = copy(dists)
-  return dists
+  A = @views traj[:, a, :]
+  B = @views traj[:, b, :]
+  D = sqrt.(sum(abs2.(A .- B), dims=1))
+  return dropdims(D, dims=1)
 end
 
-pdists(coords::CuArray, inds) = cu(pdists(cpu(coords), inds))
 
 # batched variant
-function pdists(x::AbstractArray, inds)
+function pdists(x::AbstractArray, inds::Vector{Tuple{T,T}}) where {T}
   d, s... = size(x)
   b = reshape(x, d, :)
   p = pdists(b, inds)
