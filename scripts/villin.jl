@@ -5,40 +5,54 @@ using Dates
 ## Config
 
 pdb = "data/villin nowater.pdb"
-steps = 10_000  # 20 ps
+steps = 5_000
 temp = 310
 features = 0.5 # 0 => backbone only
+forcefields = OpenMM.FORCE_AMBER_IMPLICIT
+addwater = true
+padding = 1
+ionicstrength = 0.0
+
+nx = 8
+nk = 4
 iter = 1000
 generations = 1000
 cutoff = 3000
-nx = 8
+
+kde_padding = 0.02
 extrapolates = 0 # *2
 extrapolate = 0.05
-nk = 4
 keepedges = false
+
+layers = 4
 minibatch = 100
 opt = ISOKANN.NesterovRegularized(1e-3, 1e-4)
-layers = 4
+
 sigma = 2
-forcefields = OpenMM.FORCE_AMBER_IMPLICIT
+
 path = "out/villin/$(now())"[1:end-4]
 
-readdata = "out/villin/2024-05-08T15:41:49/iso.jld2"
+readdata = nothing
+#readdata = "latest/iso.jld2"
 
 ## Initialisation
 
+lagtime = steps * 0.002 / 1000 # in nanoseconds
+simtime_per_gen = lagtime * (nx + 2 * extrapolates) * nk # in nanoseconds
 
+println("lagtime: $lagtime ns")
+println("simtime per generation: $simtime_per_gen ns")
 
-burstlength = steps * 0.002 / 1000 # in nanoseconds
-simtime_per_gen = burstlength * (nx + 2 * extrapolates) * nk # in nanoseconds
-
-@show burstlength, simtime_per_gen, "(in ns)"
-
-sim = OpenMMSimulation(;
+@time "creating system" sim = OpenMMSimulation(;
     pdb, steps, forcefields, features,
-    nthreads=1,
-    temp,
-    mmthreads="gpu")
+    temp, nthreads=1, mmthreads="gpu")
+
+if addwater
+    @time "adding water" sim = OpenMMSimulation(;
+        pdb, steps, forcefields,
+        temp, nthreads=1, mmthreads="gpu",
+        features=sim.features, addwater=true, padding, ionicstrength)
+end
 
 data = if readdata isa String
     @time "reading initial data" let i = ISOKANN.load(readdata)
@@ -54,15 +68,7 @@ iso = Iso2(data;
     gpu=true,
     loggers=[])
 
-run!(iso, iter)
-
-mkpath(path)
-cp(@__FILE__, "$path/script.jl")
-
-open("$path/script.jl", "a") do io
-    sha = readchomp(`git rev-parse HEAD`)
-    write(io, "\n#git-commit: $sha")
-end
+@time "initial training" run!(iso, iter)
 
 ## Running
 
@@ -70,15 +76,28 @@ for i in 1:generations
     GC.gc()
 
     @time "extrapolating" ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolate)
-    @time "kde sampling" ISOKANN.resample_kde!(iso, nx)
+    @time "kde sampling" ISOKANN.resample_kde!(iso, nx; padding=kde_padding)
     @time "training" run!(iso, iter)
 
-    @show time = ISOKANN.simulationtime(iso)
+    simtime = ISOKANN.simulationtime(iso)
+
     @time "saving" begin
-        save_reactive_path(iso, out="$path/villin_fold_$(time)ps.pdb"; sigma)
+
+        if i == 1
+            mkpath(path)
+            run(`ln -snf $path latest`)
+            cp(@__FILE__, "$path/script.jl")
+            open("$path/script.jl", "a") do io
+                sha = readchomp(`git rev-parse HEAD`)
+                write(io, "\n#git-commit: $sha")
+            end
+            chmod("$path/script.jl", 0o444)
+        end
+
+        save_reactive_path(iso, out="$path/villin_fold_$(simtime)ps.pdb"; sigma, maxjump=0.05)
         ISOKANN.savecoords("$path/data.pdb", iso)
-        ISOKANN.Plots.savefig(plot_training(iso), "$path/villin_fold_$(time)ps.png")
+        ISOKANN.Plots.savefig(plot_training(iso), "$path/villin_fold_$(simtime)ps.png")
+        println("\n status: $path/villin_fold_$(simtime)ps.png \n")
         ISOKANN.save("$path/iso.jld2", iso)
     end
 end
-
