@@ -22,8 +22,10 @@ def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1):
           return x
 
         return x
-
-    out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
+    if nthreads > 1:
+        out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
+    else:
+        out = [singlerun(i) for i in range(len(xs))]
     return np.array(out).flatten()
 
 def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads):

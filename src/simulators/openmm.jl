@@ -45,13 +45,13 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
 end
 
 """ generate `n` random inintial points for the simulation `mm` """
-function randx0(mm::OpenMMSimulation, n)
-    x0 = stack([getcoords(mm.pysim)])
-    return reshape(propagate(mm, x0, n), :, n)
+function randx0(sim::OpenMMSimulation, n)
+    x0 = stack([getcoords(sim.pysim)])
+    return reshape(propagate(sim, x0, n), :, n)
 end
 
-function dim(mm::OpenMMSimulation)
-    return mm.pysim.system.getNumParticles() * 3
+function dim(sim::OpenMMSimulation)
+    return sim.pysim.system.getNumParticles() * 3
 end
 
 function featurizer(sim::OpenMMSimulation)
@@ -60,7 +60,7 @@ function featurizer(sim::OpenMMSimulation)
         return ISOKANN.pairdistfeatures(ix)
     elseif sim.features isa (Vector{Tuple{Int,Int}}) # local pairwise distances
         inds = sim.features
-        return coords->ISOKANN.pdists(coords, inds)
+        return coords -> ISOKANN.pdists(coords, inds)
     elseif sim.features == nothing
         return ISOKANN.flatpairdists
     else
@@ -117,9 +117,9 @@ function OpenMMSimulation(;
     ionicstrength=0.15,
     forcefield_kwargs=Dict())
 
-    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize;addwater, padding, ionicstrength, forcefield_kwargs)::PyObject
+    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs)::PyObject
     if features isa Number
-        radius=features
+        radius = features
         features = calphas_and_spheres(pdb, pysim, radius)
     end
     return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads)
@@ -159,7 +159,7 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.st
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
     ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads)::PyArray
     ys = reshape(ys, dim, nx, ny)
-    ys = permutedims(ys, (1,3,2))
+    ys = permutedims(ys, (1, 3, 2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
     return convert(AbstractArray{Float32}, ys)
 end
@@ -183,11 +183,11 @@ end
 
 Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.
 """
-function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads) where T
+function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}, steps=s.steps, saveevery=1; stepsize=s.step, mmthreads=s.mmthreads) where {T}
     x0 = reinterpret(Tuple{T,T,T}, x0)
     xs = py"trajectory"(s.pysim, x0, stepsize, steps, saveevery, mmthreads)
-    xs = permutedims(xs, (3,2,1))
-    xs = reshape(xs, :, size(xs,3))
+    xs = permutedims(xs, (3, 2, 1))
+    xs = reshape(xs, :, size(xs, 3))
     return xs
 end
 
@@ -280,7 +280,7 @@ end
 
 function calphas_and_spheres(pdbfile::String, pysim::PyObject, radius)
     cind = calphas(pdbfile)
-    cpairs = [(x,y) for x in cind, y in cind][ISOKANN.halfinds(length(cind))]
+    cpairs = [(x, y) for x in cind, y in cind][ISOKANN.halfinds(length(cind))]
     rpairs = localpdistinds(pysim, radius)
     return unique([rpairs; cpairs])
 end
@@ -300,7 +300,7 @@ end
 
 
 function residue_atoms(sim::OpenMMSimulation)
-    [res.name => [parse(Int,a.id) for a in res.atoms()] for res in sim.pysim.topology.residues()]
+    [res.name => [parse(Int, a.id) for a in res.atoms()] for res in sim.pysim.topology.residues()]
 end
 
 noHatoms(pdbfile) = filteratoms(pdbfile, !contains("H"))
@@ -345,7 +345,9 @@ Base.convert(::Type{OpenMMSimulation}, a::OpenMMSimulationSerialized) =
         features=a.features,
         nthreads=a.nthreads,
         mmthreads=a.mmthreads)
-end
+
+
+end #module
 
 
 

@@ -254,9 +254,6 @@ end
 
 Save the complete Iso2 object to a JLD2 file """
 function save(path::String, iso::Iso2)
-    if iso.data.sim isa OpenMMSimulation
-        @warn "currently only the OpenMM `defaultsystem` is supported, any custom OpenMM simulations will not be reconstructed"
-    end
     iso = cpu(iso)
     JLD2.save(path, "iso", iso)
 end

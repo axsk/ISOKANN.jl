@@ -1,5 +1,6 @@
 import PyCall
 
+export getcoords
 ## Interface for simulations
 
 ## This is supposed to contain the (Molecular) system + integrator
@@ -63,6 +64,7 @@ SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, randx0(sim, nx), nk; kwargs...)
 
 function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...)
+    local ys
     try
         ys = propagate(sim, xs, nk)
     catch e
@@ -75,7 +77,7 @@ function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs.
             rethrow(e)
         end
     end
-    SimulationData(sim, (xs, propagate(sim, xs, nk)); kwargs...)
+    SimulationData(sim, (xs, ys); kwargs...)
 end
 
 
