@@ -62,14 +62,16 @@ end
 Given `coords` of shape ( 3n x frames ) return the pairs of indices whose minimal distance along all frames is at least once lower then radius
 """
 function localpdistinds(coords::AbstractMatrix, radius)
-  traj = reshape(coords, 3, :, size(coords,2))
-  elmin(x, y) = min.(x, y)
-  d = mapreduce(elmin, eachslice(traj, dims=3)) do coords
-    UpperTriangular(pairwise(Euclidean(), coords, dims=2))
-  end
-  inds = Tuple.(findall(0 .< d .<= radius))
-  return inds
+    traj = reshape(coords, 3, :, size(coords, 2))
+    elmin(x, y) = min.(x, y)
+    d = mapreduce(elmin, eachslice(traj, dims=3)) do coords
+        UpperTriangular(pairwise(Euclidean(), coords, dims=2))
+    end
+    pairs = Tuple.(findall(0 .< d .<= radius))
+    return pairs
 end
+
+localpdistinds(coords::Vector, radius) = localpdistinds(hcat(coords), radius)
 
 """
     pdists(coords::AbstractArray, inds::Vector{<:Tuple})

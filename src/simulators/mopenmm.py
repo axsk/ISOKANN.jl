@@ -4,24 +4,38 @@ from openmm.app import *
 from openmm.unit import *
 import numpy as np
 
-def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1):
+def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=False):
     def singlerun(i):
         c = newcontext(sim.context, nthreadssim)
+        if withmomenta:
+          n = len(xs[i]) // 2
+          c.setPositions(xs[i][:n])
+          c.setVelocities(xs[i][n:])
+        else:
+          c.setPositions(xs[i])
+          c.setVelocitiesToTemperature(sim.integrator.getTemperature())
 
-        c.setPositions(xs[i])
-        c.setVelocitiesToTemperature(sim.integrator.getTemperature())
         c.getIntegrator().setStepSize(stepsize)
         try:
           c.getIntegrator().step(steps)
-          x = c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
-          return x
+
         except OpenMMException as e:
           print("Error integrating trajectory", e)
           x = c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
           x.fill(np.nan)
           return x
 
+        if withmomenta:
+          state = c.getState(getPositions=True, getVelocities=True)
+          x = np.concatenate([
+              state.getPositions(asNumpy=True).value_in_unit(nanometer),
+              state.getVelocities(asNumpy=True).value_in_unit(nanometer/picosecond)])
+        else:
+          x = c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
+
         return x
+
+
     if nthreads > 1:
         out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
     else:

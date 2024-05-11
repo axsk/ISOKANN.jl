@@ -25,8 +25,9 @@ struct OpenMMSimulation <: IsoSimulation
     step
     steps
     features
-    nthreads
-    mmthreads
+    nthreads::Int
+    mmthreads::Union{Int,String}
+    momenta::Bool
 end
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
@@ -46,7 +47,7 @@ end
 
 """ generate `n` random inintial points for the simulation `mm` """
 function randx0(sim::OpenMMSimulation, n)
-    x0 = stack([getcoords(sim.pysim)])
+    x0 = stack([getcoords(sim)])
     return reshape(propagate(sim, x0, n), :, n)
 end
 
@@ -61,7 +62,7 @@ function featurizer(sim::OpenMMSimulation)
     elseif sim.features isa (Vector{Tuple{Int,Int}}) # local pairwise distances
         inds = sim.features
         return coords -> ISOKANN.pdists(coords, inds)
-    elseif sim.features == nothing
+    elseif sim.features == :all
         return ISOKANN.flatpairdists
     else
         error("unknown featurizer")
@@ -108,29 +109,31 @@ function OpenMMSimulation(;
     friction=1,  # 1/picosecond
     step=0.002, # picoseconds
     steps=100,
-    features=nothing,
+    features=:all,
     minimize=false,
     nthreads=Threads.nthreads(),
     mmthreads=1,
     addwater=false,
     padding=3,
     ionicstrength=0.15,
-    forcefield_kwargs=Dict())
+    forcefield_kwargs=Dict(),
+    momenta=false)
 
     pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs)::PyObject
     if features isa Number
         radius = features
         features = calphas_and_spheres(pdb, pysim, radius)
+        features = remove_atom_pairs(pysim, "H", features)
     end
-    return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads)
+    return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
 end
 
-localpdistinds(pysim::PyObject, radius) = ISOKANN.localpdistinds(reshape(getcoords(pysim), :, 1), radius)
 localpdistinds(sim::OpenMMSimulation, radius) = localpdistinds(sim.pysim, radius)
+localpdistinds(pysim::PyObject, radius) = ISOKANN.localpdistinds(getcoords(pysim, false), radius)
 
 
 FORCE_AMBER = ["amber14-all.xml"]
-FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber14/tip3pfb.xml"]
+#FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber14/tip3pfb.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 
 pdb(s::OpenMMSimulation) = s.pdb
@@ -152,12 +155,12 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads) where {T}
+function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
     CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads)::PyArray
+    ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads, momenta)::PyArray
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1, 3, 2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
@@ -191,15 +194,34 @@ function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}, steps=s.steps, s
     return xs
 end
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector
-setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
+getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)#::Vector
+setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, sim.momenta)
 
-function getcoords(sim::PyObject)
-    py"$sim.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer).flatten()"
+function getcoords(sim::PyObject, momenta)
+    st = sim.context.getState(getPositions=true, getVelocities=momenta)
+    x = st.getPositions(asNumpy=true).flatten()
+    if !momenta
+        return x
+    else
+        v = st.getVelocities(asNumpy=true).flatten()
+        return vcat(x, v)
+    end
 end
 
-function setcoords(sim::PyObject, coords::AbstractArray{T}) where {T}
-    sim.context.setPositions(reinterpret(Tuple{T,T,T}, Array(coords)))
+function getvelocities(sim::PyObject)
+    py"$sim.context.getState(getVelocities=True).getVelocities(asNumpy=True).value_in_unit(nanometer/picosecond).flatten()"
+end
+
+function setcoords(sim::PyObject, coords::AbstractVector{T}, momenta) where {T}
+    t = reinterpret(Tuple{T,T,T}, Array(coords))
+    if momenta
+        n = length(t) ÷ 2
+        x, v = t[1:n], t[n+1:end]
+        sim.context.setPositions(x)
+        sim.context.setVelocities(v)
+    else
+        sim.context.setPositions(t)
+    end
 end
 
 function force(sim::OpenMMSimulation, x)
@@ -286,6 +308,13 @@ function calphas_and_spheres(pdbfile::String, pysim::PyObject, radius)
 end
 
 calphas_and_spheres(sim::OpenMMSimulation, radius) = calphas_and_spheres(sim.pdb, sim.pysim, radius)
+
+function remove_atom_pairs(pysim::PyObject, symbol, pairs)
+    symbols = [a.element.symbol for a in pysim.topology.atoms()]
+    inds = findall(symbols .== symbol)
+    pairs = filter(p -> !(p[1] in inds || p[2] in inds), pairs)
+    return pairs
+end
 
 function filteratoms(pdbfile, pred)
     inds = Int[]
