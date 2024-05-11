@@ -19,6 +19,8 @@ inputdim(model::Flux.Dense) = size(model.weight, 2)
 outputdim(model::Flux.Chain) = outputdim(model.layers[end])
 outputdim(model::Flux.Dense) = size(model.weight, 1)
 
+iscuda(m::Flux.Chain) = Flux.params(m)[1] isa CuArray
+
 
 
 """ convenience wrapper returning the provided model with the default AdamW optimiser """
@@ -47,7 +49,7 @@ function pairnet((xs, ys)::Tuple; kwargs...)
 end
 
 """ Fully connected neural network with `layers` layers from `n` to `nout` dimensions.
-`features` allows to pass a featurizer as preprocessor, 
+`features` allows to pass a featurizer as preprocessor,
 `activation` determines the activation function for each but the last layer
 `lastactivation` can be used to modify the last layers activation function """
 function pairnet(n::Int=22; layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1)

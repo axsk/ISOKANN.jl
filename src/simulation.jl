@@ -93,7 +93,10 @@ end
 gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), d.coords, d.featurizer)
 cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), d.coords, d.featurizer)
 
-features(d::SimulationData, x) = d.featurizer(x)
+function features(d::SimulationData, x)
+    d.features[1] isa CuArray && (x = cu(x))
+    return d.featurizer(x)
+end
 
 featuredim(d::SimulationData) = size(d.features[1], 1)
 nk(d::SimulationData) = size(d.features[2], 2)

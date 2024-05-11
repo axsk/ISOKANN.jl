@@ -99,20 +99,6 @@ function OpenMMSimulation(;
     return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
-    println(
-        io, """
-        OpenMMSimulation(;
-            pdb="$(sim.pdb)",
-            ligand="$(sim.ligand)",
-            forcefields=$(sim.forcefields),
-            temp=$(sim.temp),
-            friction=$(sim.friction),
-            step=$(sim.step),
-            steps=$(sim.steps),
-            features=$(sim.features))"""
-    )
-end
 
 function featurizer(sim::OpenMMSimulation)
     if sim.features isa (Vector{Int})
@@ -162,18 +148,18 @@ function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.st
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads, momenta)::PyArray
+    ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads, momenta)::Vector{Float32}
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1, 3, 2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
-    return convert(AbstractArray{Float32}, ys)
+    return ys#convert(Array{Float32,3}, ys)
 end
 
-propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
+#propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
 
 struct OpenMMOverflow{T} <: Exception where {T}
     result::T
-    select::Vector{Bool}
+    select::Vector{Bool}  # flags which results are valid
 end
 
 function checkoverflow(ys, overflow=100)
@@ -332,6 +318,20 @@ Base.convert(::Type{OpenMMSimulation}, a::OpenMMSimulationSerialized) =
         nthreads=a.nthreads,
         mmthreads=a.mmthreads)
 
+function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
+    println(
+        io, """
+        OpenMMSimulation(;
+            pdb="$(sim.pdb)",
+            ligand="$(sim.ligand)",
+            forcefields=$(sim.forcefields),
+            temp=$(sim.temp),
+            friction=$(sim.friction),
+            step=$(sim.step),
+            steps=$(sim.steps),
+            features=$(sim.features))"""
+    )
+end
 
 end #module
 

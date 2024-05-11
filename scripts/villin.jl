@@ -5,12 +5,15 @@ using PyCall
 
 ## Config
 
+comment = "momenta"
+
 pdb = "data/villin nowater.pdb"
 steps = 10_000
 step = 0.002
 temp = 310
-friction = 0.1
+friction = 1
 integrator = :langevinmiddle
+momenta = true
 features = 0.5 # 0 => backbone only
 #forcefields = OpenMM.FORCE_AMBER_IMPLICIT  # TODO: this shouldnb be an option the way we build addwater now
 forcefields = OpenMM.FORCE_AMBER
@@ -36,7 +39,6 @@ opt = ISOKANN.NesterovRegularized(1e-3, 1e-4)
 sigma = 2
 maxjump = 1
 
-comment = "lag10ps gamma0.1"
 path = "out/villin/$(now())"[1:end-4] * comment
 
 readdata = nothing
@@ -51,13 +53,11 @@ println("lagtime: $lagtime ns")
 println("simtime per generation: $simtime_per_gen ns")
 
 @time "creating system" sim = OpenMMSimulation(;
-    pdb, steps, forcefields, features, friction, step,
-    temp, nthreads=1, mmthreads="gpu")
+    pdb, steps, forcefields, features, friction, step, momenta, temp, nthreads=1, mmthreads="gpu")
 
 if addwater
     @time "adding water" sim = OpenMMSimulation(;
-        pdb, steps, forcefields, friction, step,
-        temp, nthreads=1, mmthreads="gpu",
+        pdb, steps, forcefields, friction, step, momenta, temp, nthreads=1, mmthreads="gpu",
         features=sim.features, addwater=true, padding, ionicstrength)
 end
 
@@ -128,8 +128,8 @@ for i in 1:generations
             ISOKANN.Plots.savefig(plot_training(iso), "$path/villin_fold_$(simtime)ps.png")
             println("\n status: $path/villin_fold_$(simtime)ps.png \n")
             ISOKANN.save("$path/iso.jld2", iso)
-        catch e
-            @show e
+        catch
+            @show catch_backtrace()
         end
     end
 end

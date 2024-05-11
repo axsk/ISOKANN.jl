@@ -28,7 +28,7 @@ extrapolate them by `stepsize` for `steps` steps beyond their extrema,
 resulting in 2n new points.
 If `minimize` is true, the new points are energy minimized.
 """
-function extrapolate(iso, n, stepsize=0.1, steps=1, minimize=true)
+function extrapolate(iso, n::Integer, stepsize=0.1, steps=1, minimize=true)
     data = iso.data
     model = iso.model
     coords = flattenlast(data.coords[2])
@@ -41,7 +41,7 @@ function extrapolate(iso, n, stepsize=0.1, steps=1, minimize=true)
     for (p, dir, N) in [(p, -1, n), (reverse(p), 1, 2 * n)]
         for i in p
             try
-                x = extrapolate(data, model, coords[:, i], dir * stepsize, steps)
+                x = extrapolate(iso, coords[:, i], dir * stepsize, steps)
                 minimize && (x = energyminimization_chilevel(iso, x))
                 push!(xs, x)
             catch e
@@ -60,12 +60,11 @@ function extrapolate(iso, n, stepsize=0.1, steps=1, minimize=true)
     return xs
 end
 
-function extrapolate(d, model, x::AbstractVector, step, steps)
+function extrapolate(iso, x::AbstractVector, step, steps)
     x = copy(x)
     for _ in 1:steps
-        grad = dchidx(d, model, x)
+        grad = dchidx(iso, x)
         x .+= grad ./ norm(grad)^2 .* step
-        #@show model(features(d,x))
     end
     return x
 end
