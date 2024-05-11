@@ -90,8 +90,8 @@ end
 
 #features(sim::SimulationData, x) = sim.featurizer(x)
 
-gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), gpu(d.coords), d.featurizer)
-cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), cpu(d.coords), d.featurizer)
+gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), d.coords, d.featurizer)
+cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), d.coords, d.featurizer)
 
 features(d::SimulationData, x) = d.featurizer(x)
 
