@@ -1,16 +1,23 @@
 # maximum likelihood path on given data
 
-function reactive_path(xi::AbstractVector, coords::Matrix; sigma, maxjump, method=QuantilePath(0.05), normalize=false)
+function reactive_path(xi::AbstractVector, coords::Matrix; sigma, maxjump, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
     xi = cpu(xi)
     from, to = fromto(method, xi)
 
     nco = normalize ? coords ./ norm(coords, Inf) : coords
 
     ids = shortestchain(nco, xi, from, to; sigma, maxjump)
+    if sortincreasing && !isincreasing(ids)
+        ids = reverse(ids)
+    end
 
     path = coords[:, ids]
     return ids, path
 end
+
+
+# heuristic whether a sequence is increasing
+isincreasing(x) = sum(diff(x) .> 0) > length(x) / 2
 
 # find path from s1 to s2
 struct FromToPath
