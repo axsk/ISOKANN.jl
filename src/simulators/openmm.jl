@@ -94,7 +94,7 @@ function OpenMMSimulation(;
     pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs)::PyObject
     if features isa Number
         radius = features
-        features = [calpha_pairs(pysim); local_atom_pairs(pysim, radius)]
+        features = [calpha_pairs(pysim); local_atom_pairs(pysim, radius)] |> unique
     end
     return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
 end

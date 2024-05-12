@@ -5,13 +5,13 @@ using PyCall
 
 ## Config
 
-comment = "momenta"
+comment = "momenta-long-lowfriction"
 
 pdb = "data/villin nowater.pdb"
-steps = 10_000
+steps = 30_000
 step = 0.002
 temp = 310
-friction = 1
+friction = 0.01
 integrator = :langevinmiddle
 momenta = true
 features = 0.5 # 0 => backbone only
@@ -53,14 +53,9 @@ println("lagtime: $lagtime ns")
 println("simtime per generation: $simtime_per_gen ns")
 
 @time "creating system" sim = OpenMMSimulation(;
-    pdb, steps, forcefields, features, friction, step, momenta, temp, nthreads=1, mmthreads="gpu")
+    pdb, steps, forcefields, features, friction, step, momenta, temp, nthreads=1, mmthreads="gpu", addwater, padding, ionicstrength)
 
-if addwater
-    @time "adding water" sim = OpenMMSimulation(;
-        pdb, steps, forcefields, friction, step, momenta, temp, nthreads=1, mmthreads="gpu",
-        features=sim.features, addwater=true, padding, ionicstrength)
-end
-
+#=
 @pyimport openmm
 picosecond = openmm.unit.picosecond
 kelvin = openmm.unit.kelvin
@@ -74,6 +69,7 @@ elseif integrator == :varverlet
 elseif integrator == :nosehoover
     sim.pysim.context._integrator = openmm.NoseHooverIntegrator(sim.temp * kelvin, sim.friction / picosecond, sim.step * picosecond)
 end
+=#
 
 data = if readdata isa String
     @time "reading initial data" let i = ISOKANN.load(readdata)
