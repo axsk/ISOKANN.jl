@@ -5,14 +5,15 @@ using PyCall
 
 ## Config
 
-comment = "momenta-long-lowfriction"
+comment = "momenta-long-medlowfriction"
 
 pdb = "data/villin nowater.pdb"
-steps = 30_000
+steps = 20_000
 step = 0.002
 temp = 310
-friction = 0.01
+friction = 0.1
 integrator = :langevinmiddle
+minimize = true
 momenta = true
 features = 0.5 # 0 => backbone only
 #forcefields = OpenMM.FORCE_AMBER_IMPLICIT  # TODO: this shouldnb be an option the way we build addwater now
@@ -21,8 +22,8 @@ addwater = true
 padding = 1
 ionicstrength = 0.0
 
-nx = 8
-nk = 4
+nx = 20
+nk = 1
 iter = 1000
 generations = 1000
 cutoff = 3000
@@ -53,9 +54,9 @@ println("lagtime: $lagtime ns")
 println("simtime per generation: $simtime_per_gen ns")
 
 @time "creating system" sim = OpenMMSimulation(;
-    pdb, steps, forcefields, features, friction, step, momenta, temp, nthreads=1, mmthreads="gpu", addwater, padding, ionicstrength)
+    pdb, steps, forcefields, features, friction, step, momenta, temp, nthreads=1, mmthreads="gpu", addwater, padding, ionicstrength, minimize)
 
-#=
+
 @pyimport openmm
 picosecond = openmm.unit.picosecond
 kelvin = openmm.unit.kelvin
@@ -68,8 +69,10 @@ elseif integrator == :varverlet
     sim.pysim.context._integrator = openmm.VariableVerletIntegrator(sim.step)
 elseif integrator == :nosehoover
     sim.pysim.context._integrator = openmm.NoseHooverIntegrator(sim.temp * kelvin, sim.friction / picosecond, sim.step * picosecond)
+elseif integrator == :anderson
+    sim.pysim.context._integrator = openmm.AndersenThermostat(sim.temp * kelvin, sim.friction)
 end
-=#
+
 
 data = if readdata isa String
     @time "reading initial data" let i = ISOKANN.load(readdata)
@@ -124,8 +127,9 @@ for i in 1:generations
             ISOKANN.Plots.savefig(plot_training(iso), "$path/villin_fold_$(simtime)ps.png")
             println("\n status: $path/villin_fold_$(simtime)ps.png \n")
             ISOKANN.save("$path/iso.jld2", iso)
-        catch
-            @show catch_backtrace()
+        catch e
+            @show e
+
         end
     end
 end

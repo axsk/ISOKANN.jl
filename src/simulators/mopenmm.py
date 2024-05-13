@@ -107,7 +107,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
     simulation.context.setPositions(modeller.positions)
     simulation.context.setVelocitiesToTemperature(simulation.integrator.getTemperature())
     if minimize:
-        simulation.minimizeEnergy()
+        simulation.minimizeEnergy(maxIterations=100)
     return simulation
 
 def get_numpy_pos(context):
