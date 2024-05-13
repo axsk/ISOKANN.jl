@@ -121,12 +121,12 @@ def get_numpy_state(context, withmomenta):
 
 def set_numpy_state(context, x, withmomenta):
     if withmomenta:
-          n = len(x) // 2
-          context.setPositions(x[:n])
-          context.setVelocities(x[n:])
-        else:
-          context.setPositions(x)
-          context.setVelocitiesToTemperature(sim.integrator.getTemperature())
+        n = len(x) // 2
+        context.setPositions(x[:n])
+        context.setVelocities(x[n:])
+    else:
+        context.setPositions(x)
+        context.setVelocitiesToTemperature(sim.integrator.getTemperature())
 
 def newcontext(context, mmthreads):
   if mmthreads == 'gpu':

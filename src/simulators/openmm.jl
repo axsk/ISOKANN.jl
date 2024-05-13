@@ -87,7 +87,7 @@ function OpenMMSimulation(;
     mmthreads=1,
     addwater=false,
     padding=3,
-    ionicstrength=0.15,
+    ionicstrength=0.0,
     forcefield_kwargs=Dict(),
     momenta=false)
 
@@ -242,7 +242,7 @@ end
 function atomfilter(atom)
     !(
         atom.element.symbol == "H" ||
-        atom.residue.name == "HOH"
+        atom.residue.name in ["HOH", "NA", "CL"]
     )
 end
 
