@@ -174,9 +174,9 @@ end
 
 Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.
 """
-function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}, steps=s.steps, saveevery=1; stepsize=s.step, mmthreads=s.mmthreads) where {T}
+function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}=getcoords(s), steps=s.steps, saveevery=1; stepsize=s.step, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
     x0 = reinterpret(Tuple{T,T,T}, x0)
-    xs = py"trajectory"(s.pysim, x0, stepsize, steps, saveevery, mmthreads)
+    xs = py"trajectory"(s.pysim, x0, stepsize, steps, saveevery, mmthreads, momenta)
     xs = permutedims(xs, (3, 2, 1))
     xs = reshape(xs, :, size(xs, 3))
     return xs
@@ -185,16 +185,8 @@ end
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)#::Vector
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, sim.momenta)
 
-function getcoords(sim::PyObject, momenta)
-    st = sim.context.getState(getPositions=true, getVelocities=momenta)
-    x = st.getPositions(asNumpy=true).flatten()
-    if !momenta
-        return x
-    else
-        v = st.getVelocities(asNumpy=true).flatten()
-        return vcat(x, v)
-    end
-end
+getcoords(sim::PyObject, momenta) = py"get_numpy_state($sim.context, $momenta).flatten()"
+
 
 function setcoords(sim::PyObject, coords::AbstractVector{T}, momenta) where {T}
     t = reinterpret(Tuple{T,T,T}, Array(coords))

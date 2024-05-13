@@ -7,32 +7,16 @@ import numpy as np
 def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=False):
     def singlerun(i):
         c = newcontext(sim.context, nthreadssim)
-        if withmomenta:
-          n = len(xs[i]) // 2
-          c.setPositions(xs[i][:n])
-          c.setVelocities(xs[i][n:])
-        else:
-          c.setPositions(xs[i])
-          c.setVelocitiesToTemperature(sim.integrator.getTemperature())
-
+        set_numpy_state(c, xs[i], withmomenta)
         c.getIntegrator().setStepSize(stepsize)
+
         try:
           c.getIntegrator().step(steps)
-
         except OpenMMException as e:
           print("Error integrating trajectory", e)
-          x = c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
-          x.fill(np.nan)
-          return x
-
-        if withmomenta:
-          state = c.getState(getPositions=True, getVelocities=True)
-          x = np.concatenate([
-              state.getPositions(asNumpy=True).value_in_unit(nanometer),
-              state.getVelocities(asNumpy=True).value_in_unit(nanometer/picosecond)])
-        else:
-          x = c.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
-
+          return get_numpy_state(c, withmomenta).fill(np.nan)
+        
+        x = get_numpy_state(c, withmomenta)
         return x
 
 
@@ -42,19 +26,26 @@ def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=F
         out = [singlerun(i) for i in range(len(xs))]
     return np.array(out).flatten()
 
-def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads):
+def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   n_states = steps // saveevery + 1
   trajectory = np.zeros((n_states,) + np.array(x0).shape)
   trajectory[0] = x0
 
   c = newcontext(sim.context, mmthreads)
-  c.setPositions(x0)
-  c.setVelocitiesToTemperature(c.getIntegrator().getTemperature())
+
+  if withmomenta:
+    n = len(x0) // 2
+    c.setPositions(x0[:n])
+    c.setVelocities(x0[n:])
+  else:
+    c.setPositions(x0)
+    c.setVelocitiesToTemperature(sim.integrator.getTemperature())
+
   c.getIntegrator().setStepSize(stepsize)
 
   for n in range(1,n_states):
     c.getIntegrator().step(saveevery)
-    trajectory[n] = get_numpy_pos(c)
+    trajectory[n] = get_numpy_state(c, withmomenta)
 
   return trajectory
 
@@ -106,12 +97,36 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
 
     simulation.context.setPositions(modeller.positions)
     simulation.context.setVelocitiesToTemperature(simulation.integrator.getTemperature())
+
+    simulation.reporters.append(
+        StateDataReporter(
+            "openmmsimulation.log", 1, step=True,
+            potentialEnergy=True, totalEnergy=True,
+            temperature=True, speed=True,)
+            )
+
     if minimize:
         simulation.minimizeEnergy(maxIterations=100)
     return simulation
 
-def get_numpy_pos(context):
-  return context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
+def get_numpy_state(context, withmomenta):
+    if withmomenta:
+        state = context.getState(getPositions=True, getVelocities=True)
+        x = np.concatenate([
+            state.getPositions(asNumpy=True).value_in_unit(nanometer),
+            state.getVelocities(asNumpy=True).value_in_unit(nanometer/picosecond)])
+    else:
+        x = context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
+    return x
+
+def set_numpy_state(context, x, withmomenta):
+    if withmomenta:
+          n = len(x) // 2
+          context.setPositions(x[:n])
+          context.setVelocities(x[n:])
+        else:
+          context.setPositions(x)
+          context.setVelocitiesToTemperature(sim.integrator.getTemperature())
 
 def newcontext(context, mmthreads):
   if mmthreads == 'gpu':
