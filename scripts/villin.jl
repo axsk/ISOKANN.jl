@@ -133,10 +133,14 @@ for i in 1:generations
 
             pdblen = ISOKANN.readchemfile(iso.data.sim.pdb) |> length
             save_reactive_path(iso, ISOKANN.getcoords(iso.data)[1:pdblen, :] |> cpu;
-                out="$path/villin_fold_$(simtime)ps.pdb", sigma, maxjump)
+                out="$path/snapshot/villin_fold_$(simtime)ps.pdb", sigma, maxjump)
             #ISOKANN.savecoords("$path/data.pdb", iso)
-            ISOKANN.Plots.savefig(plot_training(iso), "$path/villin_fold_$(simtime)ps.png")
-            println("\n status: $path/villin_fold_$(simtime)ps.png \n")
+            ISOKANN.Plots.savefig(plot_training(iso), "$path/snapshot/villin_fold_$(simtime)ps.png")
+
+
+            symlink("$path/snapshot/villin_fold_$(simtime)ps.pdb", "$path/path.pdb")
+            symlink("$path/snapshot/villin_fold_$(simtime)ps.png", "$path/training.png")
+            println("status: $path/ training.png")
             ISOKANN.save("$path/iso.jld2", iso)
         catch e
             @show e

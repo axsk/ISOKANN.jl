@@ -221,10 +221,11 @@ function force(sim::OpenMMSimulation, x)
     CUDA.reclaim()
     setcoords(sim, x)
     sys = sim.pysim.system
-    m = [sys.getParticleMass(i - 1)._value for i in 1:sys.getNumParticles()]
+
     f = sim.pysim.context.getState(getForces=true).getForces(asNumpy=true)
     f = f.value_in_unit(f.unit) |> permutedims
-    f ./= m'
+    #m = [sys.getParticleMass(i - 1)._value for i in 1:sys.getNumParticles()]
+    #f ./= m'
     f = vec(f)
     @assert(!any(isnan.(f)))
     f

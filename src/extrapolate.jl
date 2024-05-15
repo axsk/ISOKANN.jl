@@ -79,21 +79,33 @@ end
 
 global trace = []
 
-function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=true)
+function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=false, algorithm=Optim.GradientDescent)
     sim = iso.data.sim
     x = copy(x0) .|> Float64
 
     chi(x) = myonly(chicoords(iso, x))
-    chilevel = Levelset(chi, chi(x0))
+    manifold = Levelset(chi, chi(x0))
 
-    U(x) = OpenMM.potential(sim, x)
-    dU(x) = (f = -OpenMM.force(sim, x); (skipwater && zerowater!(sim, f)); f)
+
+    global trace = [x0]
+    U(x) = begin
+        push!(trace, x)
+        @show OpenMM.potential(sim, x)
+    end
+    dU(x) = begin
+        push!(trace, x)
+        f = -OpenMM.force(sim, x)
+        (skipwater && zerowater!(sim, f))
+        f
+    end
 
 
     linesearch = Optim.LineSearches.HagerZhang(alphamax=alphaguess)
-    alg = Optim.LBFGS(; linesearch, alphaguess, manifold=chilevel)
+    alg = algorithm(; linesearch, alphaguess, manifold)
 
-    o = Optim.optimize(U, dU, x, alg, Optim.Options(; iterations, f_tol, show_trace); inplace=false)
+
+    o = Optim.optimize(U, dU, x, alg, Optim.Options(; iterations, f_tol, show_trace,); inplace=false)
+    return o
     return o.minimizer
 end
 
@@ -112,13 +124,16 @@ struct Levelset{F,T} <: Optim.Manifold
 end
 
 function Optim.project_tangent!(M::Levelset, g, x)
-    replace!(g, NaN => 0)
+    @assert !any(isnan.(g))
+    @assert !any(isnan.(x))
+    #replace!(g, NaN => 0)
     u = Zygote.gradient(M.f, x) |> only
     u ./= norm(u)
     g .-= dot(g, u) * u
 end
 
 function Optim.retract!(M::Levelset, x)
+    @assert !any(isnan.(x))
     g = Zygote.withgradient(M.f, x)
     u = g.grad |> only
     h = M.target - g.val
