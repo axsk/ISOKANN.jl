@@ -126,7 +126,14 @@ def set_numpy_state(context, x, withmomenta):
         context.setVelocities(x[n:])
     else:
         context.setPositions(x)
-        context.setVelocitiesToTemperature(sim.integrator.getTemperature())
+        context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
+
+def set_random_velocities(context,  mmthreads):
+    context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
+    v = context.getState(getVelocities=True).getVelocities(asNumpy=True).value_in_unit(nanometer/picosecond).flatten()
+    return v
+
+
 
 def newcontext(context, mmthreads):
   if mmthreads == 'gpu':

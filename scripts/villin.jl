@@ -5,7 +5,7 @@ using PyCall
 
 ## Config
 
-comment = "momenta-long-medlowfriction"
+comment = ""
 
 pdb = "data/villin nowater.pdb"
 steps = 20_000
@@ -17,7 +17,7 @@ minimize = true
 momenta = true
 features = 0.5 # 0 => backbone only
 #forcefields = OpenMM.FORCE_AMBER_IMPLICIT  # TODO: this shouldnb be an option the way we build addwater now
-forcefields = OpenMM.FORCE_AMBER
+forcefields = ISOKANN.OpenMM.FORCE_AMBER
 addwater = true
 padding = 1
 ionicstrength = 0.0
@@ -26,9 +26,9 @@ nx = 20
 nk = 1
 iter = 1000
 generations = 1000
-cutoff = 3000
+cutoff = 2500
 
-kde_padding = 0.05
+kde_padding = 0.02
 extrapolates = 0 # *2
 extrapolate = 0.05
 keepedges = false
@@ -41,6 +41,7 @@ sigma = 2
 maxjump = 1
 
 path = "out/villin/$(now())"[1:end-4] * comment
+
 
 readdata = nothing
 #readdata = "latest/iso.jld2"
@@ -89,17 +90,27 @@ iso = Iso2(data;
     loggers=[])
 
 @time "initial training" run!(iso, iter)
-
+data = nothing
 ## Running
 
 newsim = true
 
 for i in 1:generations
     GC.gc()
+    if length(iso.data) > cutoff
+        iso.data = iso.data[end-cutoff+1:end]
+    end
+    @show varinfo()
+    GC.gc()
 
     @time "extrapolating" ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolate)
     @time "kde sampling" ISOKANN.resample_kde!(iso, nx; padding=kde_padding)
+
+
+
     @time "training" run!(iso, iter)
+
+
 
     simtime = ISOKANN.simulationtime(iso)
 

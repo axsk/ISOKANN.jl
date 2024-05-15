@@ -28,7 +28,7 @@ extrapolate them by `stepsize` for `steps` steps beyond their extrema,
 resulting in 2n new points.
 If `minimize` is true, the new points are energy minimized.
 """
-function extrapolate(iso, n::Integer, stepsize=0.1, steps=1, minimize=true)
+function extrapolate(iso, n::Integer, stepsize=0.1, steps=1, minimize=true, maxskips=10)
     data = iso.data
     model = iso.model
     coords = flattenlast(data.coords[2])
@@ -40,12 +40,20 @@ function extrapolate(iso, n::Integer, stepsize=0.1, steps=1, minimize=true)
 
     for (p, dir, N) in [(p, -1, n), (reverse(p), 1, 2 * n)]
         for i in p
+            skips > maxskips && break
             try
                 x = extrapolate(iso, coords[:, i], dir * stepsize, steps)
                 minimize && (x = energyminimization_chilevel(iso, x))
+                if data.sim.momenta
+                    x = reshape(x, :, 2)
+                    #x[:, 2] .= 0
+                    x = vec(x)
+                end
+                #&& ISOKANN.OpenMM.set_random_velocities!(data.sim, x)
                 push!(xs, x)
             catch e
-                if isa(e, PyCall.PyError) || isa(e, DomainError)
+                if isa(e, PyCall.PyError) || isa(e, DomainError) || isa(e, AssertionError)
+                    @show e
                     skips += 1
                     continue
                 end
@@ -69,18 +77,33 @@ function extrapolate(iso, x::AbstractVector, step, steps)
     return x
 end
 
-function energyminimization_chilevel(iso, x0; f_tol=1e-1, alphaguess=1e-6, iterations=100, show_trace=true)
+global trace = []
+
+function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=true)
     sim = iso.data.sim
-    x = copy(x0)
+    x = copy(x0) .|> Float64
 
     chi(x) = myonly(chicoords(iso, x))
     chilevel = Levelset(chi, chi(x0))
 
     U(x) = OpenMM.potential(sim, x)
-    dU(x) = -OpenMM.force(sim, x)
+    dU(x) = (f = -OpenMM.force(sim, x); (skipwater && zerowater!(sim, f)); f)
 
-    o = Optim.optimize(U, dU, x, Optim.LBFGS(; alphaguess, manifold=chilevel), Optim.Options(; iterations, f_tol, show_trace); inplace=false)
+
+    linesearch = Optim.LineSearches.HagerZhang(alphamax=alphaguess)
+    alg = Optim.LBFGS(; linesearch, alphaguess, manifold=chilevel)
+
+    o = Optim.optimize(U, dU, x, alg, Optim.Options(; iterations, f_tol, show_trace); inplace=false)
     return o.minimizer
+end
+
+function zerowater!(sim, x)
+    inds = map(sim.pysim.topology.atoms()) do a
+        a.residue.name == "HOH"
+    end
+    x = reshape(x, 3, :)
+    x[:, inds] .= 0
+    vec(x)
 end
 
 struct Levelset{F,T} <: Optim.Manifold
@@ -89,6 +112,7 @@ struct Levelset{F,T} <: Optim.Manifold
 end
 
 function Optim.project_tangent!(M::Levelset, g, x)
+    replace!(g, NaN => 0)
     u = Zygote.gradient(M.f, x) |> only
     u ./= norm(u)
     g .-= dot(g, u) * u

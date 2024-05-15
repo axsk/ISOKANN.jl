@@ -73,6 +73,9 @@ function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs.
             xs = xs[:, e.select]
             ys = e.result[:, :, e.select]
             @warn "SimulationData: discarded $(nx-sum(e.select))/$nx starting points due to simulation errors."
+            if sum(e.select) == 0
+                return sim
+            end
         else
             rethrow(e)
         end

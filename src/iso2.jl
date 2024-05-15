@@ -130,20 +130,22 @@ end
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01)
+function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01, kde=0, kde_padding=0)
     p = ProgressMeter.Progress(generations)
     t_sim = 0.
+    t_kde = 0.0
     t_train = 0.
     t_extra = 0.0
     for g in 1:generations
         GC.gc()
         t_sim += @elapsed adddata!(iso, nx; keepedges)
+        t_kde += @elapsed ISOKANN.resample_kde!(iso, kde; padding=kde_padding)
+
+        t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
 
         if length(iso.data) > cutoff
             iso.data = iso.data[end-cutoff+1:end]
         end
-
-        t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
 
         t_train += @elapsed run!(iso, iter, showprogress=false)
 
@@ -153,7 +155,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
                 (:loss, iso.losses[end]),
                 (:iterations, length(iso.losses)),
                 (:data, size(getys(iso.data))),
-                ("t_sim, t_train, t_extra", (t_sim, t_train, t_extra)),
+                ("t_sim, t_train, t_extra, t_kde", (t_sim, t_train, t_extra, t_kde)),
                 ("simulated time", "$(simulationtime(iso))"), #TODO: doesnt work with cutoff
                 (:macrorates, exit_rates(iso))],
             ignore_predictor=true)

@@ -96,7 +96,7 @@ function pdists(x::AbstractArray, inds::Vector{Tuple{T,T}}) where {T}
   d, s... = size(x)
   b = reshape(x, d, :)
   p = pdists(b, inds)
-  return reshape(p, :, s...)
+    return reshape(p, length(inds), s...)
 end
 
 # convenience wrapper

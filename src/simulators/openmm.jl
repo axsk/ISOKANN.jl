@@ -187,6 +187,11 @@ setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, sim.mome
 
 getcoords(sim::PyObject, momenta) = py"get_numpy_state($sim.context, $momenta).flatten()"
 
+function minimize(sim::OpenMMSimulation, coords, iter=100)
+    setcoords(sim, coords)
+    sim.pysim.minimizeEnergy(maxIterations=iter)
+    return getcoords(sim)
+end
 
 function setcoords(sim::PyObject, coords::AbstractVector{T}, momenta) where {T}
     t = reinterpret(Tuple{T,T,T}, Array(coords))
@@ -200,25 +205,37 @@ function setcoords(sim::PyObject, coords::AbstractVector{T}, momenta) where {T}
     end
 end
 
+""" mutates the state in sim """
+function set_random_velocities!(sim, x)
+    v = py"set_random_velocities($(sim.pysim.context), $(sim.mmthreads))"
+    n = length(x) ÷ 2
+    x[n+1:end] = v
+
+    return x
+end
+
 force(sim::OpenMMSimulation, x::CuArray) = force(sim, Array(x)) |> cu
 potential(sim::OpenMMSimulation, x::CuArray) = potential(sim, Array(x))
 
 function force(sim::OpenMMSimulation, x)
     CUDA.reclaim()
-    sim = sim.pysim
     setcoords(sim, x)
-    f = sim.context.getState(getForces=true).getForces(asNumpy=true)
-    f = f.value_in_unit(f.unit) |> permutedims |> vec
+    sys = sim.pysim.system
+    m = [sys.getParticleMass(i - 1)._value for i in 1:sys.getNumParticles()]
+    f = sim.pysim.context.getState(getForces=true).getForces(asNumpy=true)
+    f = f.value_in_unit(f.unit) |> permutedims
+    f ./= m'
+    f = vec(f)
+    @assert(!any(isnan.(f)))
+    f
 end
 
 function potential(sim::OpenMMSimulation, x)
     CUDA.reclaim()
-    sim = sim.pysim
     setcoords(sim, x)
-    v = sim.context.getState(getEnergy=true).getPotentialEnergy()
+    v = sim.pysim.context.getState(getEnergy=true).getPotentialEnergy()
     v = v.value_in_unit(v.unit)
 end
-
 
 ### PYTHON CODE
 
