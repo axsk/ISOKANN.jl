@@ -5,16 +5,16 @@ using PyCall
 
 ## Config
 
-comment = ""
+comment = "hamilton"
 
 pdb = "data/villin nowater.pdb"
-steps = 20_000
+steps = 10_000
 step = 0.002
 temp = 310
-friction = 1
+friction = 0
 integrator = :langevinmiddle
 minimize = true
-momenta = true
+momenta = false
 features = 0.5 # 0 => backbone only
 #forcefields = OpenMM.FORCE_AMBER_IMPLICIT  # TODO: this shouldnb be an option the way we build addwater now
 forcefields = ISOKANN.OpenMM.FORCE_AMBER
@@ -22,11 +22,12 @@ addwater = true
 padding = 1
 ionicstrength = 0.0
 
-nx = 20
+nx = 10
+nchistrat = 10
 nk = 1
 iter = 1000
-generations = 1000
-cutoff = 2500
+generations = 2500
+cutoff = 20_000
 
 kde_padding = 0.02
 extrapolates = 0 # *2
@@ -49,7 +50,7 @@ readdata = nothing
 ## Initialisation
 
 lagtime = steps * step / 1000 # in nanoseconds
-simtime_per_gen = lagtime * (nx + 2 * extrapolates) * nk # in nanoseconds
+simtime_per_gen = lagtime * (nx + nchistrat + 2 * extrapolates) * nk # in nanoseconds
 
 println("lagtime: $lagtime ns")
 println("simtime per generation: $simtime_per_gen ns")
@@ -72,6 +73,10 @@ elseif integrator == :nosehoover
     sim.pysim.context._integrator = openmm.NoseHooverIntegrator(sim.temp * kelvin, sim.friction / picosecond, sim.step * picosecond)
 elseif integrator == :anderson
     sim.pysim.context._integrator = openmm.AndersenThermostat(sim.temp * kelvin, sim.friction)
+elseif integrator == :verlet
+    sim.pysim.context._integrator = openmm.VerletIntegrator(sim.step * picosecond)
+else
+    error("unknown integrator")
 end
 
 
@@ -94,25 +99,27 @@ data = nothing
 ## Running
 
 newsim = true
+simtime = ISOKANN.simulationtime(iso)
 
 for i in 1:generations
+    global simtime
+
     GC.gc()
     if length(iso.data) > cutoff
         iso.data = iso.data[end-cutoff+1:end]
     end
-    @show varinfo()
+
+    #@show varinfo()
     GC.gc()
 
+    simtime -= ISOKANN.simulationtime(iso)
+    @time "chistratsampling" ISOKANN.adddata!(iso, nchistrat; keepedges)
     @time "extrapolating" ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolate)
     @time "kde sampling" ISOKANN.resample_kde!(iso, nx; padding=kde_padding)
-
-
+    simtime += ISOKANN.simulationtime(iso)
 
     @time "training" run!(iso, iter)
 
-
-
-    simtime = ISOKANN.simulationtime(iso)
 
     @time "saving" begin
 
@@ -137,11 +144,12 @@ for i in 1:generations
             #ISOKANN.savecoords("$path/data.pdb", iso)
             ISOKANN.Plots.savefig(plot_training(iso), "$path/snapshot/villin_fold_$(simtime)ps.png")
 
-
-            symlink("$path/snapshot/villin_fold_$(simtime)ps.pdb", "$path/path.pdb")
-            symlink("$path/snapshot/villin_fold_$(simtime)ps.png", "$path/training.png")
-            println("status: $path/ training.png")
             ISOKANN.save("$path/iso.jld2", iso)
+
+            run(`ln -sf snapshot/villin_fold_$(simtime)ps.pdb $path/path.pdb`)
+            run(`ln -sf snapshot/villin_fold_$(simtime)ps.png $path/training.png`)
+
+            println("status: $path/training.png")
         catch e
             @show e
 
