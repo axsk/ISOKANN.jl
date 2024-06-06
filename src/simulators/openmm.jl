@@ -144,7 +144,7 @@ Note: For CPU we observed better performance with nthreads = num cpus, mmthreads
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
-    CUDA.reclaim()
+    s.mmthreads == "gpu" && CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
