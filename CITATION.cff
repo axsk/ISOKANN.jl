@@ -1,0 +1,25 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Julia package ISOKANN.jl
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Alexander
+    family-names: Sikorski
+    email: sikorski@zib.de
+    affiliation: Zuse Institute Berlin
+    orcid: 'https://orcid.org/0000-0001-9051-650X'
+doi: 10.5281/zenodo.11519359
+url: 'https://github.com/axsk/ISOKANN.jl/'
+abstract: >-
+  Julia implementation of the ISOKANN algorithm for the
+  computation of invariant subspaces of Koopman operators 
+keywords:
+  - isokann
+  - molecular-dynamics
+  - neural networks
+  - julia
