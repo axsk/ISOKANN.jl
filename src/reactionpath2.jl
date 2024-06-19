@@ -1,6 +1,6 @@
 # maximum likelihood path on given data
 
-function reactive_path(xi::AbstractVector, coords::Matrix; sigma, maxjump, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
+function reactive_path(xi::AbstractVector, coords::Matrix; sigma, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
     xi = cpu(xi)
     from, to = fromto(method, xi)
 
@@ -15,6 +15,7 @@ function reactive_path(xi::AbstractVector, coords::Matrix; sigma, maxjump, metho
     return ids, path
 end
 
+reactive_path(iso::Iso2; kwargs...) = reactive_path(chis(iso) |> vec, getcoords(iso.data); kwargs...)
 
 # heuristic whether a sequence is increasing
 isincreasing(x) = sum(diff(x) .> 0) > length(x) / 2

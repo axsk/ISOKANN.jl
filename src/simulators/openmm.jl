@@ -284,6 +284,13 @@ function calpha_pairs(pysim::PyObject)
     local_atom_pairs(pysim, Inf; atomfilter=x -> x.name == "CA")
 end
 
+calpha_inds(sim::OpenMMSimulation) = calpha_inds(sim.pysim)
+function calpha_inds(pysim::PyObject)
+    map(filter(x -> x.name == "CA", pysim.topology.atoms() |> collect)) do atom
+        atom.index + 1
+    end
+end
+
 
 ### SERIALIZATION
 

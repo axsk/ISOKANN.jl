@@ -2,6 +2,7 @@ using StatsBase: std, mean
 using KernelFunctions: SqExponentialKernel
 using Graphs: SimpleGraph, connected_components
 using WGLMakie, GraphMakie
+using StatsBase: var, median
 
 ## Kernel two sample test
 # https://en.wikipedia.org/wiki/Kernel_embedding_of_distributions#Kernel_two-sample_test
@@ -64,7 +65,7 @@ function tda(ys, chi; kernel=SqExponentialKernel(), windows=10, overlap=0.5)
 
     # normalize input data such that the std of each atom position is 1/D, which is the right scaling for the exponential kernel
     v = mean(var(ys, dims=2), dims=3)
-    ys ./= sqrt.(v) .* sqrt(D)
+    ys = ys ./ (sqrt.(v) .* sqrt(D))
 
     r = range(start=0, stop=1, length=windows + 1)
 
@@ -130,4 +131,21 @@ function test(overlap=0.1)
         chi[n] |> mean
     end
     graphplot(SimpleGraph(A), nodes, node_color=c)
+end
+
+function plot_tda(iso::Iso2; kwargs...)
+    ys = iso.data.coords[2]
+    chi = chis(iso) |> cpu |> vec
+    nodes, A = tda(ys, chi; kwargs...)
+    c = map(nodes) do n
+        chi[n] |> mean
+    end
+    graphplot(SimpleGraph(A), nodes, node_color=c)
+end
+
+function tda(iso::Iso2; kwargs...)
+    ys = iso.data.coords[2]
+    chi = chis(iso) |> cpu |> vec
+    nodes, A = tda(ys, chi; kwargs...)
+    return nodes, A, chi
 end
