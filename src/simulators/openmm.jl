@@ -83,19 +83,30 @@ function OpenMMSimulation(;
     steps=100,
     features=:all,
     minimize=false,
-    nthreads=Threads.nthreads(),
-    mmthreads=1,
+    gpu=false,
+    nthreads=gpu ? 1 : Threads.nthreads(),
+    mmthreads=gpu ? "gpu" : 1,
     addwater=false,
     padding=3,
     ionicstrength=0.0,
     forcefield_kwargs=Dict(),
     momenta=false)
 
-    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs)::PyObject
+    platform, properties = if mmthreads == "gpu"
+        "CUDA", Dict()
+    else
+        "CPU", Dict("Threads" => "$mmthreads")
+    end
+
+    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, platform, properties)::PyObject
+
     if features isa Number
         radius = features
         features = [calpha_pairs(pysim); local_atom_pairs(pysim, radius)] |> unique
     end
+
+
+
     return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
 end
 

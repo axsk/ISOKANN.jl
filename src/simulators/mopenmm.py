@@ -6,7 +6,10 @@ import numpy as np
 
 def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=False):
     def singlerun(i):
-        c = newcontext(sim.context, nthreadssim)
+        if nthreads > 1:
+            c = newcontext(sim.context, nthreadssim)
+        else:
+            c = sim.context
         set_numpy_state(c, xs[i], withmomenta)
         c.getIntegrator().setStepSize(stepsize)
 
@@ -18,7 +21,6 @@ def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=F
         
         x = get_numpy_state(c, withmomenta)
         return x
-
 
     if nthreads > 1:
         out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))

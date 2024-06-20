@@ -1,5 +1,7 @@
 using WGLMakie
 using ISOKANN
+using WGLMakie.Observables: throttle
+using ThreadPools
 
 function bondids(pysim)
     ids = Int[]
@@ -41,107 +43,121 @@ function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=true, showbackb
     end
 
 
-    #if atoms
-    meshscatter!(ax, a, markersize=0.008, color=@lift($color .* ones(size($a, 2))),
-        colorrange=(0.0, 1.0), colormap=:roma,)
-    #end
-
-    #if cas
-    #ca = @lift
+    meshscatter!(ax, a, markersize=0.1, color=@lift($color .* ones(size($a, 2))), colorrange=(0.0, 1.0), colormap=:roma,)
     lines!(ax, p; linewidth, color=color, colorrange=(0.0, 1.0), colormap=:roma,)
-    #end
-
-    #if bonds
-
-    #bonds = @lift 
     linesegments!(ax, b; color=color, colorrange=(0.0, 1.0), colormap=:roma, alpha)
-    #end
+
     ax
 end
 
 function plotmol!(ax, iso::Iso2, i; kwargs...)
     coords = @lift ISOKANN.align(iso.data.coords[1][:, $i], iso.data.coords[1][:, 1])
-    color = @lift(iso.model(iso.data.features[1][:, $i]))
+    color = @lift(iso.model(iso.data.features[1][:, $i]) |> cpu)
     plotmol!(ax, coords, iso.data.sim.pysim, color; kwargs...)
 end
 
-#dashboard(iso::Iso2) = dashboard(Observable(Iso2))
-function dashboard(iso::Iso2)
-    coords = Observable(iso.data.coords[1])
+dashboard(iso::Iso2) = dashboard(Observable(iso))
+
+function dashboard(iso::Observable)
+    coords = @lift iso.data.coords[1] |> cpu
     chis = Observable(ISOKANN.chis(iso) |> vec |> cpu)
     icur = Observable(1)
-    losses = Observable(iso.losses)
+    losses = Observable(iso.losses |> cpu)
 
     imin = @lift argmin($chis)
     imax = @lift argmax($chis)
 
     n = @lift size($coords, 2)
 
-    fig = Figure(size=(1600, 1000))
+    fig = Figure(size=(1920, 1000))
 
 
-    displaygrid = fig[1, 3] = GridLayout()
-    showbackbone = Toggle(displaygrid[1, 1], active=true).active
-    showatoms = Toggle(displaygrid[2, 1]).active
-    showbonds = Toggle(displaygrid[3, 1], active=true).active
-    showextrema = Toggle(displaygrid[4, 1], active=true).active
+    showbackbone = Toggle(fig, active=true)
+    showatoms = Toggle(fig)
+    showbonds = Toggle(fig, active=true)
+    showextrema = Toggle(fig, active=true)
 
-    ax = LScene(fig[1:6, 2:3], show_axis=false)
+    labels = WGLMakie.Label.(Ref(fig), ["Backbone", "Bonds", "Atoms", "Extrema"])
+
+    fig[1, 2] = grid!(hcat(labels, [showbackbone, showbonds, showatoms, showextrema]))
+
+    colsize!(fig.layout, 1, Relative(2 / 5))
+    colsize!(fig.layout, 2, Relative(3 / 5))
 
 
-    plotmol!(ax, iso, icur, linewidth=6; showbackbone, showatoms, showbonds)
+    run = Toggle(fig)
+    contsampling = Toggle(fig)
+    uniformsampling = Toggle(fig)
+    adaptivesampling = Toggle(fig)
 
-    let showbackbone = @lift($showextrema && $showbackbone),
-        showatoms = @lift($showextrema && $showatoms),
-        showbonds = @lift($showextrema && $showbonds)
+    fig[1, 1] = grid!(hcat(WGLMakie.Label.(Ref(fig), ["Run", "Trajectory", "Uniform", "Fill-In"]), [run, contsampling, uniformsampling, adaptivesampling]))
+
+
+    ax = LScene(fig[1:6, 2], show_axis=false)
+
+
+    plotmol!(ax, iso, icur, linewidth=6; showbackbone=showbackbone.active, showatoms=showatoms.active, showbonds=showbonds.active)
+
+    let showbackbone = @lift($(showextrema.active) && $(showbackbone.active)),
+        showatoms = @lift($(showextrema.active) && $(showatoms.active)),
+        showbonds = @lift($(showextrema.active) && $(showbonds.active))
+
+
+
 
         plotmol!(ax, iso, imax; showbackbone, showatoms, showbonds)
         plotmol!(ax, iso, imin; showbackbone, showatoms, showbonds)
     end
 
 
-    lines(fig[3, 1], losses, axis=(yscale=log10, limits=@lift((((1, max(length($losses), 2)), nothing)))))
-    scatter(fig[4, 1][1, 1], chis, axis=(limits=@lift((1, $n, 0, 1)),))
+    lines(fig[2, 1], losses, axis=(yscale=log10, limits=@lift((((1, max(length($losses), 2)), nothing)))))
+    scatter(fig[3, 1], chis, axis=(limits=@lift((1, $n, 0, 1)),))
 
-    frameselector = SliderGrid(fig[5, 1],
+    frameselector = SliderGrid(fig[4, 1],
         (label="Data Frame", range=@lift(1:$n), startvalue=n)
     )
 
     connect!(icur, frameselector.sliders[1].value)
 
-    run = Toggle(fig[1:2, 1][1, 2])
-
-    adaptivesampling = Toggle(fig[1:2, 1][2, 2])
-
-    uniformsampling = Toggle(fig[1:2, 1][3, 2])
-
-    contsampling = Toggle(fig[1:2, 1][4, 2])
-
-
+    global ISRUNNING
 
     on(run.active) do e
-        @show e
-        Threads.@spawn begin
-            for _ in 1:1000
+        e || return
+        if ISRUNNING
+            run.active[] = false
+            return
+        end
+
+        ThreadPools.@tspawnat 1 begin
+            last = time()
+            ISRUNNING = true
+            while run.active[]
+                global ISO
+                ISO == iso || break
                 run.active[] || break
                 run!(iso)
                 adaptivesampling.active[] && ISOKANN.resample_kde!(iso, 1; padding=0.0)
                 uniformsampling.active[] && ISOKANN.adddata!(iso, 1, keepedges=false)
                 contsampling.active[] && continuedata!(iso)
 
-                chis[] = ISOKANN.chis(iso) |> vec |> cpu
-                coords[] = iso.data.coords[1]
-                icur[] = n[]
-                losses[] = iso.losses
-                sleep(0.001)
+
+                if time() - last > 0.1
+                    chis[] = ISOKANN.chis(iso) |> vec |> cpu
+                    coords[] = iso.data.coords[1]
+                    icur[] = n[]
+                    losses[] = iso.losses
+                    last = time()
+                end
+                # sleep(0.01)
             end
+            ISRUNNING = false
         end
     end
 
 
-    run_react = WGLMakie.Makie.Button(fig, label="Compute reactive path")
+    run_react = WGLMakie.Makie.Button(fig[5, 1], label="Compute reactive path")
     reactpath = Observable([1])
-    react_select = SliderGrid(fig[7, 1],
+    react_select = SliderGrid(fig[6, 1],
         (label="Reactive Frame", range=@lift(1:max(1, length($reactpath))), startvalue=1),
         (label="Sigma", range=0.01:0.01:1, startvalue=0.1)
     )
