@@ -46,7 +46,7 @@ Molly = "aa0f7f06-fcc0-5ec4-a7f3-a573f33f9c4c"
 MollyExt = "Molly"
 
 [compat]
-BioStructures = "3.0.0"
+BioStructures = "4.0.0"
 CUDA = "5.2.0"
 ChainRulesCore = "1.23.0"
 Chemfiles = "0.10.41"
