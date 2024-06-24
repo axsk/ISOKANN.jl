@@ -279,6 +279,6 @@ function adddata!(iso::Iso2, nx; keepedges)
     iso.data = adddata(iso.data, iso.model, nx; keepedges)
 end
 
-function resample_kde!(iso, ny; padding=0.0)
-    iso.data = resample_kde(iso.data, iso.model, ny; padding)
+function resample_kde!(iso, ny; kwargs...)
+    iso.data = resample_kde(iso.data, iso.model, ny; kwargs...)
 end

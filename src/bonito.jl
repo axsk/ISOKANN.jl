@@ -11,17 +11,21 @@ USEGPU = true
 ISO = nothing
 ISRUNNING = false
 
-function content()
-    println("session created")
+function content(session)
+    global SESSION
+    SESSION = session
+    println("session created $session")
+    @show Threads.threadid()
     isoui, isoo = @time isocreator()
     Grid(isoui)
-    Grid(isoui, @lift(dashboard($isoo)))
+    Grid(isoui, @lift(dashboard($isoo, session)))
 end
 
 logrange(x1, x2, n) = round.((10^y for y in range(log10(x1), log10(x2), length=n)), sigdigits=1)
 
 function isocreator()
     pdb = Dropdown(["data/alanine-dipeptide-nowater.pdb", "data/vgv.pdb", "data/villin nowater.pdb"])
+    pdbid = TextField("")
     steps = StylableSlider(1:1000, value=10)
     temperature = StylableSlider(-10:70, value=30)
     optim = Dropdown(["Adam", "Nesterov"], index=2)
@@ -29,6 +33,7 @@ function isocreator()
     regularization = StylableSlider(sort([logrange(1e-6, 1e-3, 10); 1e-4]), value=1e-4)
     nx = StylableSlider(2:100, value=10)
     nk = StylableSlider(1:10, value=2)
+
 
     button = Button("Create")
 
@@ -45,14 +50,19 @@ function isocreator()
 
         ISRUNNING = true
 
+        getpdb(id::String) = Base.download("https://files.rcsb.org/download/$id.pdb")
+
+        pdbfile = pdbid.value[] != "" ? getpdb(pdbid.value[]) : pdb.value[]
+
+
         iso = Iso2(
             OpenMMSimulation(
                 steps=steps.value[],
-                pdb=pdb.value[],
+                pdb=pdbfile,
                 forcefields=ISOKANN.OpenMM.FORCE_AMBER,
                 temp=temperature.value[] + 272.15,
                 gpu=USEGPU,
-                features=0.5),
+                features=0.5,),
             loggers=[], opt=opt, nx=nx.value[], nk=nk.value[], minibatch=64, gpu=USEGPU)
 
         global ISO = iso
@@ -85,7 +95,7 @@ function isocreator()
     end
 
     return Card(Grid(
-            pdb, nothing,
+            pdb, pdbid,
             steps, Bonito.Label(steps.value),
             temperature, Bonito.Label(temperature.value),
             optim, nothing,
@@ -100,10 +110,10 @@ function isocreator()
         ); width="300px",), isoo
 end
 
-app = App(title="ISOKANN Dashboard") do
-    return content()
+app = App(title="ISOKANN Dashboard") do session
+    return content(session)
 end
 
+
 server = Bonito.get_server()
-# add a route to the server for root to point to our example app
 route!(server, "/" => app)

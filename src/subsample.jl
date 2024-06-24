@@ -87,10 +87,10 @@ end
 
 import KernelDensity
 
-function kde_needles(chis, n=10; padding=0.)
+function kde_needles(chis, n=10; padding=0.0, bandwidth)
     needles = []
     for _ in 1:n
-        k = KernelDensity.kde(chis, boundary=(0. - padding, 1. + padding))
+        k = KernelDensity.kde(chis, boundary=(0.0 - padding, 1.0 + padding); bandwidth)
         #plot(k.x, k.density) |> display
         c = k.x[argmin(k.density)]
         push!(needles, c)

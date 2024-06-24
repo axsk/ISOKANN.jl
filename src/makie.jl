@@ -12,6 +12,17 @@ function bondids(pysim)
     return ids .+ 1
 end
 
+function onlychanges(a::Observable)
+    o = Observable(a[])
+
+    on(a) do a
+        if a != o[]
+            o[] = a
+        end
+    end
+    return o
+end
+
 function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=true, showbackbone=true, alpha=1.0, linewidth=4)
     z = zeros(3, 0)
 
@@ -42,10 +53,12 @@ function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=true, showbackb
         z
     end
 
+    color = onlychanges(color)
 
-    meshscatter!(ax, a, markersize=0.1, color=@lift($color .* ones(size($a, 2))), colorrange=(0.0, 1.0), colormap=:roma,)
-    lines!(ax, p; linewidth, color=color, colorrange=(0.0, 1.0), colormap=:roma,)
-    linesegments!(ax, b; color=color, colorrange=(0.0, 1.0), colormap=:roma, alpha)
+
+    meshscatter!(ax, onlychanges(a), markersize=0.1, color=@lift($color .* ones(size($a, 2))), colorrange=(0.0, 1.0), colormap=:roma,)
+    lines!(ax, onlychanges(p); linewidth, color=color, colorrange=(0.0, 1.0), colormap=:roma,)
+    linesegments!(ax, onlychanges(b); color=color, colorrange=(0.0, 1.0), colormap=:roma, alpha)
 
     ax
 end
@@ -56,10 +69,10 @@ function plotmol!(ax, iso::Iso2, i; kwargs...)
     plotmol!(ax, coords, iso.data.sim.pysim, color; kwargs...)
 end
 
-dashboard(iso::Iso2) = dashboard(Observable(iso))
 
-function dashboard(iso::Observable)
-    coords = @lift iso.data.coords[1] |> cpu
+
+function dashboard(iso::Iso2, session)
+    coords = Observable(iso.data.coords[1] |> cpu)
     chis = Observable(ISOKANN.chis(iso) |> vec |> cpu)
     icur = Observable(1)
     losses = Observable(iso.losses |> cpu)
@@ -102,9 +115,6 @@ function dashboard(iso::Observable)
         showatoms = @lift($(showextrema.active) && $(showatoms.active)),
         showbonds = @lift($(showextrema.active) && $(showbonds.active))
 
-
-
-
         plotmol!(ax, iso, imax; showbackbone, showatoms, showbonds)
         plotmol!(ax, iso, imin; showbackbone, showatoms, showbonds)
     end
@@ -119,38 +129,46 @@ function dashboard(iso::Observable)
 
     connect!(icur, frameselector.sliders[1].value)
 
-    global ISRUNNING
 
     on(run.active) do e
         e || return
+
+        global ISRUNNING
         if ISRUNNING
             run.active[] = false
             return
+        else
+            ISRUNNING = true
         end
 
         ThreadPools.@tspawnat 1 begin
-            last = time()
-            ISRUNNING = true
-            while run.active[]
-                global ISO
-                ISO == iso || break
-                run.active[] || break
-                run!(iso)
-                adaptivesampling.active[] && ISOKANN.resample_kde!(iso, 1; padding=0.0)
-                uniformsampling.active[] && ISOKANN.adddata!(iso, 1, keepedges=false)
-                contsampling.active[] && continuedata!(iso)
+            try
+                last = time()
+                while isready(session) && run.active[]
+
+                    run!(iso)
+                    adaptivesampling.active[] && ISOKANN.resample_kde!(iso, 1; padding=0.01, bandwidth=0.1)
+                    uniformsampling.active[] && ISOKANN.adddata!(iso, 1, keepedges=false)
+                    contsampling.active[] && continuedata!(iso)
+
+                    cutoff = 1000
+                    if length(iso.data) > cutoff
+                        iso.data = iso.data[end-cutoff+1:end]
+                    end
 
 
-                if time() - last > 0.1
-                    chis[] = ISOKANN.chis(iso) |> vec |> cpu
-                    coords[] = iso.data.coords[1]
-                    icur[] = n[]
-                    losses[] = iso.losses
-                    last = time()
+
+                    if time() - last > 0.1
+                        chis[] = ISOKANN.chis(iso) |> vec |> cpu
+                        coords[] = iso.data.coords[1]
+                        icur[] = n[]
+                        losses[] = iso.losses
+                        last = time()
+                    end
                 end
-                # sleep(0.01)
+            finally
+                ISRUNNING = false
             end
-            ISRUNNING = false
         end
     end
 
