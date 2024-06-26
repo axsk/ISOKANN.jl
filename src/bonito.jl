@@ -17,6 +17,8 @@ function content(session)
     println("session created $session")
     @show Threads.threadid()
     isoui, isoo = @time isocreator()
+    global ISO 
+    ISO = isoo
     Grid(isoui)
     Grid(isoui, @lift(dashboard($isoo, session)))
 end
@@ -65,7 +67,6 @@ function isocreator()
                 features=0.5,),
             loggers=[], opt=opt, nx=nx.value[], nk=nk.value[], minibatch=64, gpu=USEGPU)
 
-        global ISO = iso
         run!(iso)
         ISRUNNING = false
         return iso
