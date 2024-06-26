@@ -55,7 +55,13 @@ function pairwise_twosampletest(xs::AbstractArray{<:Any,3}, kernel; KX=selfkerne
     return M
 end
 
-
+function normalize_for_SqExp(ys)
+    D = size(ys, 1)
+    # normalize input data such that the std of each atom position is 1/D, which is the right scaling for the exponential kernel
+    v = mean(var(ys, dims=2), dims=3)
+    ys = ys ./ (sqrt.(v) .* sqrt(D))
+    return ys
+end
 
 ## Dynamical Topological Data Analysis
 
@@ -63,9 +69,7 @@ function tda(ys, chi; kernel=SqExponentialKernel(), windows=10, overlap=0.5)
 
     D = size(ys, 1)
 
-    # normalize input data such that the std of each atom position is 1/D, which is the right scaling for the exponential kernel
-    v = mean(var(ys, dims=2), dims=3)
-    ys = ys ./ (sqrt.(v) .* sqrt(D))
+    ys = normalize_for_SqExp(ys)
 
     r = range(start=0, stop=1, length=windows + 1)
 
@@ -123,6 +127,20 @@ function tda(ys, chi; kernel=SqExponentialKernel(), windows=10, overlap=0.5)
     return nodes, A
 end
 
+function pairwise_mmd(ys; kernel=SqExponentialKernel())
+    ys = normalize_for_SqExp(ys)
+    N = size(ys, 3)
+    A = zeros(N, N)
+    for i in 1:N
+        for j in i+1:N
+            A[i, j] = @views twosampletest(ys[:, :, i], ys[:, :, j], kernel)
+        end
+    end
+
+    return A + A'
+end
+
+
 function test(overlap=0.1)
     ys = rand(10, 10, 100)
     chi = rand(100)
@@ -148,4 +166,12 @@ function tda(iso::Iso2; kwargs...)
     chi = chis(iso) |> cpu |> vec
     nodes, A = tda(ys, chi; kwargs...)
     return nodes, A, chi
+end
+
+using NetworkLayout
+
+function weightedplot(A; kwargs...)
+    G = SimpleWeightedGraph(A)
+    l = stress(A)
+    graphplot(G, layout=l, edge_width=weight.(edges(G)) ./ 100; kwargs...)
 end
