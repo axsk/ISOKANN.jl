@@ -1,11 +1,5 @@
-using Revise
 using Bonito
 using WGLMakie
-using ISOKANN
-
-includet("makie.jl")
-
-#iso = Iso2(OpenMMSimulation(steps=30, pdb="data/vgv.pdb", forcefields=ISOKANN.OpenMM.FORCE_AMBER_IMPLICIT), loggers=[], opt=ISOKANN.NesterovRegularized(1e-3, 0), nx=10, nk=1, minibatch=64)
 
 USEGPU = true
 ISO = nothing
@@ -111,10 +105,13 @@ function isocreator()
         ); width="300px",), isoo
 end
 
-app = App(title="ISOKANN Dashboard") do session
-    return content(session)
+
+function serve()
+    app = App(title="ISOKANN Dashboard") do session
+        return content(session)
+    end
+
+    server = Bonito.get_server()
+    route!(server, "/" => app)
+    return app
 end
-
-
-server = Bonito.get_server()
-route!(server, "/" => app)

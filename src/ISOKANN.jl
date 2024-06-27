@@ -99,4 +99,7 @@ include("reactionpath2.jl")
 include("IsoMu/IsoMu.jl")
 include("vgv/vgv.jl")
 
+include("makie.jl")
+include("bonito.jl")
+
 end

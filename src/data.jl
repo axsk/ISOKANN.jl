@@ -140,16 +140,6 @@ end
 
 @deprecate shuffledata(data) shuffleobs(data)
 
-# TODO: this does not belong here!
-"""  trajectory(sim, nx)
-generate a trajectory of length `nx` from the simulation `sim`"""
-function trajectory(sim, nx)
-    siml = deepcopy(sim)
-    logevery = round(Int, sim.T / sim.dt)
-    siml.T = sim.T * nx
-    xs = solve(siml; logevery=logevery)
-    return xs
-end
 
 
 ### Data I/O

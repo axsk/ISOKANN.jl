@@ -1,5 +1,4 @@
 using WGLMakie
-using ISOKANN
 using WGLMakie.Observables: throttle
 using ThreadPools
 
@@ -71,7 +70,7 @@ end
 
 
 
-function dashboard(iso::Iso2, session)
+function dashboard(iso::Iso2, session=nothing)
     coords = Observable(iso.data.coords[1] |> cpu)
     chis = Observable(ISOKANN.chis(iso) |> vec |> cpu)
     icur = Observable(1)
@@ -144,7 +143,7 @@ function dashboard(iso::Iso2, session)
         ThreadPools.@tspawnat 1 begin
             try
                 last = time()
-                while isready(session) && run.active[]
+                while (isnothing(session) || isready(session)) && run.active[]
 
                     run!(iso)
                     adaptivesampling.active[] && ISOKANN.resample_kde!(iso, 1; padding=0.01, bandwidth=0.1)

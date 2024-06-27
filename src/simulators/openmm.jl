@@ -8,7 +8,7 @@ import ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdb,
-    force, potential, lagtime
+    force, potential, lagtime, trajectory
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 
@@ -191,6 +191,12 @@ function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}=getcoords(s), ste
     xs = permutedims(xs, (3, 2, 1))
     xs = reshape(xs, :, size(xs, 3))
     return xs
+end
+
+function ISOKANN.laggedtrajectory(s::OpenMMSimulation, nlags)
+    steps = s.steps * nlags
+    saveevery = s.steps
+    trajectory(s, getcoords(s), steps, saveevery)
 end
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)#::Vector
