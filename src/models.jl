@@ -52,7 +52,7 @@ end
 `features` allows to pass a featurizer as preprocessor,
 `activation` determines the activation function for each but the last layer
 `lastactivation` can be used to modify the last layers activation function """
-function pairnet(n::Int=22; layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1, layernorm=false)
+function pairnet(n::Int=22; layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1, layernorm=true)
     float32(x) = Float32.(x)
     nn = Flux.Chain(
         #float32,

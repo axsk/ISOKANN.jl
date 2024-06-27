@@ -13,7 +13,7 @@ function content(session)
     isoui, isoo = @time isocreator()
     global ISO 
     ISO = isoo
-    Grid(isoui)
+    #Grid(isoui)
     Grid(isoui, @lift(dashboard($isoo, session)))
 end
 
@@ -24,7 +24,7 @@ function isocreator()
     pdbid = TextField("")
     steps = StylableSlider(1:1000, value=10)
     temperature = StylableSlider(-10:70, value=30)
-    optim = Dropdown(["Adam", "Nesterov"], index=2)
+    optim = Dropdown(["Adam", "Nesterov"], index=1)
     learnrate = StylableSlider(sort([logrange(1e-4, 1e-2, 10); 1e-3]), value=1e-3)
     regularization = StylableSlider(sort([logrange(1e-6, 1e-3, 10); 1e-4]), value=1e-4)
     nx = StylableSlider(2:100, value=10)
@@ -111,7 +111,7 @@ function serve()
         return content(session)
     end
 
-    server = Bonito.get_server()
-    route!(server, "/" => app)
+    #server = Bonito.get_server()
+    #route!(server, "/" => app)
     return app
 end

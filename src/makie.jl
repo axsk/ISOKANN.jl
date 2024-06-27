@@ -120,7 +120,7 @@ function dashboard(iso::Iso2, session=nothing)
 
 
     lines(fig[2, 1], losses, axis=(yscale=log10, limits=@lift((((1, max(length($losses), 2)), nothing)))))
-    scatter(fig[3, 1], chis, axis=(limits=@lift((1, $n, 0, 1)),))
+    WGLMakie.scatter(fig[3, 1], chis, axis=(limits=@lift((1, $n, 0, 1)),))
 
     frameselector = SliderGrid(fig[4, 1],
         (label="Data Frame", range=@lift(1:$n), startvalue=n)
