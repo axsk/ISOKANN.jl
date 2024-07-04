@@ -195,12 +195,12 @@ function datasize((xs, ys)::Tuple)
     return size(xs), size(ys)
 end
 
-function trajectorydata(sim::IsoSimulation, steps; reverse=false, kwargs...)
+function trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
     xs = laggedtrajectory(sim, steps)
     SimulationData(sim, data_from_trajectory(xs; reverse), kwargs...)
 end
 
-function trajectoryburstdata(sim, steps, nk; kwargs)
+function trajectorydata_bursts(sim, steps, nk; kwargs)
     xs = laggedtrajectory(sim, steps)
     ys = propagate(sim, xs, nk)
     SimulationData(sim, ys, kwargs...)

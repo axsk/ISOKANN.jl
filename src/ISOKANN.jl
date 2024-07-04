@@ -79,7 +79,6 @@ include("simulators/langevin.jl")  # for the simulators
 include("isotarget.jl")
 include("iso2.jl")
 include("plots.jl")           # visualizations
-include("simulators/potentials.jl")
 
 include("simulators/openmm.jl")
 
