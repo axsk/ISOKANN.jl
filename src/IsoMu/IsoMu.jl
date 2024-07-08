@@ -4,11 +4,10 @@ using LinearAlgebra
 using Plots
 
 using DataFrames: DataFrame
-using ISOKANN
-using ISOKANN: plot_reactive_path, writechemfile, aligntrajectory
+using ..ISOKANN: plot_reactive_path, writechemfile, aligntrajectory, ISOKANN
 using Distances: pairwise, Euclidean
 
-import ISOKANN: reactive_path, save_reactive_path
+import ..ISOKANN: reactive_path, save_reactive_path
 
 #using FileIO
 import BioStructures

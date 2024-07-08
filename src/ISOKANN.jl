@@ -3,10 +3,12 @@
 module ISOKANN
 
 #using Startup           # precompiles most used packages
-
 #include("forced/IsoForce.jl")
 
-import Random
+import StochasticDiffEq, Flux, CUDA, PCCAPlus, Plots
+
+using ProgressMeter
+using Plots
 
 using LinearAlgebra: norm, dot, cross, diag, svd
 using StatsBase: mean, sample, mean_and_std
@@ -18,6 +20,9 @@ using Unitful: @u_str, unit
 using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
+using StaticArrays: @SVector
+using StochasticDiffEq: StochasticDiffEq
+using LinearAlgebra: pinv, norm, I, schur
 
 import Chemfiles
 import ProgressMeter
@@ -34,6 +39,13 @@ import OrdinaryDiffEq
 import Graphs
 import Optimisers
 import Optim
+import PyCall
+import Random
+import KernelDensity
+import ForwardDiff
+import StatsBase
+import Flux
+import PCCAPlus
 
 import MLUtils: numobs
 import Flux: cpu, gpu
@@ -57,10 +69,6 @@ export getxs, getys
 
 export reactionpath_minimum, reactionpath_ode, writechemfile
 
-using ProgressMeter
-
-
-
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
 include("simulation.jl")      # Interface for simulations
@@ -71,7 +79,6 @@ include("data.jl")            # tools for handling the data (sampling, slicing, 
 #include("iso1.jl")        # ISOKANN - first implementation with adaptive sampling
 #include("loggers.jl")     # performance metric loggers
 #include("benchmarks.jl")      # benchmark runs, deprecated by scripts/*
-
 
 include("simulators/langevin.jl")  # for the simulators
 
@@ -85,7 +92,6 @@ include("simulators/openmm.jl")
 import .OpenMM.OpenMMSimulation
 export OpenMMSimulation
 
-
 #include("dataloader.jl")
 
 #include("precompile.jl") # precompile for faster ttx
@@ -95,8 +101,8 @@ include("extrapolate.jl")
 include("reactionpath.jl")
 include("reactionpath2.jl")
 
-include("IsoMu/IsoMu.jl")
-include("vgv/vgv.jl")
+#include("IsoMu/IsoMu.jl")
+#include("vgv/vgv.jl")
 
 include("makie.jl")
 include("bonito.jl")

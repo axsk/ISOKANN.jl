@@ -1,7 +1,7 @@
 using Bonito
 using WGLMakie
 
-USEGPU = true
+USEGPU = CUDA.functional()
 ISO = nothing
 ISRUNNING = false
 

@@ -257,6 +257,7 @@ function livevis(iso::Iso2)
         notify(col)
     end
 
+    #=
     on(events(fig).mousebutton) do event
 
         a, i = pick(fig)
@@ -265,6 +266,7 @@ function livevis(iso::Iso2)
         x = iso.data.coords[1][:, i] # |> align_to_prev
         o[] = x
     end
+    =#
 
     #allcoords = Observable(reshape(iso.data.coords[1], 3, :))
     #colors = Observable(repeat(iso.model(iso.data.features[1]) |> vec, inner=22))

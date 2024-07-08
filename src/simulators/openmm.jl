@@ -4,7 +4,7 @@ using PyCall, CUDA
 using LinearAlgebra: norm
 
 import JLD2
-import ISOKANN: ISOKANN, IsoSimulation,
+import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdb,

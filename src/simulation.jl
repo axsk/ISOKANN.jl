@@ -1,5 +1,3 @@
-import PyCall
-
 export getcoords
 ## Interface for simulations
 
@@ -110,6 +108,7 @@ nk(d::SimulationData) = size(d.features[2], 2)
 Base.length(d::SimulationData) = size(d.features[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
 
+# facilitates easy indexing into the data, returning a new data object 
 Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
 
 MLUtils.getobs(d::SimulationData) = d.features
@@ -195,13 +194,24 @@ function datasize((xs, ys)::Tuple)
     return size(xs), size(ys)
 end
 
+"""
+    trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
+
+Simulate a single long trajectory of `steps` times the lagtime and generate the corresponding ISOKANN data.
+If `reverse` is true, also add the time-reversed transitions
+"""
 function trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
     xs = laggedtrajectory(sim, steps)
     SimulationData(sim, data_from_trajectory(xs; reverse), kwargs...)
 end
 
-function trajectorydata_bursts(sim, steps, nk; kwargs)
+"""
+    trajectorydata_bursts(sim::IsoSimulation, steps, nk; kwargs...)
+
+Simulate a single long trajectory of `steps` times the lagtime and start `nk` burst trajectories at each step for the Koopman samples.
+"""
+function trajectorydata_bursts(sim::IsoSimulation, steps, nk; kwargs...)
     xs = laggedtrajectory(sim, steps)
     ys = propagate(sim, xs, nk)
-    SimulationData(sim, ys, kwargs...)
+    SimulationData(sim, (xs, ys), kwargs...)
 end

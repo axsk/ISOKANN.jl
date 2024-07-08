@@ -19,7 +19,8 @@ inputdim(model::Flux.Dense) = size(model.weight, 2)
 outputdim(model::Flux.Chain) = outputdim(model.layers[end])
 outputdim(model::Flux.Dense) = size(model.weight, 1)
 
-iscuda(m::Flux.Chain) = m[2].weight isa CuArray
+#iscuda(m::Flux.Chain) = m[2].weight isa CuArray
+iscuda(m::Flux.Chain) = first(Flux.trainables(m)) isa CuArray
 
 
 

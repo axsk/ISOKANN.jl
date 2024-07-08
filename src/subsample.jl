@@ -85,7 +85,6 @@ function pickclosest_test(hs, ns)
 end
 
 
-import KernelDensity
 
 function kde_needles(chis, n=10; padding=0.0, bandwidth)
     needles = []

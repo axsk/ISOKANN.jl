@@ -1,9 +1,4 @@
-import StatsBase
-import Flux
-import PCCAPlus
-import ISOKANN
-using LinearAlgebra: pinv, norm, I, schur
-using Plots
+
 
 @kwdef mutable struct Iso2
     model
@@ -108,8 +103,9 @@ chis(iso::Iso2) = iso.model(getxs(iso.data))
 chicoords(iso::Iso2, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso2) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
-Optimisers.adjust!(iso::Iso2; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
-Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
+#Optimisers.adjust!(iso::Iso2; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
+#Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
+
 gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
 cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
 

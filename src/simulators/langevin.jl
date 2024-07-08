@@ -1,7 +1,4 @@
 #using Parameters
-using StaticArrays: @SVector
-using StochasticDiffEq: StochasticDiffEq
-import ForwardDiff
 
 # Abstract type defining the Overdamped Langevin dynamics
 # mandatory interface methods: potential, sigma, dim, lagtime, dt
@@ -25,7 +22,7 @@ function propagate(l::AbstractLangevin, x0::AbstractMatrix, ny)
     dim, nx = size(x0)
     ys = zeros(dim, ny, nx)
     Threads.@threads for (i, j) in [(i, j) for j in 1:ny, i in 1:nx]
-        ys[:, j, i] = trajectory(l; x0, saveat=lagtime(l))[:, end]
+        ys[:, j, i] = trajectory(l; x0=x0[:, i], saveat=lagtime(l))[:, end]
     end
     return ys
 end
