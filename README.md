@@ -13,6 +13,9 @@ The ISOKANN.jl package implements the ISOKANN algorithm for the identification o
 
 Install the package via `using Pkg; Pkg.add("https://github.com/axsk/ISOKANN.jl")`.
 
+If you want to use Julia's built Conda.jl to automatically install OpenMM, you shoud build the package after setting the environment variable 
+`PYTHON=""`, e.g. through `ENV["PYTHON"]=""; Pkg.build()`.
+
 The usual pipeline consists of the creation of system simulation, generation of training data, training ISOKANN and a posteriori analysis of the results.
 
 ```julia
