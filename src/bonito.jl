@@ -111,7 +111,8 @@ function serve()
         return content(session)
     end
 
-    #server = Bonito.get_server()
-    #route!(server, "/" => app)
+    server = Bonito.get_server()  # default port is 9384
+    route!(server, "/" => app)
+    @show server
     return app
 end
