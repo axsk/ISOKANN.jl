@@ -66,6 +66,7 @@ export Doublewell, Triplewell, MuellerBrown
 export chis
 export SimulationData
 export getxs, getys
+export exit_rates
 
 export reactionpath_minimum, reactionpath_ode, writechemfile
 
