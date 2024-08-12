@@ -85,7 +85,7 @@ end
 
 c_alpha_inds(d::DataLink) = c_alpha_inds(pdbfile(d))
 function c_alpha_inds(pdbfile="data/struct.pdb")
-  pdb = BioStructures.read(pdbfile, BioStructures.PDB)
+  pdb = BioStructures.read(pdbfile, BioStructures.PDBFormat)
   #df = BioStructures.DataFrame(BioStructures.collectatoms(pdb))
   df = DataFrame(BioStructures.collectatoms(pdb))
   ids = filter(x -> x["atomname"] == "CA", df)[!, :serial]
