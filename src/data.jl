@@ -121,7 +121,7 @@ function data_from_trajectory(xs::AbstractMatrix; reverse=false)
         #@views ys[:, 2, :] .= xs[:, 1:end-2]
         xs = xs[:, 2:end-1]
     else
-        ys = unsqueeze(xs[:, 2:end], dims=3)
+        ys = unsqueeze(xs[:, 2:end], dims=2)
         xs = xs[:, 1:end-1]
     end
     return xs, ys
