@@ -9,10 +9,11 @@ CurrentModule = ISOKANN
 ## Main entry points
 
 ```@docs
-IsoRun
-ISOKANN.run!
-MollyLangevin
+SimulationData
+OpenMMSimulation
 propagate
+Iso2
+run!
 ```
 
 ## Public API

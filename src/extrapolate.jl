@@ -44,11 +44,13 @@ function extrapolate(iso, n::Integer, stepsize=0.1, steps=1, minimize=true, maxs
             try
                 x = extrapolate(iso, coords[:, i], dir * stepsize, steps)
                 minimize && (x = energyminimization_chilevel(iso, x))
-                if data.sim.momenta
+                #=
+                if hasfield(typeof(data.sim), :momenta) && data.sim.momenta
                     x = reshape(x, :, 2)
                     #x[:, 2] .= 0
                     x = vec(x)
                 end
+                =#
                 #&& ISOKANN.OpenMM.set_random_velocities!(data.sim, x)
                 push!(xs, x)
             catch e
@@ -90,7 +92,6 @@ function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, itera
     global trace = [x0]
     U(x) = begin
         push!(trace, x)
-        @show OpenMM.potential(sim, x)
     end
     dU(x) = begin
         push!(trace, x)
@@ -105,7 +106,6 @@ function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, itera
 
 
     o = Optim.optimize(U, dU, x, alg, Optim.Options(; iterations, f_tol, show_trace,); inplace=false)
-    return o
     return o.minimizer
 end
 

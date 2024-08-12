@@ -6,7 +6,10 @@ import numpy as np
 
 def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=False):
     def singlerun(i):
-        c = newcontext(sim.context, nthreadssim)
+        if nthreads > 1:
+            c = newcontext(sim.context, nthreadssim)
+        else:
+            c = sim.context
         set_numpy_state(c, xs[i], withmomenta)
         c.getIntegrator().setStepSize(stepsize)
 
@@ -18,7 +21,6 @@ def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=F
         
         x = get_numpy_state(c, withmomenta)
         return x
-
 
     if nthreads > 1:
         out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
@@ -32,15 +34,8 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   trajectory[0] = x0
 
   c = newcontext(sim.context, mmthreads)
-
-  if withmomenta:
-    n = len(x0) // 2
-    c.setPositions(x0[:n])
-    c.setVelocities(x0[n:])
-  else:
-    c.setPositions(x0)
-    c.setVelocitiesToTemperature(sim.integrator.getTemperature())
-
+  
+  set_numpy_state(c, x0, withmomenta)
   c.getIntegrator().setStepSize(stepsize)
 
   for n in range(1,n_states):

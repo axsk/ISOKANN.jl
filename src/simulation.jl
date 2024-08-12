@@ -1,5 +1,3 @@
-import PyCall
-
 export getcoords
 ## Interface for simulations
 
@@ -27,6 +25,9 @@ function randx0(sim::IsoSimulation, nx)
     xs = reshape(propagate(sim, x0, nx), :, nx)
     return xs
 end
+
+trajectory(sim::IsoSimulation, steps) = error("not implemented")
+laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 
 ###
 
@@ -107,6 +108,7 @@ nk(d::SimulationData) = size(d.features[2], 2)
 Base.length(d::SimulationData) = size(d.features[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
 
+# facilitates easy indexing into the data, returning a new data object 
 Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
 
 MLUtils.getobs(d::SimulationData) = d.features
@@ -166,11 +168,11 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
 end
 
 
-function resample_kde(data, model, n; padding = 0.)
+function resample_kde(data, model, n; padding=0.0, bandwidth=0.02)
     n == 0 && return data
     chix = data.features[1] |> model |> vec |> cpu
     chiy = data.features[2] |> model |> vec |> cpu
-    needles = kde_needles(chix, n; padding)
+    needles = kde_needles(chix, n; padding, bandwidth)
     inds = pickclosest(chiy, needles)
     ys = data.coords[2] |> flattenlast
     newdata = addcoords(data, ys[:, inds])
@@ -190,4 +192,26 @@ end
 
 function datasize((xs, ys)::Tuple)
     return size(xs), size(ys)
+end
+
+"""
+    trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
+
+Simulate a single long trajectory of `steps` times the lagtime and generate the corresponding ISOKANN data.
+If `reverse` is true, also add the time-reversed transitions
+"""
+function trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
+    xs = laggedtrajectory(sim, steps)
+    SimulationData(sim, data_from_trajectory(xs; reverse), kwargs...)
+end
+
+"""
+    trajectorydata_bursts(sim::IsoSimulation, steps, nk; kwargs...)
+
+Simulate a single long trajectory of `steps` times the lagtime and start `nk` burst trajectories at each step for the Koopman samples.
+"""
+function trajectorydata_bursts(sim::IsoSimulation, steps, nk; kwargs...)
+    xs = laggedtrajectory(sim, steps)
+    ys = propagate(sim, xs, nk)
+    SimulationData(sim, (xs, ys), kwargs...)
 end

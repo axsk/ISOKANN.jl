@@ -4,11 +4,11 @@ using PyCall, CUDA
 using LinearAlgebra: norm
 
 import JLD2
-import ISOKANN: ISOKANN, IsoSimulation,
+import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdb,
-    force, potential, lagtime
+    force, potential, lagtime, trajectory
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 
@@ -83,19 +83,30 @@ function OpenMMSimulation(;
     steps=100,
     features=:all,
     minimize=false,
-    nthreads=Threads.nthreads(),
-    mmthreads=1,
+    gpu=false,
+    nthreads=gpu ? 1 : Threads.nthreads(),
+    mmthreads=gpu ? "gpu" : 1,
     addwater=false,
     padding=3,
     ionicstrength=0.0,
     forcefield_kwargs=Dict(),
     momenta=false)
 
-    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs)::PyObject
+    platform, properties = if mmthreads == "gpu"
+        "CUDA", Dict()
+    else
+        "CPU", Dict("Threads" => "$mmthreads")
+    end
+
+    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, platform, properties)::PyObject
+
     if features isa Number
         radius = features
         features = [calpha_pairs(pysim); local_atom_pairs(pysim, radius)] |> unique
     end
+
+
+
     return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
 end
 
@@ -180,6 +191,12 @@ function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}=getcoords(s), ste
     xs = permutedims(xs, (3, 2, 1))
     xs = reshape(xs, :, size(xs, 3))
     return xs
+end
+
+function ISOKANN.laggedtrajectory(s::OpenMMSimulation, nlags)
+    steps = s.steps * nlags
+    saveevery = s.steps
+    trajectory(s, getcoords(s), steps, saveevery)
 end
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)#::Vector
@@ -282,6 +299,13 @@ end
 
 function calpha_pairs(pysim::PyObject)
     local_atom_pairs(pysim, Inf; atomfilter=x -> x.name == "CA")
+end
+
+calpha_inds(sim::OpenMMSimulation) = calpha_inds(sim.pysim)
+function calpha_inds(pysim::PyObject)
+    map(filter(x -> x.name == "CA", pysim.topology.atoms() |> collect)) do atom
+        atom.index + 1
+    end
 end
 
 

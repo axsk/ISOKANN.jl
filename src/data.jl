@@ -86,11 +86,11 @@ function adddata(data, model, sim, ny)
     return joindata(data, (xs, ys))
 end
 
-@deprecate joindata (x, y) -> lastcat.(x, y)
 
 lastcat(x::T, y::T) where {N,T<:AbstractArray{<:Any,N}} = cat(x, y, dims=N)
 lastcat(x::T, y) where {T} = lastcat(x, convert(T, y))
 
+@deprecate joindata (x, y) -> lastcat.(x, y)
 #=
 function datastats(data)
     xs, ys = data
@@ -121,7 +121,7 @@ function data_from_trajectory(xs::AbstractMatrix; reverse=false)
         #@views ys[:, 2, :] .= xs[:, 1:end-2]
         xs = xs[:, 2:end-1]
     else
-        ys = unsqueeze(xs[:, 2:end], dims=3)
+        ys = unsqueeze(xs[:, 2:end], dims=2)
         xs = xs[:, 1:end-1]
     end
     return xs, ys
@@ -140,16 +140,6 @@ end
 
 @deprecate shuffledata(data) shuffleobs(data)
 
-# TODO: this does not belong here!
-"""  trajectory(sim, nx)
-generate a trajectory of length `nx` from the simulation `sim`"""
-function trajectory(sim, nx)
-    siml = deepcopy(sim)
-    logevery = round(Int, sim.T / sim.dt)
-    siml.T = sim.T * nx
-    xs = solve(siml; logevery=logevery)
-    return xs
-end
 
 
 ### Data I/O
