@@ -35,7 +35,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
 
   c = newcontext(sim.context, mmthreads)
   
-  set_numpy_state(c, x0)
+  set_numpy_state(c, x0, withmomenta)
   c.getIntegrator().setStepSize(stepsize)
 
   for n in range(1,n_states):
