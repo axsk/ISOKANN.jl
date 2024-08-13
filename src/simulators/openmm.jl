@@ -15,6 +15,7 @@ export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 DEFAULT_PDB = "$(@__DIR__)/../../data/systems/alanine dipeptide.pdb"
 FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
+FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber/tip3p_standard.xml"]
 
 function __init__()
     # install / load OpenMM
@@ -105,8 +106,6 @@ function OpenMMSimulation(;
         features = [calpha_pairs(pysim); local_atom_pairs(pysim, radius)] |> unique
     end
 
-
-
     return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
 end
 
@@ -119,6 +118,8 @@ function featurizer(sim::OpenMMSimulation)
         inds = sim.features
         return coords -> ISOKANN.pdists(coords, inds)
     elseif sim.features == :all
+        if length(getcoords(sim)) > 100 
+            @warn "Computing _all_ pairwise distances for a bigger (>100 atoms) molecule. Try using a cutoff by setting features::Number in OpenMMSimulatioon"
         return ISOKANN.flatpairdists
     else
         error("unknown featurizer")
@@ -193,9 +194,9 @@ function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}=getcoords(s), ste
     return xs
 end
 
-function ISOKANN.laggedtrajectory(s::OpenMMSimulation, nlags)
-    steps = s.steps * nlags
-    saveevery = s.steps
+function ISOKANN.laggedtrajectory(s::OpenMMSimulation, n_lags, steps_per_lag = s.steps)
+    steps = steps_per_lag * n_lags
+    saveevery = steps_per_lag
     trajectory(s, getcoords(s), steps, saveevery)
 end
 
