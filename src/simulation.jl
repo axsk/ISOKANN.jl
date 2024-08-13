@@ -180,10 +180,13 @@ function resample_kde(data, model, n; padding=0.0, bandwidth=0.02)
 end
 
 function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
+    simstr = sprint() do io
+        show(io, mime, d.sim)
+    end
     println(
         io, """
         SimulationData(;
-            sim=$(d.sim),
+            sim=$(simstr),
             features=$(size.(d.features)), $(split(string(typeof(d.features[1])),",")[1]),
             coords=$(size.(d.coords)), $(split(string(typeof(d.coords[1])),",")[1]),
             featurizer=$(d.featurizer))"""

@@ -354,6 +354,11 @@ Base.convert(::Type{OpenMMSimulation}, a::OpenMMSimulationSerialized) =
         mmthreads=a.mmthreads)
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
+    featstr = if sim.features isa Vector{Tuple{Int,Int}}
+        "{$(length(sim.features)) pairwise distances}"
+    else
+        sim.features
+    end
     println(
         io, """
         OpenMMSimulation(;
@@ -364,12 +369,9 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
             friction=$(sim.friction),
             step=$(sim.step),
             steps=$(sim.steps),
-            features=$(sim.features))"""
+            features=$featstr) 
+        with $(div(length(getcoords(sim)),3)) atoms"""
     )
 end
 
 end #module
-
-
-
-
