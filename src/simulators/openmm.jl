@@ -120,6 +120,7 @@ function featurizer(sim::OpenMMSimulation)
     elseif sim.features == :all
         if length(getcoords(sim)) > 100 
             @warn "Computing _all_ pairwise distances for a bigger (>100 atoms) molecule. Try using a cutoff by setting features::Number in OpenMMSimulatioon"
+        end
         return ISOKANN.flatpairdists
     else
         error("unknown featurizer")
