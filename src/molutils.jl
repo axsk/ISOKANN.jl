@@ -139,3 +139,9 @@ function save_trajectory(filename, coords::AbstractMatrix; top::String)
     traj.xyz = PyReverseDims(xyz)
     traj.save(filename)
 end
+
+function atom_indices(filename::String, selector::String)
+    mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
+    traj = mdtraj.load(filename, stride=-1)
+    inds = traj.top.select(selector) .+ 1
+end
