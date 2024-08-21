@@ -23,8 +23,8 @@ using MLUtils: numobs, getobs, shuffleobs, unsqueeze
 using StaticArrays: @SVector
 using StochasticDiffEq: StochasticDiffEq
 using LinearAlgebra: pinv, norm, I, schur
+using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 
-import Chemfiles
 import ProgressMeter
 import ChainRulesCore
 import Flux
@@ -68,7 +68,7 @@ export SimulationData
 export getxs, getys
 export exit_rates
 
-export reactionpath_minimum, reactionpath_ode, writechemfile
+export reactionpath_minimum, reactionpath_ode
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances

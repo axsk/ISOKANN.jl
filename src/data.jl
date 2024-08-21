@@ -175,5 +175,6 @@ function exportsorted(iso, path="out/sorted.pdb")
     p = iso.model(xs) |> vec |> sortperm
     xs = ISOKANN.getcoords(iso.data)
     println("saving sorted data to $path")
-    ISOKANN.writechemfile(path, ISOKANN.aligntrajectory(xs[:, p] |> cpu); source=pdb(iso.data))
+    traj = ISOKANN.aligntrajectory(xs[:, p] |> cpu)
+    save_trajectory(path, traj, top=pdb(iso.data))
 end

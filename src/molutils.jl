@@ -65,44 +65,6 @@ standardform(x::AbstractArray, rotationhandles=(2, 11, 19)) =
 
 standardform(x::AbstractArray, sim::IsoSimulation) = standardform(x, rotationhandles(sim))
 
-
-## Chemfiles to read/write trajectory data
-
-function readchemfile(source::String, steps=nothing)
-    traj = Chemfiles.Trajectory(source, 'r')
-    readchemfile(traj, steps)
-end
-
-# todo: should we return this wih flattened coords?
-function readchemfile(traj::Chemfiles.Trajectory, steps=nothing)
-    isnothing(steps) && (steps = 1:length(traj))
-    frame = Chemfiles.read_step(traj, 0)
-    xs = Array{Float32}(undef, size(Chemfiles.positions(frame))..., length(steps))
-    for (i, s) in enumerate(steps)
-        Chemfiles.read_step!(traj, s - 1, frame)
-        xs[:, :, i] .= Chemfiles.positions(frame)
-    end
-    return xs ./ 10 # convert from Angstom to nm
-end
-
-function writechemfile(filename, data::Array{<:Any,3}; source)
-    trajectory = Chemfiles.Trajectory(source, 'r')
-    frame = Chemfiles.read(trajectory)
-    trajectory = Chemfiles.Trajectory(filename, 'w', uppercase(split(filename, ".")[end]))
-    for i in 1:size(data, 3)
-        Chemfiles.positions(frame) .= data[:, :, i] .* 10 # convert from nm to Angstrom
-        write(trajectory, frame)
-    end
-    close(trajectory)
-end
-
-function writechemfile(filename, data::Array{<:Any,2}; source)
-    n = size(data, 2)
-    data = reshape(data, 3, :, n)
-    writechemfile(filename, data; source)
-end
-
-
 ### alignment of pointclouds / trajectories using procrustes alignment
 function aligntrajectory(traj::AbstractVector)
     aligned = [centermean(traj[1])]
@@ -145,4 +107,35 @@ end
 function split_first_dimension(A, d)
     s1, s2... = size(A)
     reshape(A, (d, div(s1, d), s2...))
+end
+
+"""
+    load_trajectory(filename; top=nothing, kwargs...)
+
+wrapper around Python's `mdtraj.load()`.
+Returns a (3 * natom, nframes) shaped array.
+"""
+function load_trajectory(filename; top::Union{Nothing,String}=nothing, stride=nothing, atom_indices=nothing)
+    mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
+
+    if filename[end-2:end] != "pdb" && isnothing(top)
+        error("must supply topology file (.pdb) to the top argument")
+    end
+
+    traj = mdtraj.load(filename; top, stride, atom_indices)
+    xs = permutedims(PyArray(py"$traj.xyz"o), (3, 2, 1))
+    xs = reshape(xs, :, size(xs, 3))::Matrix{Float32}
+end
+
+"""
+    save_trajectory(filename, coords::AbstractMatrix; top::String)
+
+save the trajectory given in `coords` to `filename` with the topology provided by the file `top`
+"""
+function save_trajectory(filename, coords::AbstractMatrix; top::String)
+    mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
+    traj = mdtraj.load(filename, stride=-1)
+    xyz = reshape(coords, 3, :, size(coords, 2))
+    traj.xyz = PyReverseDims(xyz)
+    traj.save(filename)
 end

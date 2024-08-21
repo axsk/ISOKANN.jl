@@ -151,6 +151,6 @@ function save_reactive_path(iso::Iso2, coords::AbstractMatrix=getcoords(iso.data
     path = centercoords(path)
     println("saving reactive path of length $(length(ids)) to $out")
     mkpath(dirname(out))
-    writechemfile(out, path; source)
+    save_trajectory(out, path, top=source)
     return ids
 end
