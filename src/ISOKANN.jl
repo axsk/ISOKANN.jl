@@ -50,14 +50,14 @@ import PCCAPlus
 import MLUtils: numobs
 import Flux: cpu, gpu
 
-export pairnet#, pairnetn
+export pairnet
 #export PDB_ACEMD, PDB_1UAO, PDB_diala_water
 #export MollyLangevin, propagate, solve#, MollySDE
 
 export propagate
 
 export run!, runadaptive!
-export AdamRegularized, pairnet#, Adam
+export AdamRegularized, NesterovRegularized
 export plot_training, scatter_ramachandran
 export reactive_path, save_reactive_path
 export cpu, gpu
@@ -67,6 +67,8 @@ export chis
 export SimulationData
 export getxs, getys
 export exit_rates
+export atom_indices
+export load_trajectory, save_trajectory
 
 export reactionpath_minimum, reactionpath_ode
 

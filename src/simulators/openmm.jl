@@ -136,7 +136,7 @@ end
 
 lagtime(sim::OpenMMSimulation) = sim.step * sim.steps
 dim(sim::OpenMMSimulation) = return length(getcoords(sim))
-defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(sim; kwargs...)
+defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
 pdb(s::OpenMMSimulation) = s.pdb
 
 """

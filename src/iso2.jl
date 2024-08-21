@@ -12,10 +12,10 @@ end
 
 
 """
-    Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
+    Iso2(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
 
 """
-function Iso2(data; opt=AdamRegularized(), model=pairnet(data), gpu=false, kwargs...)
+function Iso2(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
     opt = Flux.setup(opt, model)
     transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
 
@@ -34,13 +34,10 @@ and constructs the Iso2 object. See also Iso2(data; kwargs...)
 - `sim::IsoSimulation`: The `IsoSimulation` object.
 - `nx::Int`: The number of starting points.
 - `nk::Int`: The number of koopman samples.
-- `nd::Int`: Dimension of the χ function.
+- `nout::Int`: Dimension of the χ function.
 """
-function Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
-    data = SimulationData(sim, nx, nk)
-    model = pairnet(data; nout=nd)  # maybe defaultmodel(data) makes sense here?
-    return Iso2(data; model, kwargs...)
-end
+Iso2(sim::IsoSimulation; nx=100, nk=2, kwargs...) = Iso2(SimulationData(sim, nx, nk); kwargs...)
+
 
 #Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
 
@@ -199,7 +196,7 @@ function exit_rates(x, kx, tau)
     x = vec(x)
     kx = vec(kx)
     P = [x o .- x] \ [kx o .- kx]
-    return -1 / tau .* Base.log.(diag(P))
+    return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
 end
 
 koopman(iso::Iso2) = koopman(iso.model, getys(iso.data))

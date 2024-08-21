@@ -102,6 +102,7 @@ function features(d::SimulationData, x)
     return d.featurizer(x)
 end
 
+defaultmodel(d::SimulationData; kwargs...) = defaultmodel(d.sim; n=featuredim(d), kwargs...)
 featuredim(d::SimulationData) = size(d.features[1], 1)
 nk(d::SimulationData) = size(d.features[2], 2)
 

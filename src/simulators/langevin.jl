@@ -6,7 +6,7 @@ abstract type AbstractLangevin <: IsoSimulation end
 
 featurizer(::AbstractLangevin) = identity
 integrator(::AbstractLangevin) = StochasticDiffEq.EM()
-defaultmodel(l::AbstractLangevin; nout, kwargs...) = smallnet(dim(l), nout)
+defaultmodel(l::AbstractLangevin; n=dim(l), kwargs...) = smallnet(n; kwargs...)
 
 function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=lagtime(l); dt=dt(l), alg=integrator(l), kwargs...)
     drift(x,p,t) = force(l, x)

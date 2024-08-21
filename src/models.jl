@@ -43,17 +43,15 @@ function featurizer(sim)
 end
 =#
 
+featuredim((xs, ys)::Tuple) = size(xs, 1)
 pairnet(data; kwargs...) = pairnet(featuredim(data); kwargs...)
 
-function pairnet((xs, ys)::Tuple; kwargs...)
-    pairnet(size(xs, 1); kwargs...)
-end
 
 """ Fully connected neural network with `layers` layers from `n` to `nout` dimensions.
 `features` allows to pass a featurizer as preprocessor,
 `activation` determines the activation function for each but the last layer
 `lastactivation` can be used to modify the last layers activation function """
-function pairnet(n::Int=22; layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1, layernorm=true)
+function pairnet(; n::Int, layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1, layernorm=true)
     float32(x) = Float32.(x)
     nn = Flux.Chain(
         #float32,
@@ -76,7 +74,7 @@ function growmodel(m, n)
 end
 
 # Used by AbstractLangevin
-function smallnet(nin, nout, activation=nl = Flux.sigmoid, lastactivation=identity)
+function smallnet(nin, nout=1, activation=nl = Flux.sigmoid, lastactivation=identity)
     model = Flux.Chain(
         Flux.Dense(nin, 5, activation),
         Flux.Dense(5, 10, activation),
