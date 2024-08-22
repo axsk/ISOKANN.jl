@@ -13,9 +13,10 @@ sim = OpenMMSimulation(; pdb, minimize=true, gpu=true)
 x0 = getcoords(sim)
 cainds = atom_indices(pdb, "name==CA")
 featinds = restricted_localpdistinds(x0, radius, cainds)
+featurizer(x) = pdists(x, featinds)
 
 traj = laggedtrajectory(sim, samples)
-data = SimulationData(sim, traj, nk, featurizer=coords -> pdists(coords, featinds))
+data = SimulationData(sim, traj, nk; featurizer)
 
 iso = Iso2(data, opt=NesterovRegularized(), gpu=true)
 
