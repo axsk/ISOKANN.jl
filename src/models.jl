@@ -22,6 +22,7 @@ outputdim(model::Flux.Dense) = size(model.weight, 1)
 #iscuda(m::Flux.Chain) = m[2].weight isa CuArray
 iscuda(m::Flux.Chain) = first(Flux.trainables(m)) isa CuArray
 
+defaultmodel((x, y)) = smallnet(size(x, 1)) # TODO: probably we want a wiser choice here
 
 
 """ convenience wrapper returning the provided model with the default AdamW optimiser """
