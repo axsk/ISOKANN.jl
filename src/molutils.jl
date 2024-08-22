@@ -118,13 +118,22 @@ Returns a (3 * natom, nframes) shaped array.
 function load_trajectory(filename; top::Union{Nothing,String}=nothing, stride=nothing, atom_indices=nothing)
     mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
 
-    if filename[end-2:end] != "pdb" && isnothing(top)
-        error("must supply topology file (.pdb) to the top argument")
+    if isnothing(top)
+        if filename[end-2:end] == "pdb"
+            top = filename
+        else
+            error("must supply topology file (.pdb) to the top argument")
+        end
+    end
+
+    if !isnothing(atom_indices)
+        atom_indices = atom_indices .- 1
     end
 
     traj = mdtraj.load(filename; top, stride, atom_indices)
     xs = permutedims(PyArray(py"$traj.xyz"o), (3, 2, 1))
-    xs = reshape(xs, :, size(xs, 3))::Matrix{Float32}
+    xs = reshape(xs, :, size(xs, 3))
+    return xs::Matrix{Float32}
 end
 
 """
@@ -144,4 +153,93 @@ function atom_indices(filename::String, selector::String)
     mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     traj = mdtraj.load(filename, stride=-1)
     inds = traj.top.select(selector) .+ 1
+    return inds::Vector{Int}
+end
+
+import Chemfiles
+
+function readchemfile(source::String, steps=:)
+    traj = Chemfiles.Trajectory(source, 'r')
+    try
+        readchemfile(traj, steps)
+    finally
+        close(traj)
+    end
+end
+
+function readchemfile(traj::Chemfiles.Trajectory, frames)
+    frame = Chemfiles.read_step(traj, 0)
+    xs = Array{Float32}(undef, length(Chemfiles.positions(frame)), length(frames))
+    for (i, s) in enumerate(frames)
+        Chemfiles.read_step!(traj, s - 1, frame)
+        xs[:, i] .= Chemfiles.positions(frame).data |> vec
+    end
+    xs ./= 10 # convert from Angstrom to nm
+    return xs
+end
+
+readchemfile(traj::Chemfiles.Trajectory, frames::Colon=:) =
+    readchemfile(traj::Chemfiles.Trajectory, Base.OneTo(length(traj)))
+
+readchemfile(traj::Chemfiles.Trajectory, frame::Int) =
+    readchemfile(traj, frame:frame) |> vec
+
+function writechemfile(filename, data::Array{<:Any,2}; source)
+    trajectory = Chemfiles.Trajectory(source, 'r')
+    try
+        frame = Chemfiles.read(trajectory)
+        trajectory = Chemfiles.Trajectory(filename, 'w', uppercase(split(filename, ".")[end]))
+        for i in 1:size(data, 3)
+            Chemfiles.positions(frame) .= reshape(data[:, i], 3, :) .* 10 # convert from nm to Angstrom
+            write(trajectory, frame)
+        end
+    finally
+        close(trajectory)
+    end
+end
+
+mutable struct LazyTrajectory <: AbstractMatrix{Float32}
+    path::String
+    traj::Chemfiles.Trajectory
+    size::Tuple{Int,Int}
+end
+
+function LazyTrajectory(path::String)
+    traj = Chemfiles.Trajectory(path, 'r')
+    frame = read(traj)
+    s = (length(Chemfiles.positions(frame)), Int(length(traj)))
+    return LazyTrajectory(path, traj, s)
+end
+
+Base.size(ltl::LazyTrajectory) = ltl.size
+Base.getindex(ltl::LazyTrajectory, i1, i2) = ISOKANN.readchemfile(ltl.traj, i2)[i1, :]
+Base.getindex(ltl::LazyTrajectory, i1::Union{Colon,Base.OneTo}, i2) = ISOKANN.readchemfile(ltl.traj, i2)
+Base.getindex(ltl::LazyTrajectory, i1::Union{Colon,Base.OneTo}, i2::Int) = ISOKANN.readchemfile(ltl.traj, i2)
+Base.getindex(ltl::LazyTrajectory, i1, i2::Int) = vec(ISOKANN.readchemfile(ltl.traj, i2))[i1]
+
+struct LazyMultiTrajectory <: AbstractMatrix{Float32}
+    lts::Vector{LazyTrajectory}
+end
+
+Base.collect(l::LazyMultiTrajectory) = l[:, :]
+Base.size(l::LazyMultiTrajectory) = (size(l.lts[1])[1], sum(size(l)[2] for l in l.lts))
+
+function Base.getindex(l::LazyMultiTrajectory, I, j::Int)
+    for t in l.lts
+        len = size(t, 2)
+        j <= len && return t[I, j]
+        j = j - len
+    end
+end
+
+function Base.getindex(l::LazyMultiTrajectory, V::Vararg)
+    I, J = to_indices(l, V)
+    res = Array{eltype(l)}(undef, length(I), length(J))
+    for t in l.lts
+        len = size(t, 2)
+        c = findall(x -> 0 < x <= len, J)
+        res[:, c] = t[I, J[c]]
+        J = J .- len
+    end
+    return res
 end
