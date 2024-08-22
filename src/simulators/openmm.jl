@@ -195,10 +195,10 @@ function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}=getcoords(s), ste
     return xs
 end
 
-function ISOKANN.laggedtrajectory(s::OpenMMSimulation, n_lags, steps_per_lag = s.steps)
+function ISOKANN.laggedtrajectory(s::OpenMMSimulation, n_lags, steps_per_lag=s.steps; x0=getcoords(s))
     steps = steps_per_lag * n_lags
     saveevery = steps_per_lag
-    trajectory(s, getcoords(s), steps, saveevery)
+    trajectory(s, x0, steps, saveevery)
 end
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)#::Vector

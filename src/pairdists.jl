@@ -79,7 +79,6 @@ Like `localdists`, but consider only the atoms with index in `atoms`
 """
 function restricted_localpdistinds(coords, radius, atoms)
     rc = reshape(reshape(coords, 3, :, size(coords, 2))[:, atoms, :], :, size(coords, 2))
-    @show size(rc)
     pairs = localpdistinds(rc, radius)
     map(pairs) do (a, b)
         (atoms[a], atoms[b])

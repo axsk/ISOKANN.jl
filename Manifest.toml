@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "faf4567aaf643eff1653f6ca013dc56f535da286"
+project_hash = "82551888b97af7274c9467a3e0d8fa7fcbd8a068"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "99a6f5d0ce1c7c6afdb759daa30226f71c54f6b0"
@@ -153,6 +153,12 @@ deps = ["UnsafeAtomics"]
 git-tree-sha1 = "c06a868224ecba914baa6942988e2f2aade419be"
 uuid = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
 version = "0.1.0"
+
+[[deps.AtomsBase]]
+deps = ["LinearAlgebra", "PeriodicTable", "Printf", "Requires", "StaticArrays", "Unitful", "UnitfulAtomic"]
+git-tree-sha1 = "995c2b6b17840cd87b722ce9c6cdd72f47bab545"
+uuid = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
+version = "0.3.5"
 
 [[deps.Automa]]
 deps = ["PrecompileTools", "TranscodingStreams"]
@@ -349,6 +355,18 @@ weakdeps = ["SparseArrays"]
 
     [deps.ChainRulesCore.extensions]
     ChainRulesCoreSparseArraysExt = "SparseArrays"
+
+[[deps.Chemfiles]]
+deps = ["AtomsBase", "Chemfiles_jll", "DocStringExtensions", "PeriodicTable", "Unitful", "UnitfulAtomic"]
+git-tree-sha1 = "82fe5e341c793cb51149d993307da9543824b206"
+uuid = "46823bd8-5fb3-5f92-9aa0-96921f3dd015"
+version = "0.10.41"
+
+[[deps.Chemfiles_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "f3743181e30d87c23d9c8ebd493b77f43d8f1890"
+uuid = "78a364fa-1a3c-552a-b4bb-8fa0f9c1fcca"
+version = "0.10.4+0"
 
 [[deps.CloseOpenIntervals]]
 deps = ["Static", "StaticArrayInterface"]
@@ -1974,6 +1992,12 @@ git-tree-sha1 = "8489905bcdbcfac64d1daa51ca07c0d8f0283821"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
 version = "2.8.1"
 
+[[deps.PeriodicTable]]
+deps = ["Base64", "Unitful"]
+git-tree-sha1 = "238aa6298007565529f911b734e18addd56985e1"
+uuid = "7b2266bf-644c-5ea3-82d8-af4bbd25a884"
+version = "1.2.1"
+
 [[deps.Pipe]]
 git-tree-sha1 = "6842804e7867b115ca9de748a0cf6b364523c16d"
 uuid = "b98c9c47-44ae-5843-9183-064241ee97a0"
@@ -2761,6 +2785,12 @@ weakdeps = ["ConstructionBase", "InverseFunctions"]
     [deps.Unitful.extensions]
     ConstructionBaseUnitfulExt = "ConstructionBase"
     InverseFunctionsUnitfulExt = "InverseFunctions"
+
+[[deps.UnitfulAtomic]]
+deps = ["Unitful"]
+git-tree-sha1 = "903be579194534af1c4b4778d1ace676ca042238"
+uuid = "a7773ee8-282e-5fa2-be4e-bd808c38a91a"
+version = "1.0.0"
 
 [[deps.UnitfulLatexify]]
 deps = ["LaTeXStrings", "Latexify", "Unitful"]

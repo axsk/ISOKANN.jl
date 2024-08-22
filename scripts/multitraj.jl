@@ -5,7 +5,8 @@ using ISOKANN:
     pdists,
     atom_indices,
     data_from_trajectory,
-    lastcat
+    lastcat,
+    *
 
 DATADIR = "/data/numerik/ag_cmd/trajectory_transfers_for_isokann/data/8EF5_500ns_pka_7.4_no_capping_310.10C"
 MAXRADIUS = 0.5 # angstrom
@@ -15,7 +16,7 @@ trajfiles = ["$DATADIR/traj.dcd" for i in 1:2]
 pdbfile = "$DATADIR/struct.pdb"
 
 
-molecule = load_trajectory(pdbfile, top=pdbfile)
+molecule = load_trajectory(pdbfile)
 pdist_inds = restricted_localpdistinds(molecule, MAXRADIUS, atom_indices(pdbfile, "not water and name==CA"))
 
 

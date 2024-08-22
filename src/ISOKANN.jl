@@ -55,6 +55,7 @@ export pairnet
 #export MollyLangevin, propagate, solve#, MollySDE
 
 export propagate
+export laggedtrajectory
 
 export run!, runadaptive!
 export AdamRegularized, NesterovRegularized
@@ -65,10 +66,13 @@ export Iso2
 export Doublewell, Triplewell, MuellerBrown
 export chis
 export SimulationData
+export addcoords
 export getxs, getys
 export exit_rates
-export atom_indices
 export load_trajectory, save_trajectory
+export atom_indices
+export localpdistinds, pdists, restricted_localpdistinds
+
 
 export reactionpath_minimum, reactionpath_ode
 

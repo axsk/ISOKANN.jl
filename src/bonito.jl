@@ -20,7 +20,7 @@ end
 logrange(x1, x2, n) = round.((10^y for y in range(log10(x1), log10(x2), length=n)), sigdigits=1)
 
 function isocreator()
-    pdb = Dropdown(["data/alanine-dipeptide-nowater.pdb", "data/vgv.pdb", "data/villin nowater.pdb"])
+    pdb = Dropdown(["data/alanine-dipeptide-nowater.pdb", "data/vgv.pdb", "data/villin nowater.pdb", "temp/8eftstepped.pdb"])
     pdbid = TextField("")
     steps = StylableSlider(1:1000, value=10)
     temperature = StylableSlider(-10:70, value=30)

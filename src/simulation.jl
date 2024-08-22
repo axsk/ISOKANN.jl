@@ -137,13 +137,18 @@ Merge the data and features of `d1` and `d2`, keeping the simulation and feature
 Note that there is no check if simulation features agree.
 """
 function Base.merge(d1::SimulationData, d2::SimulationData)
-    features = lastcat.(d1.features, d2.features)
     coords = lastcat.(d1.coords, d2.coords)
+    d2f = if d1.featurizer == d2.featurizer
+        d2.features
+    else
+        d1.featurizer.(d2.coords)
+    end
+    features = lastcat.(d1.features, d2f)
     return SimulationData(d1.sim, features, coords, d1.featurizer)
 end
 
 function addcoords(d::SimulationData, coords::AbstractMatrix)
-    merge(d, SimulationData(d.sim, coords, nk(d)))
+    merge(d, SimulationData(d.sim, coords, nk(d), featurizer=d.featurizer))
 end
 
 
