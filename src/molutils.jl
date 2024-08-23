@@ -73,7 +73,7 @@ function aligntrajectory(traj::AbstractVector)
     end
     return aligned
 end
-aligntrajectory(traj::Matrix) = reduce(hcat, aligntrajectory(eachcol(traj)))
+aligntrajectory(traj::AbstractMatrix) = reduce(hcat, aligntrajectory(eachcol(traj)))
 
 centermean(x::AbstractMatrix) = x .- mean(x, dims=2)
 centermean(x::AbstractVector) = as3dmatrix(centermean, x)

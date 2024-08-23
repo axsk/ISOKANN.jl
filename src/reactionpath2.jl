@@ -1,6 +1,6 @@
 # maximum likelihood path on given data
 
-function reactive_path(xi::AbstractVector, coords::Matrix; sigma, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
+function reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
     xi = cpu(xi)
     from, to = fromto(method, xi)
 

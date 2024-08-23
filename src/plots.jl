@@ -123,7 +123,7 @@ end
 scatter_ramachandran(iso::Iso) = scatter_ramachandran(getcoords(iso.data) |> cpu, iso.model(getxs(iso.data)) |> cpu |> vec)
 
 scatter_ramachandran(x, model; kwargs...) = scatter_ramachandran(x, vec(model(x)))
-scatter_ramachandran(x, mat::Matrix; kwargs...) = plot(map(eachrow(mat)) do row
+scatter_ramachandran(x, mat::AbstractMatrix; kwargs...) = plot(map(eachrow(mat)) do row
     scatter_ramachandran(x, vec(row))
 end...)
 

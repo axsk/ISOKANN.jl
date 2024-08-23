@@ -10,7 +10,7 @@ import StochasticDiffEq, Flux, CUDA, PCCAPlus, Plots
 using ProgressMeter
 using Plots
 
-using LinearAlgebra: norm, dot, cross, diag, svd
+using LinearAlgebra: norm, dot, cross, diag, svd, pinv, I, schur
 using StatsBase: mean, sample, mean_and_std
 using StaticArrays: SVector
 using StatsBase: sample, quantile
@@ -22,7 +22,6 @@ using Plots: plot, plot!, scatter, scatter!
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
 using StaticArrays: @SVector
 using StochasticDiffEq: StochasticDiffEq
-using LinearAlgebra: pinv, norm, I, schur
 using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 
 import ProgressMeter
@@ -46,6 +45,7 @@ import ForwardDiff
 import StatsBase
 import Flux
 import PCCAPlus
+import LinearAlgebra
 
 import MLUtils: numobs
 import Flux: cpu, gpu
