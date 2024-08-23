@@ -1,7 +1,7 @@
 name = "ISOKANN"
 uuid = "512544ac-929d-4ba3-aa9d-55e9313a4b47"
 authors = ["Sikorski <sikorski@zib.de> and contributors"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 BioStructures = "de9282ab-8554-53be-b2d6-f6c222edabfc"
