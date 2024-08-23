@@ -86,6 +86,7 @@ function adddata(data, model, sim, ny)
     return joindata(data, (xs, ys))
 end
 
+mergedata(d1::Tuple, d2::Tuple) = lastcat.(d1, d2)
 
 lastcat(x::T, y::T) where {N,T<:AbstractArray{<:Any,N}} = cat(x, y, dims=N)
 lastcat(x::T, y) where {T} = lastcat(x, convert(T, y))

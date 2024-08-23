@@ -16,7 +16,7 @@ function addextrapolates!(iso, n; stepsize=0.01, steps=1)
     n == 0 && return
     xs = extrapolate(iso, n, stepsize, steps)
     nd = SimulationData(iso.data.sim, xs, nk(iso.data))
-    iso.data = merge(iso.data, nd)
+    iso.data = mergedata(iso.data, nd)
     return
 end
 

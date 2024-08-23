@@ -26,8 +26,6 @@ datas = map(trajfiles) do trajfile
     data = data_from_trajectory(feats, reverse=true)
 end
 
-mergedata(d1, d2) = lastcat.(d1, d2)
-
 data = reduce(mergedata, datas)
 
 iso = Iso(data)
