@@ -88,7 +88,7 @@ else
     @time "generating initial data" SimulationData(sim, nx, nk)
 end
 
-iso = Iso2(data;
+iso = Iso(data;
     opt, minibatch,
     model=pairnet(length(sim.features); layers),
     gpu=true,

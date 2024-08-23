@@ -15,7 +15,7 @@ function reactive_path(xi::AbstractVector, coords::Matrix; sigma, maxjump=1, met
     return ids, path
 end
 
-reactive_path(iso::Iso2; kwargs...) = reactive_path(chis(iso) |> vec, getcoords(iso.data); kwargs...)
+reactive_path(iso::Iso; kwargs...) = reactive_path(chis(iso) |> vec, getcoords(iso.data); kwargs...)
 
 # heuristic whether a sequence is increasing
 isincreasing(x) = sum(diff(x) .> 0) > length(x) / 2
@@ -110,7 +110,7 @@ end
 
 
 """
-    save_reactive_path(iso::Iso2, coords::AbstractMatrix;
+    save_reactive_path(iso::Iso, coords::AbstractMatrix;
         sigma=1,
         out="out/reactive_path.pdb",
         source,
@@ -122,7 +122,7 @@ Computes the maximum likelihood path with parameter `sigma` along the given data
 aligns it and saves it to the `out` path.
 
 # Arguments
-- `iso::Iso2`: The isomer for which the reactive path is computed.
+- `iso::Iso`: The isomer for which the reactive path is computed.
 - `coords::AbstractMatrix`: The coordinates corresponding to the samples in `iso`
 - `sigma=1`: The standard deviation used for the reactive path calculation.
 - `out="out/reactive_path.pdb"`: The output file path for saving the reactive path.
@@ -133,7 +133,7 @@ aligns it and saves it to the `out` path.
 - `ids`: The IDs of the reactive path.
 
 """
-function save_reactive_path(iso::Iso2, coords::AbstractMatrix=getcoords(iso.data) |> cpu;
+function save_reactive_path(iso::Iso, coords::AbstractMatrix=getcoords(iso.data) |> cpu;
     sigma=1,
     maxjump=1,
     out="out/reactive_path.pdb",

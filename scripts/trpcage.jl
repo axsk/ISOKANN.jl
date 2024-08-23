@@ -2,6 +2,6 @@ sim = OpenMMSimulation(pdb="data/2jof-processed.pdb", forcefields=ISOKANN.OpenMM
 
 data = SimulationData(sim, nx=100, nk=8)
 
-iso = Iso2(data, model=pairnet(data, activation=Flux.swish, layers=4), gpu=true, opt=AdamRegularized(1e-4, 1e-5), minibatch=100, loggers=[ISOKANN.autoplot(10)])
+iso = Iso(data, model=pairnet(data, activation=Flux.swish, layers=4), gpu=true, opt=AdamRegularized(1e-4, 1e-5), minibatch=100, loggers=[ISOKANN.autoplot(10)])
 
 runadaptive!(iso, generations=1000, nx=3, cutoff=2000, iter=500, keepedges=true)

@@ -16,7 +16,7 @@ using Flux: Dense
 abstract type VGVData end
 
 struct VGVData2 <: VGVData
-  dir 
+  dir
   data
   coords
 end
@@ -68,7 +68,7 @@ function vgv_luca(v::VGVData=VGVData(); kwargs...)
   model = lucanet2(size(v.data[1], 1))
   opt = AdamRegularized(5e-4, 1e-5)
 
-  iso = Iso2(v.data; model, opt, minibatch=100) |> gpu
+  iso = Iso(v.data; model, opt, minibatch=100) |> gpu
 
   # iso = IsoRunFixedData(; v.data, model, opt,
   #   minibatch=100,
@@ -77,7 +77,7 @@ function vgv_luca(v::VGVData=VGVData(); kwargs...)
   #   kwargs...
   # ) |> gpu
 
-  iso.loggers = [ISOKANN.autoplot(1), 
+  iso.loggers = [ISOKANN.autoplot(1),
     (; plot=() -> scatter_reactioncoord(iso, v))]
   return iso
 end

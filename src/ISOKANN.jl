@@ -62,7 +62,7 @@ export AdamRegularized, NesterovRegularized
 export plot_training, scatter_ramachandran
 export reactive_path, save_reactive_path
 export cpu, gpu
-export Iso2
+export Iso
 export Doublewell, Triplewell, MuellerBrown
 export chis
 export SimulationData
@@ -91,7 +91,7 @@ include("simulators/langevin.jl")  # for the simulators
 
 #include("isosimple.jl")
 include("isotarget.jl")
-include("iso2.jl")
+include("iso.jl")
 include("plots.jl")           # visualizations
 
 include("simulators/openmm.jl")

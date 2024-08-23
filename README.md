@@ -3,7 +3,7 @@
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://axsk.github.io/ISOKANN.jl/dev)
 
 The ISOKANN.jl package implements the ISOKANN algorithm for the identification of macro-states of molecular systems. Its main features comprise of:
-- A flexible implementation of the ISOKANN core (`Iso2`) (supporting 1D and N-D ISOKANN, customizable neural networks on a broad set of `SimulationData`)
+- A flexible implementation of the ISOKANN core (`Iso`) (supporting 1D and N-D ISOKANN, customizable neural networks on a broad set of `SimulationData`)
 - A battery-included interfaces to OpenMM for automated adaptive sampling of molecular dynamics
 - Different adaptive sampling strategies (extapolation, kde and stratified sampling)
 - A posteriori analysis tools (plots, reaction path extraction and reaction rate estimation)
@@ -13,7 +13,7 @@ The ISOKANN.jl package implements the ISOKANN algorithm for the identification o
 
 Install the package via `julia> ]add https://github.com/axsk/ISOKANN.jl`.
 
-If you want to use Julia's built Conda.jl to automatically install OpenMM, you shoud build the package after setting the environment variable 
+If you want to use Julia's built Conda.jl to automatically install OpenMM, you shoud build the package after setting the environment variable
 `PYTHON=""`, e.g. through `ENV["PYTHON"]=""; using Pkg; Pkg.build()`.
 
 The usual pipeline consists of the creation of system simulation, generation of training data, training ISOKANN and a posteriori analysis of the results.
@@ -29,13 +29,13 @@ sim = OpenMMSimulation()
 data = isodata(sim, 100, 5)
 
 # create the ISOKANN training object
-iso = Iso2(data)
+iso = Iso(data)
 
 # train for 100 episodes
 run!(iso, 100)
 
 # plot the training losses and chi values
-plot_training(iso) 
+plot_training(iso)
 
 # scatter plot of all initial points colored in corresponding chi value
 scatter_ramachandran(iso)
@@ -48,7 +48,7 @@ save_reactive_path(iso, out="path.pdb")
 ```
 
 A more comprehensive example simulating the folding of the chicken villin can be found in [`scripts/villin.jl`](scripts/villin.jl).
-For further information consult the docstrings (e.g. `?Iso2`).
+For further information consult the docstrings (e.g. `?Iso`).
 
 ## References
 

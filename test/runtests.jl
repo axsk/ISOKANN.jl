@@ -20,7 +20,7 @@ end
         @testset "Running basic system tests on $backend" begin
             for (sim, name) in simulations
                 @testset "Testing ISOKANN with $name" begin
-                    i = Iso2(sim) |> backend
+                    i = Iso(sim) |> backend
                     @test true
                     run!(i)
                     @test true
@@ -32,11 +32,11 @@ end
             end
         end
 
-        @testset "Iso2 Transforms ($backend)" begin
+        @testset "Iso Transforms ($backend)" begin
             sim = MuellerBrown()
             for (d, t) in zip([1, 2, 2], [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()])
                 @test begin
-                    run!(Iso2(sim, model=pairnet(n=2, nout=d), transform=t) |> backend)
+                    run!(Iso(sim, model=pairnet(n=2, nout=d), transform=t) |> backend)
                     true
                 end
             end
@@ -44,8 +44,8 @@ end
     end
 
 
-    @testset "Iso2 and IsoSimulation operations" begin
-        iso = Iso2(OpenMMSimulation(), nx=10)
+    @testset "Iso and IsoSimulation operations" begin
+        iso = Iso(OpenMMSimulation(), nx=10)
         iso.data = iso.data[6:10] # data slicing
         path = Base.Filesystem.tempname() * ".jld2"
         ISOKANN.save(path, iso)

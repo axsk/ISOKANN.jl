@@ -2,21 +2,21 @@
 
 This package provides the core ISOKANN algorithm as well as some wrappers and convenience routines to work with different kind of simulations and data.
 
-The core ISOKANN algorithm is accessed by the `Iso2` type,
+The core ISOKANN algorithm is accessed by the `Iso` type,
 which holds the neural network, optimizer, ISOKANN parameters and training data.
 
 You can construct it by passing a tuple of `(xs, ys)` of arrays as input data. Here `xs` is a matrix where the columns are starting points of trajectories and `ys` is a 3 dimensional array where `ys[d,k,n]` is the `d`-th coordinate of the `k`-th Koopman-replica of the `n`-th trajectory.
 
-To start training the neural network simply call the `run!` function passing the `Iso2` object and the number of ISOKANN iterations.
+To start training the neural network simply call the `run!` function passing the `Iso` object and the number of ISOKANN iterations.
 The resulting \chi values can be obtained via the `chis` method
 
 ```julia
-iso=Iso2((rand(3,100), rand(3,10,100)))
+iso=Iso((rand(3,100), rand(3,10,100)))
 run!(iso)
 chis(iso)
 ```
 
-For more advanced use, such as with the adaptive sampling algorithms we pass a `SimulationData` object instead of the data tuple to the `Iso2` constructor.
+For more advanced use, such as with the adaptive sampling algorithms we pass a `SimulationData` object instead of the data tuple to the `Iso` constructor.
 
 The `SimulationData` itself is composed of a `Simulation`, its simulated trajectory data as well as the features fed into the neural network for training.
 We supply some basic simulations which can generate the data, e.g. [`Doublewell`](@ref), [`MuellerBrown`](@ref), [`Diffusion`](@ref), [`MollySimulation`](@ref) and [`OpenMMSimulation`](@ref).
@@ -25,7 +25,7 @@ Of course you can write your own `Simulation` which in its most basic form needs
 ```julia
 sim = Doublewell()
 data = isodata(sim, 100, 20)
-iso = Iso2(data)
+iso = Iso(data)
 ```
 
 We also provide different type of wrappers to load simulations [`vgv`] or generate data from trajectories [`IsoMu`].
@@ -41,7 +41,7 @@ The `SimulationData` in turn links such a simulation `Simulation` to actual simu
 Through the specification of a `featurizer` the neural network does not need to digest the simulation coordinates but can use optimized features which for example guarantee invariance under rigid transformations.
 By default the `featurizer` is inhereted from the default `featurizer` of the `Simulation`. For the `OpenMMSimulation` we have pre-implemented pairwise distances between all atoms, locally close atoms and/or the c-Alpha atoms (c.f. the `OpenMMSimulation` docstring).
 
-The `Iso2` object then brings together the `SimulationData` with a neural network `model` and an `optimizer`.
+The `Iso` object then brings together the `SimulationData` with a neural network `model` and an `optimizer`.
 Its main use is together with the training routine `run!()` which computes the ISOKANN iteration via `isotarget` and updates the networks weights with `train_batch`.
 The `logger` field allows to ammend other operations such as the default `autoplot()` which displays the progress during training.
 The default model is the `pairnet` which constructs a fully connected network of a given number of layers of descreasing width and the default optimizer is Adam with weight decay.
@@ -49,7 +49,7 @@ The default model is the `pairnet` which constructs a fully connected network of
 Adaptive sampling is facilitated either by the `runadaptive!` method, or the individual `adddata!`, `resample_kde!`, `addextrapolates!` used in a custom training routine.
 
 
-The learned chi values can be accessed via `chis(::Iso2)` and the reaction rates via `exit_rates(::Iso2)`
+The learned chi values can be accessed via `chis(::Iso)` and the reaction rates via `exit_rates(::Iso)`
 
 
 # Contents of the source files
@@ -67,7 +67,7 @@ Simulators:
 - `simulators/langevin.jl`: A simulator for the Langevin equation
 - `simulators/openmm.jl`: Wrapper around OpenMM for molecular dynamics simulations
 
-Utility: 
+Utility:
 - `molutils.jl`: different utilities to work with molecules and molecular data, such as alignment, dihedrals etc.
 - `pairdists.jl`: different methods to compute pairwise distance features
 - `plots.jl`: plotting functionality

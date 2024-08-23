@@ -18,7 +18,7 @@ featurizer(x) = pdists(x, featinds)
 traj = laggedtrajectory(sim, samples)
 data = SimulationData(sim, traj, nk; featurizer)
 
-iso = Iso2(data, opt=NesterovRegularized(), gpu=true)
+iso = Iso(data, opt=NesterovRegularized(), gpu=true)
 
 run!(iso, trainsteps)
 

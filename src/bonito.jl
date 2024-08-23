@@ -11,7 +11,7 @@ function content(session)
     println("session created $session")
     @show Threads.threadid()
     isoui, isoo = @time isocreator()
-    global ISO 
+    global ISO
     ISO = isoo
     #Grid(isoui)
     Grid(isoui, @lift(dashboard($isoo, session)))
@@ -51,7 +51,7 @@ function isocreator()
         pdbfile = pdbid.value[] != "" ? getpdb(pdbid.value[]) : pdb.value[]
 
 
-        iso = Iso2(
+        iso = Iso(
             OpenMMSimulation(
                 steps=steps.value[],
                 pdb=pdbfile,

@@ -15,16 +15,16 @@ function myonly(x::CuArray)
 end
 
 """
-    reactionpath_minimum(iso::Iso2, x0; steps=100)
+    reactionpath_minimum(iso::Iso, x0; steps=100)
 
 Compute the reaction path by integrating ∇χ with orthogonal energy minimization.
 
 # Arguments
-- `iso::Iso2`: The isomer for which the reaction path minimum is to be computed.
+- `iso::Iso`: The isomer for which the reaction path minimum is to be computed.
 - `x0`: The starting point for the reaction path computation.
 - `steps=100`: The number of steps to take along the reaction path.
 """
-function reactionpath_minimum(iso::Iso2, x0=randomcoords(cpu(iso)); steps=101, xtol=1e-3)
+function reactionpath_minimum(iso::Iso, x0=randomcoords(cpu(iso)); steps=101, xtol=1e-3)
 
     iso = cpu(iso) # TODO: find another solution
 
@@ -41,7 +41,7 @@ function reactionpath_minimum(iso::Iso2, x0=randomcoords(cpu(iso)); steps=101, x
     hcat(x1, xs, x2)
 end
 
-function reactionintegrator(iso::Iso2, x0; steps=10, stepsize=0.01, direction=1, xtol)
+function reactionintegrator(iso::Iso, x0; steps=10, stepsize=0.01, direction=1, xtol)
     x = x0
     xs = similar(x0, length(x0), steps)
     @showprogress for i in 1:steps
@@ -76,7 +76,7 @@ Compute the reaction path by integrating ∇χ as well as `orth` * F orthogonal 
 
 
 # Arguments
-- `iso::Iso2`: The isomer for which the reaction path minimum is to be computed.
+- `iso::Iso`: The isomer for which the reaction path minimum is to be computed.
 - `x0`: The starting point for the reaction path computation.
 - `steps=100`: The number of steps to take along the reaction path.
 - `minimize=false`: Whether to minimize the orthogonal to ∇χ before integration.

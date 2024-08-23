@@ -151,7 +151,7 @@ function test(overlap=0.1)
     graphplot(SimpleGraph(A), nodes, node_color=c)
 end
 
-function plot_tda(iso::Iso2; kwargs...)
+function plot_tda(iso::Iso; kwargs...)
     ys = iso.data.coords[2]
     chi = chis(iso) |> cpu |> vec
     nodes, A = tda(ys, chi; kwargs...)
@@ -161,7 +161,7 @@ function plot_tda(iso::Iso2; kwargs...)
     graphplot(SimpleGraph(A), nodes, node_color=c)
 end
 
-function tda(iso::Iso2; kwargs...)
+function tda(iso::Iso; kwargs...)
     ys = iso.data.coords[2]
     chi = chis(iso) |> cpu |> vec
     nodes, A = tda(ys, chi; kwargs...)

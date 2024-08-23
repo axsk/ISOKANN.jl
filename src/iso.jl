@@ -1,6 +1,6 @@
+@deprecate Iso2 Iso
 
-
-@kwdef mutable struct Iso2
+@kwdef mutable struct Iso
     model
     opt
     data
@@ -12,23 +12,23 @@ end
 
 
 """
-    Iso2(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
+    Iso(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
 
 """
-function Iso2(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
+function Iso(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
     opt = Flux.setup(opt, model)
     transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
 
-    iso = Iso2(; model, opt, data, transform, kwargs...)
+    iso = Iso(; model, opt, data, transform, kwargs...)
     gpu && (iso = ISOKANN.gpu(iso))
     return iso
 end
 
 """
-    Iso2(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
+    Iso(sim::IsoSimulation; nx=100, nk=10, nd=1, kwargs...)
 
 Convenience constructor which generates the `SimulationData` from the simulation `sim`
-and constructs the Iso2 object. See also Iso2(data; kwargs...)
+and constructs the Iso object. See also Iso(data; kwargs...)
 
 ## Arguments
 - `sim::IsoSimulation`: The `IsoSimulation` object.
@@ -36,22 +36,22 @@ and constructs the Iso2 object. See also Iso2(data; kwargs...)
 - `nk::Int`: The number of koopman samples.
 - `nout::Int`: Dimension of the χ function.
 """
-Iso2(sim::IsoSimulation; nx=100, nk=2, kwargs...) = Iso2(SimulationData(sim, nx, nk); kwargs...)
+Iso(sim::IsoSimulation; nx=100, nk=2, kwargs...) = Iso(SimulationData(sim, nx, nk); kwargs...)
 
 
-#Iso2(iso::IsoRun) = Iso2(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
+#Iso(iso::IsoRun) = Iso(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
 
 """
-    run!(iso::Iso2, n=1, epochs=1)
+    run!(iso::Iso, n=1, epochs=1)
 
-Run the training process for the Iso2 model.
+Run the training process for the Iso model.
 
 # Arguments
-- `iso::Iso2`: The Iso2 model to train.
+- `iso::Iso`: The Iso model to train.
 - `n::Int`: The number of (outer) Koopman iterations.
 - `epochs::Int`: The number of (inner) epochs to train the model for each Koopman evaluation.
 """
-function run!(iso::Iso2, n=1, epochs=1; showprogress=true)
+function run!(iso::Iso, n=1, epochs=1; showprogress=true)
     p = ProgressMeter.Progress(n)
     iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
@@ -96,17 +96,17 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
     return ls / numobs(xs)
 end
 
-chis(iso::Iso2) = iso.model(getxs(iso.data))
-chicoords(iso::Iso2, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
-isotarget(iso::Iso2) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
+chis(iso::Iso) = iso.model(getxs(iso.data))
+chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
+isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
-#Optimisers.adjust!(iso::Iso2; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
-#Optimisers.setup(iso::Iso2) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
+#Optimisers.adjust!(iso::Iso; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
+#Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
-gpu(iso::Iso2) = Iso2(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
-cpu(iso::Iso2) = Iso2(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
 
-function Base.show(io::IO, mime::MIME"text/plain", iso::Iso2)
+function Base.show(io::IO, mime::MIME"text/plain", iso::Iso)
     println(io, typeof(iso), ":")
     println(io, " model: $(iso.model.layers)")
     println(io, " transform: $(iso.transform)")
@@ -188,7 +188,7 @@ function chi_exit_rate(x, Kx, tau)
     return α + β
 end
 
-chi_exit_rate(iso::Iso2) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), iso.data.sim.step * iso.data.sim.steps)
+chi_exit_rate(iso::Iso) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), iso.data.sim.step * iso.data.sim.steps)
 
 
 function exit_rates(x, kx, tau)
@@ -199,17 +199,17 @@ function exit_rates(x, kx, tau)
     return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
 end
 
-koopman(iso::Iso2) = koopman(iso.model, getys(iso.data))
+koopman(iso::Iso) = koopman(iso.model, getys(iso.data))
 
-exit_rates(iso::Iso2) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso.data.sim))
+exit_rates(iso::Iso) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso.data.sim))
 
 
 """
-    simulationtime(iso::Iso2)
+    simulationtime(iso::Iso)
 
 print and return the total simulation time contained in the data of `iso` in nanoseconds.
 """
-function simulationtime(iso::Iso2)
+function simulationtime(iso::Iso)
     _, k, n = size(iso.data.features[2])
     t = k * n * lagtime(iso.data.sim)
     #println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?
@@ -217,46 +217,46 @@ function simulationtime(iso::Iso2)
 end
 
 """
-    savecoords(path::String, iso::Iso2, inds=1:numobs(iso.data))
+    savecoords(path::String, iso::Iso, inds=1:numobs(iso.data))
 
 Save the coordinates of the specified observation indices from the data of of `iso` to the file `path`.
 
-    savecoords(path::String, iso::Iso2, coords::AbstractArray)
+    savecoords(path::String, iso::Iso, coords::AbstractArray)
 
 Save the coordinates of the specified matrix of coordinates to a file, using the molecule in `iso` as a template.
 """
-function savecoords(path::String, iso::Iso2, inds=1:numobs(iso.data))
+function savecoords(path::String, iso::Iso, inds=1:numobs(iso.data))
     coords = getcoords(iso.data)[:,inds]
     savecoords(path, iso, coords)
 end
 
-function savecoords(path::String, iso::Iso2, coords::AbstractMatrix)
+function savecoords(path::String, iso::Iso, coords::AbstractMatrix)
     savecoords(path, iso.data.sim, coords)
 end
 
 """
-    saveextrema(path::String, iso::Iso2)
+    saveextrema(path::String, iso::Iso)
 
 Save the two extermal configurations (metastabilities) to the file `path`.
 """
-function saveextrema(path::String, iso::Iso2)
+function saveextrema(path::String, iso::Iso)
     c = vec(chis(iso))
     savecoords(path, iso, [argmin(c), argmax(c)])
 end
 
 """
-    save(path::String, iso::Iso2)
+    save(path::String, iso::Iso)
 
-Save the complete Iso2 object to a JLD2 file """
-function save(path::String, iso::Iso2)
+Save the complete Iso object to a JLD2 file """
+function save(path::String, iso::Iso)
     iso = cpu(iso)
     JLD2.save(path, "iso", iso)
 end
 
 """
-    load(path::String, iso::Iso2)
+    load(path::String, iso::Iso)
 
-Load the Iso2 object from a JLD2 file
+Load the Iso object from a JLD2 file
 Note that it will be loaded to the CPU, even if it was saved on the GPU.
 An OpenMMSimulation will be reconstructed anew from the saved pdb file.
 """
@@ -268,7 +268,7 @@ function load(path::String)
     return iso
 end
 
-function adddata!(iso::Iso2, nx; keepedges)
+function adddata!(iso::Iso, nx; keepedges)
     iso.data = adddata(iso.data, iso.model, nx; keepedges)
 end
 

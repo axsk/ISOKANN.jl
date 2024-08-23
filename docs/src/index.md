@@ -12,7 +12,7 @@ CurrentModule = ISOKANN
 SimulationData
 OpenMMSimulation
 propagate
-Iso2
+Iso
 run!
 ```
 

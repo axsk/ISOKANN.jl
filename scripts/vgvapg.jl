@@ -24,7 +24,7 @@ model = pairnet(data) # create the default `pairnet`` neural network for the dat
 opt = AdamRegularized(1e-3, 1e-4) # set learning rate and decay parameters
 
 # create the ISOKANN object
-iso = Iso2(data; model, opt,
+iso = Iso(data; model, opt,
   minibatch=100, # size of the minibatch for the SGD,
   gpu=true)
 

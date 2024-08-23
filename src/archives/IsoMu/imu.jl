@@ -43,7 +43,7 @@ function IMu(data::Union{DataLink,Vector{DataLink}};
     #     loggers=[ISOKANN.autoplot(5)],
     #     kwargs...)
 
-    iso = ISOKANN.Iso2(idata,
+    iso = ISOKANN.Iso(idata,
         opt=AdamRegularized(learnrate, regularization),
         model=model,
         transform=ISOKANN.TransformShiftscale(),

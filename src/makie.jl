@@ -62,7 +62,7 @@ function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=true, showbackb
     ax
 end
 
-function plotmol!(ax, iso::Iso2, i; kwargs...)
+function plotmol!(ax, iso::Iso, i; kwargs...)
     coords = @lift ISOKANN.align(iso.data.coords[1][:, $i], iso.data.coords[1][:, 1])
     color = @lift(iso.model(iso.data.features[1][:, $i]) |> cpu)
     plotmol!(ax, coords, iso.data.sim.pysim, color; kwargs...)
@@ -70,7 +70,7 @@ end
 
 
 
-function dashboard(iso::Iso2, session=nothing)
+function dashboard(iso::Iso, session=nothing)
     coords = Observable(iso.data.coords[1] |> cpu)
     chis = Observable(ISOKANN.chis(iso) |> vec |> cpu)
     icur = Observable(1)
@@ -195,7 +195,7 @@ end
 
 
 
-function livevis(iso::Iso2)
+function livevis(iso::Iso)
     coords = iso.data.coords[1][:, 1]
     a = Observable(coords)
     b = Observable(coords)
@@ -277,7 +277,7 @@ function livevis(iso::Iso2)
     return fig, update!
 end
 
-function scatterdata!(fig, iso::Iso2, data)
+function scatterdata!(fig, iso::Iso, data)
     scatter!(fig, data)
 end
 
@@ -287,7 +287,7 @@ function addvis!(iso)
     plt
 end
 
-function showmakie(iso=Iso2(OpenMMSimulation(steps=20), loggers=[]))
+function showmakie(iso=Iso(OpenMMSimulation(steps=20), loggers=[]))
     run!(iso, 2)
     plt, up = livevis(iso)
     display(plt)

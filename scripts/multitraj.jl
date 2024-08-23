@@ -30,5 +30,5 @@ mergedata(d1, d2) = lastcat.(d1, d2)
 
 data = reduce(mergedata, datas)
 
-iso = Iso2(data)
+iso = Iso(data)
 run!(iso, 1000)
