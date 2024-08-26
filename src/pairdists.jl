@@ -63,12 +63,9 @@ Given `coords` of shape ( 3n x frames ) return the pairs of indices whose minima
 """
 function localpdistinds(coords::AbstractMatrix, radius)
     traj = reshape(coords, 3, :, size(coords, 2))
-    elmin(x, y) = min.(x, y)
-    d = mapreduce(elmin, eachslice(traj, dims=3)) do coords
-        UpperTriangular(pairwise(Euclidean(), coords, dims=2))
-    end
-    pairs = Tuple.(findall(0 .< d .<= radius))
-    return pairs
+    ds = sqpairdist(traj)
+    mds = dropdims(minimum(ds, dims=3), dims=3)
+    pairs = Tuple.(findall(0 .< UpperTriangular(mds) .<= radius^2))
 end
 
 localpdistinds(coords::Vector, radius) = localpdistinds(hcat(coords), radius)
