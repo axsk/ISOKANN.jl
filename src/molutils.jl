@@ -143,9 +143,9 @@ save the trajectory given in `coords` to `filename` with the topology provided b
 """
 function save_trajectory(filename, coords::AbstractMatrix; top::String)
     mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
-    traj = mdtraj.load(filename, stride=-1)
+    traj = mdtraj.load(top, stride=-1)
     xyz = reshape(coords, 3, :, size(coords, 2))
-    traj.xyz = PyReverseDims(xyz)
+    traj = mdtraj.Trajectory(PyReverseDims(xyz), traj.topology)
     traj.save(filename)
 end
 

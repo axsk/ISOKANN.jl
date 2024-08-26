@@ -72,6 +72,7 @@ export exit_rates
 export load_trajectory, save_trajectory
 export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
+export data_from_trajectory, mergedata
 
 
 export reactionpath_minimum, reactionpath_ode

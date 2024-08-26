@@ -20,19 +20,21 @@ molecule = load_trajectory(pdbfile)
 pdist_inds = restricted_localpdistinds(molecule, MAXRADIUS, atom_indices(pdbfile, "not water and name==CA"))
 
 
+
 datas = map(trajfiles) do trajfile
     traj = load_trajectory(trajfile, top=pdbfile, stride=STRIDE)  # for large datasets you may use the memory-mapped LazyTrajectory
-    feats = pdists(traj, pdist_inds)
-    data = data_from_trajectory(feats, reverse=true)
+    xs, ys = data_from_trajectory(traj, reverse=true)
 end
 
-data = reduce(mergedata, datas)
+xs, ys = reduce(mergedata, datas)
 
-iso = Iso(data)
+data = pdists(xs, pdist_inds), pdists(ys, pdist_inds)
+
+iso = Iso(data, opt=NesterovRegularized())
 run!(iso, 1000)
 
 # saving the reactive path for multiple trajectories could work like this
 # note that the above data is probably too big for this to terminate in sufficient time
 
 # coords = ISOKANN.LazyMultiTrajectory(ISOKANN.LazyTrajectory.(trajfiles))
-# save_reactive_path(iso, coords, sigma=.1, source=pdbfile)
+save_reactive_path(iso, xs, sigma=0.1, source=pdbfile)
