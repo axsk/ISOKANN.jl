@@ -3,7 +3,7 @@ using ISOKANN
 using Test
 using CUDA
 
-backends = [cpu]
+backends = Any[cpu]
 if CUDA.functional()
     CUDA.allowscalar(false)
     push!(backends, gpu)
