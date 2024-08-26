@@ -93,12 +93,12 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
     simulation.context.setPositions(modeller.positions)
     simulation.context.setVelocitiesToTemperature(simulation.integrator.getTemperature())
 
-    simulation.reporters.append(
-        StateDataReporter(
-            "openmmsimulation.log", 1, step=True,
-            potentialEnergy=True, totalEnergy=True,
-            temperature=True, speed=True,)
-            )
+    # simulation.reporters.append(
+    #    StateDataReporter(
+    #        "openmmsimulation.log", 1, step=True,
+    #        potentialEnergy=True, totalEnergy=True,
+    #        temperature=True, speed=True,)
+    #        )
 
     if minimize:
         simulation.minimizeEnergy(maxIterations=100)
