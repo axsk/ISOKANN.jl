@@ -60,7 +60,7 @@ end
 
 # compute the shortest through the matrix A from ind s1 to s2
 function shortestpath(A::AbstractMatrix, s1::AbstractVector{<:Integer}, s2::AbstractVector{<:Integer})
-    g = SimpleWeightedDiGraph(A)
+    g = SimpleWeightedDiGraph(sparse(A))
     bf = Graphs.bellman_ford_shortest_paths(g, s1, A)
     j = s2[bf.dists[s2]|>argmin]
     return Graphs.enumerate_paths(bf, j)
@@ -70,20 +70,14 @@ shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1]
 
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
 function finite_dimensional_distribution(dxs, xi, sigma, dim, maxjump)
-    logp = zero(dxs)
-    for c in CartesianIndices(dxs)
-        i, j = Tuple(c)
-        dt = xi[j] - xi[i]
-        if 0 < dt < maxjump
-            v = dxs[i, j] / dt
-            L = 1 / 2 * (v / sigma)^2
-            s = (-dim / 2) * Base.log(2 * pi * sigma^2 * dt)
-            logp[c] = (s - L * dt)
-        else
-            logp[c] = -Inf
-        end
+    dt = xi' .- xi
+    map(dxs, dt) do dx, dt
+        0 < dt < maxjump || return -Inf
+        v = dx / dt
+        L = 1 / 2 * (v / sigma)^2
+        s = (-dim / 2) * Base.log(2 * pi * sigma^2 * dt)
+        logp = (s - L * dt)
     end
-    return logp
 end
 
 ### VISUALIZATION
