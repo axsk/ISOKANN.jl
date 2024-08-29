@@ -213,14 +213,13 @@ function minimize(sim::OpenMMSimulation, coords, iter=100)
 end
 
 function setcoords(sim::PyObject, coords::AbstractVector{T}, momenta) where {T}
-    t = reinterpret(Tuple{T,T,T}, Array(coords))
     if momenta
         n = length(t) ÷ 2
         x, v = t[1:n], t[n+1:end]
-        sim.context.setPositions(x)
-        sim.context.setVelocities(v)
+        sim.context.setPositions(PyReverseDims(reshape(x, 3, :)))
+        sim.context.setVelocities(PyReverseDims(reshape(v, 3, :)))
     else
-        sim.context.setPositions(t)
+        sim.context.setPositions(PyReverseDims(reshape(coords, 3, :)))
     end
 end
 
