@@ -45,7 +45,7 @@ end
 =#
 
 featuredim((xs, ys)::Tuple) = size(xs, 1)
-pairnet(data; kwargs...) = pairnet(featuredim(data); kwargs...)
+pairnet(data; kwargs...) = pairnet(n=featuredim(data); kwargs...)
 
 
 """ Fully connected neural network with `layers` layers from `n` to `nout` dimensions.

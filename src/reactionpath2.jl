@@ -52,7 +52,7 @@ using Distances: pairwise, Euclidean
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma, maxjump)
-    dxs = pairwise(Euclidean(), xs, dims=2)
+    dxs = pairwise(Euclidean(), xs, dims=2) ## TODO: gpu support
     logp = finite_dimensional_distribution(dxs, xi, sigma, size(xs, 1), maxjump)
     ids = shortestpath(-logp, from, to)
     return ids
@@ -60,7 +60,7 @@ end
 
 # compute the shortest through the matrix A from ind s1 to s2
 function shortestpath(A::AbstractMatrix, s1::AbstractVector{<:Integer}, s2::AbstractVector{<:Integer})
-    g = Graphs.SimpleDiGraph(A)
+    g = SimpleWeightedDiGraph(A)
     bf = Graphs.bellman_ford_shortest_paths(g, s1, A)
     j = s2[bf.dists[s2]|>argmin]
     return Graphs.enumerate_paths(bf, j)
@@ -154,3 +154,77 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=getcoords(iso.data)
     save_trajectory(out, path, top=source)
     return ids
 end
+
+
+function SimpleDiGraph_fast(A::SparseMatrixCSC{U}, T = typeof(A).parameters[2]) where {U<:Real}
+    dima, dimb = size(A)
+    isequal(dima, dimb) ||
+        throw(ArgumentError("Adjacency / distance matrices must be square"))
+
+    badjlist = Vector{T}[]
+    for i in 1:dima
+        ni = A.rowval[A.colptr[i]:A.colptr[i+1]-1]
+        push!(badjlist, ni)
+    end
+
+    At = sparse(A')
+    fadjlist = Vector{T}[]
+    for i in 1:dima
+        ni = At.rowval[At.colptr[i]:At.colptr[i+1]-1]
+        push!(fadjlist, ni)
+    end
+
+    return SimpleDiGraph(length(A.nzval), fadjlist, badjlist)
+end
+
+
+# implementation of own graph type using sparse arrays as representation
+# about as fast as SimpleDiGraph, but does not require the compilation of it
+
+
+using Graphs
+using SparseArrays
+
+struct SAGraph3{S<:SparseArrays.AbstractSparseMatrixCSC} <: Graphs.AbstractGraph{Int}
+    A::S
+    At::SparseMatrixCSC{Nothing,Int}
+
+    function SAGraph3(a)
+        A = sparse(a)
+        i, j, _ = findnz(A)
+        n, m = size(A)
+        @assert n == m
+        At = sparse(j, i, fill(nothing, length(i)), n, n)
+        new{typeof(A)}(A, At)
+    end
+end
+
+MySAGraph = SAGraph3
+
+Graphs.ne(s::MySAGraph) = nnz(s.A)
+Graphs.nv(s::MySAGraph) = s.A.n
+Graphs.vertices(s::MySAGraph) = 1:Graphs.nv(s)
+Graphs.is_directed(s::MySAGraph) = true
+Graphs.outneighbors(s::MySAGraph, v) = @view s.At.rowval[s.At.colptr[v]:s.At.colptr[v+1]-1]
+Graphs.inneighbors(s::MySAGraph, v) = @view s.A.rowval[s.A.colptr[v]:s.A.colptr[v+1]-1]
+Graphs.has_vertex(s::MySAGraph, v) = v in Graphs.vertices(s)
+Graphs.has_edge(s::MySAGraph, a, b) = s.A[a, b] != 0
+Graphs.edgetype(s::MySAGraph) = typeof(Graphs.edges(s) |> first)
+Graphs.edges(s::MySAGraph) = begin
+    i, j, _ = findnz(s.At)
+    zip(j, i)
+end
+Graphs.weights(s::MySAGraph) = s.A
+
+function benchmark_bf_graphs(A=sprand(10_000, 10_000, 0.1))
+    @time sim = SimpleDiGraph(A)
+    @time sta = StaticDiGraph(sim)
+    @time sag = MySAGraph(A)
+
+    r1 = @time bellman_ford_shortest_paths(sim, 1, A)
+    r2 = @time bellman_ford_shortest_paths(sta, 1, A)
+    r3 = @time bellman_ford_shortest_paths(sag, 1, A)
+    r1, r2, r3
+end
+
+=#

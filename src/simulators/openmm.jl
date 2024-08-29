@@ -118,7 +118,7 @@ function featurizer(sim::OpenMMSimulation)
         inds = sim.features
         return coords -> ISOKANN.pdists(coords, inds)
     elseif sim.features == :all
-        if length(getcoords(sim)) > 100 
+        if length(getcoords(sim)) > 100
             @warn "Computing _all_ pairwise distances for a bigger (>100 atoms) molecule. Try using a cutoff by setting features::Number in OpenMMSimulatioon"
         end
         return ISOKANN.flatpairdists
@@ -134,6 +134,8 @@ function randx0(sim::OpenMMSimulation, n)
     return dropdims(xs, dims=3)
 end
 
+
+" compute the lagtime in ps "
 lagtime(sim::OpenMMSimulation) = sim.step * sim.steps
 dim(sim::OpenMMSimulation) = return length(getcoords(sim))
 defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
@@ -187,7 +189,7 @@ end
 
 Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.
 """
-function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}=getcoords(s), steps=s.steps, saveevery=1; stepsize=s.step, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
+function trajectory(s::OpenMMSimulation; x0::AbstractVector{T}=getcoords(s), steps=s.steps, saveevery=1, stepsize=s.step, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
     x0 = reinterpret(Tuple{T,T,T}, x0)
     xs = py"trajectory"(s.pysim, x0, stepsize, steps, saveevery, mmthreads, momenta)
     xs = permutedims(xs, (3, 2, 1))
@@ -195,10 +197,13 @@ function trajectory(s::OpenMMSimulation, x0::AbstractVector{T}=getcoords(s), ste
     return xs
 end
 
-function ISOKANN.laggedtrajectory(s::OpenMMSimulation, n_lags, steps_per_lag=s.steps; x0=getcoords(s))
+@deprecate trajectory(s, x0, steps, saveevery; kwargs...) trajectory(s; x0, steps, saveevery, kwargs...)
+
+function ISOKANN.laggedtrajectory(s::OpenMMSimulation, n_lags, steps_per_lag=s.steps; x0=getcoords(s), keepstart=false)
     steps = steps_per_lag * n_lags
     saveevery = steps_per_lag
-    trajectory(s, x0, steps, saveevery)
+    xs = trajectory(s, x0, steps, saveevery)
+    return keepstart ? xs : xs[:, 2:end]
 end
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)#::Vector
@@ -369,7 +374,7 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
             friction=$(sim.friction),
             step=$(sim.step),
             steps=$(sim.steps),
-            features=$featstr) 
+            features=$featstr)
         with $(div(length(getcoords(sim)),3)) atoms"""
     )
 end

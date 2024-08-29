@@ -109,7 +109,7 @@ nk(d::SimulationData) = size(d.features[2], 2)
 Base.length(d::SimulationData) = size(d.features[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
 
-# facilitates easy indexing into the data, returning a new data object 
+# facilitates easy indexing into the data, returning a new data object
 Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
 
 MLUtils.getobs(d::SimulationData) = d.features
@@ -222,8 +222,8 @@ end
 
 Simulate a single long trajectory of `steps` times the lagtime and start `nk` burst trajectories at each step for the Koopman samples.
 """
-function trajectorydata_bursts(sim::IsoSimulation, steps, nk; kwargs...)
-    xs = laggedtrajectory(sim, steps)
+function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=getcoords(sim), kwargs...)
+    xs = laggedtrajectory(sim, steps; x0)
     ys = propagate(sim, xs, nk)
     SimulationData(sim, (xs, ys), kwargs...)
 end

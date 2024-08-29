@@ -209,12 +209,14 @@ exit_rates(iso::Iso) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso
 
 print and return the total simulation time contained in the data of `iso` in nanoseconds.
 """
-function simulationtime(iso::Iso)
-    _, k, n = size(iso.data.features[2])
-    t = k * n * lagtime(iso.data.sim)
+function simulationtime(data::SimulationData)
+    _, k, n = size(data.features[2])
+    t = k * n * lagtime(data.sim)
     #println("$t nanoseconds")  # TODO: should we have nanoseconds here when we have picoseconds everywhere else?
     return t
 end
+
+simulationtime(iso::Iso) = simulationtime(iso.data)
 
 """
     savecoords(path::String, iso::Iso, inds=1:numobs(iso.data))

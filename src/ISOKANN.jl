@@ -23,6 +23,8 @@ using MLUtils: numobs, getobs, shuffleobs, unsqueeze
 using StaticArrays: @SVector
 using StochasticDiffEq: StochasticDiffEq
 using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
+using SimpleWeightedGraphs: SimpleWeightedDiGraph
+
 
 import ProgressMeter
 import ChainRulesCore
