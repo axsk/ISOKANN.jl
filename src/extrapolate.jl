@@ -15,9 +15,7 @@ which may result in less then 2n points being added.
 function addextrapolates!(iso, n; stepsize=0.01, steps=1)
     n == 0 && return
     xs = extrapolate(iso, n, stepsize, steps)
-    nd = SimulationData(iso.data.sim, xs, nk(iso.data))
-    iso.data = mergedata(iso.data, nd)
-    return
+    addcoords!(iso, xs)
 end
 
 """
@@ -81,20 +79,16 @@ end
 
 global trace = []
 
-function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=false, algorithm=Optim.GradientDescent)
+function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=false, algorithm=Optim.GradientDescent, xtol=nothing)
     sim = iso.data.sim
     x = copy(x0) .|> Float64
 
     chi(x) = myonly(chicoords(iso, x))
     manifold = Levelset(chi, chi(x0))
 
+    U(x) = OpenMM.potential(sim, x)
 
-    global trace = [x0]
-    U(x) = begin
-        push!(trace, x)
-    end
-    dU(x) = begin
-        push!(trace, x)
+    function dU(x)
         f = -OpenMM.force(sim, x)
         (skipwater && zerowater!(sim, f))
         f

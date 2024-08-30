@@ -29,6 +29,12 @@ end
 trajectory(sim::IsoSimulation, steps) = error("not implemented")
 laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 
+#TODO:
+
+addcoords!(iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
+laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
+laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
+
 ###
 
 """

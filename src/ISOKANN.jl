@@ -109,8 +109,8 @@ export OpenMMSimulation
 
 include("extrapolate.jl")
 
+include("minimumpath.jl")
 include("reactionpath.jl")
-include("reactionpath2.jl")
 
 #include("IsoMu/IsoMu.jl")
 #include("vgv/vgv.jl")
