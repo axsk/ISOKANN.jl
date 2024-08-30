@@ -26,7 +26,7 @@ using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 using SimpleWeightedGraphs: SimpleWeightedDiGraph
 using SparseArrays: sparse
 
-
+import Distances
 import ProgressMeter
 import ChainRulesCore
 import Flux

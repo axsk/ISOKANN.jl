@@ -30,7 +30,7 @@ end
 sqpairdist(x::AbstractMatrix) = sqpairdist(reshape(x, size(x)..., 1))[:, :, 1]
 
 pairdist(x::CuArray) = sqrt.(sqpairdist(x))
-pairdist(x::AbstractMatrix) = pairwise(Euclidean(), x, dims=2) # this saves computing the symmetric part
+pairdist(x::AbstractMatrix) = Distances.pairwise(Distances.Euclidean(), x, dims=2) # this saves computing the symmetric part
 
 using LinearAlgebra: diagind, UpperTriangular
 

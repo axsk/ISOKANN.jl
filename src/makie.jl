@@ -181,7 +181,7 @@ function dashboard(iso::Iso, session=nothing)
     connect!(icur, @lift(reactpath[][$(react_select.sliders[1].value)]))
 
     on(run_react.clicks) do e
-        ids, _ = reactive_path(iso; sigma=react_select.sliders[2].value[], maxjump=1)
+        ids = reactive_path(iso; sigma=react_select.sliders[2].value[], maxjump=1)
         reactpath[] = ids
     end
 
