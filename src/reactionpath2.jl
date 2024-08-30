@@ -1,7 +1,6 @@
 # maximum likelihood path on given data
 
 function reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
-    xi = cpu(xi)
     from, to = fromto(method, xi)
 
     nco = normalize ? coords ./ norm(coords, Inf) : coords
@@ -52,7 +51,7 @@ using Distances: pairwise, Euclidean
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma, maxjump)
-    dxs = pairwise(Euclidean(), xs, dims=2) ## TODO: gpu support
+    dxs = pairdist(xs)
     logp = finite_dimensional_distribution(dxs, xi, sigma, size(xs, 1), maxjump)
     ids = shortestpath(-logp, from, to)
     return ids
@@ -60,7 +59,8 @@ end
 
 # compute the shortest through the matrix A from ind s1 to s2
 function shortestpath(A::AbstractMatrix, s1::AbstractVector{<:Integer}, s2::AbstractVector{<:Integer})
-    g = SimpleWeightedDiGraph(sparse(A))
+    A = sparse(replace(A, Inf => 0))
+    g = SimpleWeightedDiGraph(A)
     bf = Graphs.bellman_ford_shortest_paths(g, s1, A)
     j = s2[bf.dists[s2]|>argmin]
     return Graphs.enumerate_paths(bf, j)
@@ -68,7 +68,13 @@ end
 
 shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1], [s2])
 
+function shortestpath(A::CuArray, s1::Integer, s2::Integer)
+    _, par = bellmanford_parallel(A, s1)
+    enumerate_path(par, s2)
+end
+
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
+# this is the dense "vectorized" implementation which is slightly faster on cpu but works and much faster on gpu
 function finite_dimensional_distribution(dxs, xi, sigma, dim, maxjump)
     dt = xi' .- xi
     map(dxs, dt) do dx, dt
@@ -147,4 +153,37 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=getcoords(iso.data)
     mkpath(dirname(out))
     save_trajectory(out, path, top=source)
     return ids
+end
+
+### GPU Bellman Ford
+
+function enumerate_path(par, s2)
+    par = cpu(par)
+    c = s2
+    path = [s2]
+    while true
+        c = par[c]
+        c == 0 && break
+        push!(path, c)
+    end
+    return reverse(path)
+end
+
+function bellmanford_parallel(A, source)
+    n = size(A, 1)
+    A = A + I * Inf
+    d = similar(A, n) .= typemax(eltype(A))
+    CUDA.@allowscalar d[source] = 0
+    par = similar(d, Int) .= 0
+    new = similar(d, Bool) .= false
+    next = similar(A)
+    for _ in 1:n
+        next .= d .+ A
+        dd, pp = findmin(next, dims=1)
+        new .= vec(dd) .+ 1e-8 .< d
+        any(new) > 0 || break
+        d[new] = dd[new]
+        par[new] = map(x -> x[1], pp[new])
+    end
+    return d, par
 end

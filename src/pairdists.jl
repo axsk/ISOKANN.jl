@@ -17,14 +17,20 @@ function flatpairdists(x)
 end
 
 """
-    simplepairdists(x::AbstractArray{<:Any,3})
+    sqpairdist(x::AbstractArray)
 
-Compute the pairwise distances between the columns of `x`, batched along the 3rd dimension.
+Compute the squared pairwise distances between the columns of `x`.
+If `x` has 3 dimensions, the computation is batched along the 3rd dimension.
 """
 function sqpairdist(x::AbstractArray{<:Any,3})
     p = -2 .* batched_mul(batched_adjoint(x), x) .+ sum(abs2, x, dims=1) .+ PermutedDimsArray(sum(abs2, x, dims=1), (2, 1, 3))
     return p
 end
+
+sqpairdist(x::AbstractMatrix) = sqpairdist(reshape(x, size(x)..., 1))[:, :, 1]
+
+pairdist(x::CuArray) = sqrt.(sqpairdist(x))
+pairdist(x::AbstractMatrix) = pairwise(Euclidean(), x, dims=2) # this saves computing the symmetric part
 
 using LinearAlgebra: diagind, UpperTriangular
 

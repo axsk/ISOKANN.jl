@@ -24,6 +24,7 @@ using StaticArrays: @SVector
 using StochasticDiffEq: StochasticDiffEq
 using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 using SimpleWeightedGraphs: SimpleWeightedDiGraph
+using SparseArrays: sparse
 
 
 import ProgressMeter
