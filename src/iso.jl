@@ -1,7 +1,14 @@
 @deprecate Iso2 Iso
 
-
-
+@kwdef mutable struct Iso{M,D}
+    model::M
+    opt
+    data::D
+    transform
+    losses = Float64[]
+    loggers = [autoplot(1)]
+    minibatch = 0
+end
 
 """
     Iso(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)

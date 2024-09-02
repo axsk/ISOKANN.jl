@@ -76,19 +76,7 @@ export load_trajectory, save_trajectory
 export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
 export data_from_trajectory, mergedata
-
-
 export reactionpath_minimum, reactionpath_ode
-
-@kwdef mutable struct Iso
-  model
-  opt
-  data
-  transform
-  losses = Float64[]
-  loggers = [autoplot(1)]
-  minibatch = 0
-end
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances

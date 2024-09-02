@@ -146,7 +146,7 @@ function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, itera
     sim = iso.data.sim
     x = copy(x0) .|> Float64
 
-    chi(x) = myonly(chicoords(iso, x))
+    chi(x) = chicoords(iso, reshape(x, :, 1)) |> myonly
     manifold = Levelset(chi, chi(x0))
 
     U(x) = OpenMM.potential(sim, x)
@@ -184,7 +184,7 @@ function Optim.project_tangent!(M::Levelset, g, x)
     @assert !any(isnan.(g))
     @assert !any(isnan.(x))
     #replace!(g, NaN => 0)
-    u = Zygote.gradient(M.f, x) |> only
+    u = Zygote.gradient(M.f, x) |> myonly
     u ./= norm(u)
     g .-= dot(g, u) * u
 end
@@ -192,7 +192,7 @@ end
 function Optim.retract!(M::Levelset, x)
     @assert !any(isnan.(x))
     g = Zygote.withgradient(M.f, x)
-    u = g.grad |> only
+    u = g.grad |> myonly
     h = M.target - g.val
     x .+= h .* u ./ (norm(u)^2)
 end
