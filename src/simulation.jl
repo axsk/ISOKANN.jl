@@ -31,9 +31,7 @@ laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 
 #TODO:
 
-addcoords!(iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
-laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
-laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
+
 
 ###
 
@@ -212,6 +210,8 @@ function datasize((xs, ys)::Tuple)
     return size(xs), size(ys)
 end
 
+laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
+
 """
     trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
 
@@ -227,6 +227,11 @@ end
     trajectorydata_bursts(sim::IsoSimulation, steps, nk; kwargs...)
 
 Simulate a single long trajectory of `steps` times the lagtime and start `nk` burst trajectories at each step for the Koopman samples.
+
+
+x0---x----x---
+    / |  / | 
+    y y  y y
 """
 function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=getcoords(sim), kwargs...)
     xs = laggedtrajectory(sim, steps; x0)

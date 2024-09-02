@@ -1,14 +1,6 @@
 @deprecate Iso2 Iso
 
-@kwdef mutable struct Iso
-    model
-    opt
-    data
-    transform
-    losses = Float64[]
-    loggers = [autoplot(1)]
-    minibatch = 0
-end
+
 
 
 """
@@ -99,6 +91,9 @@ end
 chis(iso::Iso) = iso.model(getxs(iso.data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
+
+addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
+laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
 
 #Optimisers.adjust!(iso::Iso; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
 #Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
