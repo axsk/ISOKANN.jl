@@ -109,7 +109,7 @@ function shortestchain(xs, xi, from, to; sigma, maxjump)
 end
 
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
-# this is the dense "vectorized" implementation which is slightly faster on cpu but works and much faster on gpu
+# this is the dense "vectorized" implementation which is slightly faster on cpu but works and is much faster on gpu
 function finite_dimensional_distribution(dxs, xi, sigma, dim, maxjump)
     dt = xi' .- xi
     map(dxs, dt) do dx, dt
@@ -133,7 +133,7 @@ end
 shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1], [s2])
 
 function shortestpath(A::CuArray, s1::Integer, s2::Integer)
-    _, par = bellmanford_parallel(A, s1)
+    _, par = bellmanford(A, s1)
     enumerate_path(par, s2)
 end
 
@@ -177,7 +177,7 @@ function enumerate_path(par, s2)
     return reverse(path)
 end
 
-function bellmanford_parallel(A, source)
+function bellmanford(A::DenseMatrix, source)
     n = size(A, 1)
     A = A + I * Inf
     d = similar(A, n) .= typemax(eltype(A))
@@ -194,4 +194,55 @@ function bellmanford_parallel(A, source)
         par[new] = map(x -> x[1], pp[new])
     end
     return d, par
+end
+
+using CUDA
+
+
+import SparseArrays
+
+# CUDA implementation of Bellman Ford for sparse matrices
+# each thread corresponds to one column
+function bellmanford(s::CUDA.CUSPARSE.AbstractCuSparseMatrix, source=1)
+    colptr = s.colPtr
+    rowval = s.rowVal
+    val = s.nzVal
+    d = size(s, 1)
+    p = similar(rowval, d) .= 0
+    dists = similar(val, d) .= Inf
+    changed = cu([false])
+    CUDA.@allowscalar dists[source] = 0
+
+    kernel = @cuda name = "bellman ford iteration" launch = false bf_cuda_sparse(dists, p, colptr, rowval, val, changed)
+    config = launch_configuration(kernel.fun)
+    threads = min(d, config.threads)
+    blocks = cld(d, threads)
+
+    for _ in 1:d
+        kernel(dists, p, colptr, rowval, val, changed; threads=threads, blocks=blocks)
+        any(changed) || break
+        changed .= false
+    end
+    return dists, p
+
+end
+
+# iterate over all rows of a target column and find the shortest distance
+function bf_cuda_sparse(dists, parent, colptr, rowval, val, changed)
+    col = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    col > length(dists) && return
+    d = dists[col]
+    p = parent[col]
+    for i in colptr[col]:colptr[col+1]-1
+        row = rowval[i]
+        n = dists[row] + val[i]
+        if n < d
+            changed[1] = true
+            d = n
+            p = row
+        end
+    end
+    parent[col] = p
+    dists[col] = d
+    return
 end

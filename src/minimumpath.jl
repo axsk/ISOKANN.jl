@@ -24,12 +24,12 @@ Compute the reaction path by integrating ∇χ with orthogonal energy minimizati
 - `x0`: The starting point for the reaction path computation.
 - `steps=100`: The number of steps to take along the reaction path.
 """
-function reactionpath_minimum(iso::Iso, x0=randomcoords(cpu(iso)); steps=101, xtol=1e-3)
+function reactionpath_minimum(iso::Iso, x0=randomcoords(iso); steps=101, xtol=1e-3)
 
-    iso = cpu(iso) # TODO: find another solution
+    #iso = cpu(iso) # TODO: find another solution
 
-    xs = energyminimization_projected(iso, x0; xtol)
-    chi = chicoords(iso, xs) |> only
+    xs = energyminimization_projected(iso, x0; xtol) #|> gpu
+    chi = chicoords(iso, xs) |> myonly
 
     steps2 = floor(Int, steps * (1 - chi))
     steps1 = floor(Int, steps * chi)
@@ -42,7 +42,7 @@ function reactionpath_minimum(iso::Iso, x0=randomcoords(cpu(iso)); steps=101, xt
 end
 
 function reactionintegrator(iso::Iso, x0; steps=10, stepsize=0.01, direction=1, xtol)
-    x = x0
+    x = copy(x0)
     xs = similar(x0, length(x0), steps)
     @showprogress for i in 1:steps
         dchi = dchidx(iso, x)
