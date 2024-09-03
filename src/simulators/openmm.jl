@@ -239,6 +239,7 @@ end
 
 force(sim::OpenMMSimulation, x::CuArray) = force(sim, Array(x)) |> cu
 potential(sim::OpenMMSimulation, x::CuArray) = potential(sim, Array(x))
+masses(sim::OpenMMSimulation) = [sim.pysim.system.getParticleMass(i - 1)._value for i in 1:sim.pysim.system.getNumParticles()] # in daltons
 
 function force(sim::OpenMMSimulation, x)
     CUDA.reclaim()
@@ -377,6 +378,28 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
             features=$featstr)
         with $(div(length(getcoords(sim)),3)) atoms"""
     )
+end
+
+function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=sim.steps, F_ext::Union{Function,Nothing}=nothing)
+    x = copy(x0)
+    v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
+    kBT = 1 # c * sim.temperature
+    dt = sim.step / 1000 # sim,step is in picosecond, we calculate in nanoseconds
+    gamma = sim.friction * 1000 # convert 1/ps into 1/ns
+    m = repeat(masses(sim), inner=3)
+
+    for i in 1:steps
+        F = force(sim, x)
+        isnothing(F_ext) || (F_ext(F, x))
+        langevin_step!(x, v, F, m, gamma, kBT, dt)
+    end
+    return x
+end
+
+function langevin_step!(x, v, F, m, gamma, kBT, dt)
+    db = randn(length(x))
+    @. v += 1 / m * ((F - gamma * v) * dt + sqrt(2 * gamma * kBT * dt) * db)
+    @. x += v * dt
 end
 
 end #module
