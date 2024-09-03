@@ -48,6 +48,14 @@ struct OpenMMSimulation <: IsoSimulation
     momenta::Bool
 end
 
+steps(sim) = sim.steps::Int
+# TODO: we have redundant values, decide which ones to use
+friction(sim) = sim.pysim.integrator.getFriction()._value # 1/ps
+temp(sim) = sim.pysim.integrator.getTemperature()._value # kelvin
+stepsize(sim) = sim.pysim.integrator.getStepSize()._value # ps
+
+
+
 """
     OpenMMSimulation(; pdb=DEFAULT_PDB, ligand="", forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"], temp=298, friction=1, step=0.002, steps=100, features=nothing, minimize=false)
 
@@ -206,7 +214,7 @@ function ISOKANN.laggedtrajectory(s::OpenMMSimulation, n_lags, steps_per_lag=s.s
     return keepstart ? xs : xs[:, 2:end]
 end
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)#::Vector
+getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)::Vector{Float64}
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, sim.momenta)
 
 getcoords(sim::PyObject, momenta) = py"get_numpy_state($sim.context, $momenta).flatten()"
@@ -380,20 +388,31 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
     )
 end
 
-function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=sim.steps, F_ext::Union{Function,Nothing}=nothing)
+
+""" 
+    integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
+
+Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for external forces.
+
+- F_ext: An additional force perturbation. It is expected to have the form F_ext(F, x) and mutating the provided force F.
+- saveevery: If `nothing`, returns just the last point, otherwise returns an array saving every `saveevery` frame.
+"""
+function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int,nothing}=nothing)
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
     kBT = 1 # c * sim.temperature
     dt = sim.step / 1000 # sim,step is in picosecond, we calculate in nanoseconds
-    gamma = sim.friction * 1000 # convert 1/ps into 1/ns
+    gamma = sim.friction * 1000 # convert 1/ps = 1000/ns
     m = repeat(masses(sim), inner=3)
+    out = isnothing(saveevery) ? x : similar(x, length(x), cld(steps, saveevery))
 
     for i in 1:steps
         F = force(sim, x)
-        isnothing(F_ext) || (F_ext(F, x))
+        isnothing(F_ext) || (F_ext(F, x)) # note that F_ext(F, x) is assumed to be mutating F
         langevin_step!(x, v, F, m, gamma, kBT, dt)
+        isnothing(saveevery) || i % saveevery == 0 && (out[:, div(i, saveevery)] = x)
     end
-    return x
+    return out
 end
 
 function langevin_step!(x, v, F, m, gamma, kBT, dt)
