@@ -421,4 +421,31 @@ function langevin_step!(x, v, F, m, gamma, kBT, dt)
     @. x += v * dt
 end
 
+function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
+    # TODO: check units on the following three lines
+    kB = 0.008314463
+    dt = sim.step
+    gamma = sim.friction
+
+    sigma = sqrt(2 * gamma * kB * sim.temp)
+    m = repeat(masses(sim), inner=3)
+    
+    x = copy(x0)
+    g = 0.
+
+    for i in 1:steps
+        g += od_langevin_step_girsanov!(x, F, m, gamma, kBT, dt, u, g)
+    end
+
+    return x, g
+end
+
+function od_langevin_step_girsanov!(x, F, m, gamma, kBT, dt, u, g)
+    dB = randn(length(x))
+    ux = u(x)
+    @. x += 1 / m * ((F + sigma * ux) * dt + sigma * sqrt(dt) * dB)
+    dg = 1/2 * dt * dot(ux, ux) + sqrt(dt) * dot(ux, dB)
+    return dg
+end
+
 end #module
