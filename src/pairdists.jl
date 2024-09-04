@@ -29,8 +29,8 @@ end
 
 sqpairdist(x::AbstractMatrix) = sqpairdist(reshape(x, size(x)..., 1))[:, :, 1]
 
-pairdist(x::CuArray) = sqrt.(sqpairdist(x))
-pairdist(x::AbstractMatrix) = Distances.pairwise(Distances.Euclidean(), x, dims=2) # this saves computing the symmetric part
+pairdist(x::AbstractArray) = sqrt.(sqpairdist(x))
+pairdist(x::AbstractMatrix) = Distances.pairwise(Distances.Euclidean(), x, dims=2) # this is saving on computing the symmetric part but doesnt work batched or with cuda
 
 using LinearAlgebra: diagind, UpperTriangular
 

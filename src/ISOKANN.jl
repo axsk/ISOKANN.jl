@@ -77,6 +77,7 @@ export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
 export data_from_trajectory, mergedata
 export reactionpath_minimum, reactionpath_ode
+export chicoords
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
