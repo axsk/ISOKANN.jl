@@ -167,7 +167,7 @@ Note: For CPU we observed better performance with nthreads = num cpus, mmthreads
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
-    s.mmthreads == "gpu" && CUDA.reclaim()
+    s.mmthreads == "gpu" && CUDA.has_cuda() && CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
@@ -397,7 +397,7 @@ Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for exte
 - F_ext: An additional force perturbation. It is expected to have the form F_ext(F, x) and mutating the provided force F.
 - saveevery: If `nothing`, returns just the last point, otherwise returns an array saving every `saveevery` frame.
 """
-function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int,nothing}=nothing)
+function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing)
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
     kBT = 1 # c * sim.temperature
