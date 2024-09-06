@@ -8,8 +8,9 @@ The ISOKANN.jl package implements the ISOKANN algorithm for the identification o
 - Different adaptive sampling strategies (extapolation, kde and stratified sampling)
 - A posteriori analysis tools (plots, reaction path extraction and reaction rate estimation)
 
-## Quick start
+See the [documentation](https://axsk.github.io/ISOKANN.jl/dev) for details.
 
+## Quick start
 
 Install the package via `julia> ]add https://github.com/axsk/ISOKANN.jl`.
 
@@ -55,4 +56,3 @@ For further information consult the docstrings (e.g. `?Iso`).
 - [Rabben, Ray, Weber (2018) - ISOKANN: Invariant subspaces of Koopman operators learned by a neural network.](https://doi.org/10.1063/5.0015132)
 - [Sikorski, Ribera Borrell, Weber (2024) - Learning Koopman eigenfunctions of stochastic diffusions with optimal importance sampling and ISOKANN](http://dx.doi.org/10.1063/5.0140764)
 - [Sikorski, Rabben, Chewle, Weber (2024) - Capturing the Macroscopic Behaviour of Molecular Dynamics with Membership Functions](http://arxiv.org/abs/2404.10523)
-
