@@ -76,6 +76,7 @@ export load_trajectory, save_trajectory
 export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
 export data_from_trajectory, mergedata
+export trajectorydata_bursts, trajectorydata_linear
 export reactionpath_minimum, reactionpath_ode
 export chicoords
 

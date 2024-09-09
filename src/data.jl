@@ -177,5 +177,5 @@ function exportsorted(iso, path="out/sorted.pdb")
     xs = ISOKANN.getcoords(iso.data)
     println("saving sorted data to $path")
     traj = ISOKANN.aligntrajectory(xs[:, p] |> cpu)
-    save_trajectory(path, traj, top=pdb(iso.data))
+    save_trajectory(path, traj, top=pdbfile(iso.data))
 end

@@ -256,4 +256,4 @@ function plot_reactioncoords(iso)
     end
 end
 
-pdb(id::String) = Base.download("https://files.rcsb.org/download/$id.pdb")
+getpdb(id::String) = Base.download("https://files.rcsb.org/download/$id.pdb")

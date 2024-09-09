@@ -3,14 +3,20 @@
 
 Assumes each col of x to be a flattened representation of multiple 3d coords.
 Returns the flattened pairwise distances as columns."""
-function flatpairdists(x)
+function flatpairdists(x, cols=:)
     d = size(x, 1)
     s = size(x)[2:end]
     #d, s... = size(x)  # slower for zygote autodiff
     c = div(d, 3)
-    inds = halfinds(c)
+
     b = reshape(x, 3, c, :)
+    if !(cols isa Colon)
+        b = b[:, cols, :]
+        c = length(cols)
+    end
     p = sqpairdist(b)
+
+    inds = halfinds(c)
     p = p[inds, :]
     p = sqrt.(p)
     return reshape(p, length(inds), s...)

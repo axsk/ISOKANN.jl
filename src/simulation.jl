@@ -131,7 +131,7 @@ flattenlast(x) = reshape(x, size(x, 1), :)
 getxs(d::SimulationData) = getxs(d.features)
 getys(d::SimulationData) = getys(d.features)
 
-pdb(s::SimulationData) = pdb(s.sim)
+pdbfile(s::SimulationData) = pdbfile(s.sim)
 
 
 """
@@ -236,5 +236,5 @@ x0---x----x---
 function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=getcoords(sim), kwargs...)
     xs = laggedtrajectory(sim, steps; x0)
     ys = propagate(sim, xs, nk)
-    SimulationData(sim, (xs, ys), kwargs...)
+    SimulationData(sim, (xs, ys); kwargs...)
 end

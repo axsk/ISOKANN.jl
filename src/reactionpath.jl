@@ -4,7 +4,7 @@
         sigma=1,
         maxjump=1,
         out="out/reactive_path.pdb",
-        source=pdb(iso.data),
+        source=pdbfile(iso.data),
         kwargs...)
 
 Extract and save the reactive path of a given `iso`.
@@ -28,7 +28,7 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=getcoords(iso.data)
     sigma=1,
     maxjump=1,
     out="out/reactive_path.pdb",
-    source=pdb(iso.data),
+    source=pdbfile(iso.data),
     kwargs...)
 
     chi = chis(iso) |> vec |> cpu

@@ -11,6 +11,8 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
     force, potential, lagtime, trajectory
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
+export OpenMMScript
+export FeaturesAll, FeaturesAll, FeaturesPairs, FeaturesRandomPairs
 
 DEFAULT_PDB = "$(@__DIR__)/../../data/systems/alanine dipeptide.pdb"
 FORCE_AMBER = ["amber14-all.xml"]
@@ -50,10 +52,25 @@ end
 
 steps(sim) = sim.steps::Int
 # TODO: we have redundant values, decide which ones to use
-friction(sim) = sim.pysim.integrator.getFriction()._value # 1/ps
-temp(sim) = sim.pysim.integrator.getTemperature()._value # kelvin
-stepsize(sim) = sim.pysim.integrator.getStepSize()._value # ps
+friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
+temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
+stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
 
+friction(sim) = friction(sim.pysim)
+temp(sim) = temp(sim.pysim)
+stepsize(sim) = stepsize(sim.pysim)
+
+function OpenMMScript(filename::String;
+    steps::Int,
+    features=nothing,
+)
+    @pyinclude(filename)
+    pysim = py"simulation"
+    pdb = py"pdb"
+    mmthreads = CUDA.has_cuda() ? "gpu" : 1
+
+    OpenMMSimulation(pysim, pdb, nothing, nothing, temp(pysim), friction(pysim), stepsize(pysim), steps, features, 1, mmthreads, false)
+end
 
 
 """
@@ -117,7 +134,7 @@ function OpenMMSimulation(;
     return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
 end
 
-
+#=
 function featurizer(sim::OpenMMSimulation)
     if sim.features isa (Vector{Int})
         ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
@@ -134,6 +151,62 @@ function featurizer(sim::OpenMMSimulation)
         error("unknown featurizer")
     end
 end
+=#
+
+featurizer(sim::OpenMMSimulation) = featurizer(sim, sim.features)
+
+featurizer(sim, ::Nothing) = error("No default featurizer specified")
+featurizer(sim, atoms::Vector{Int}) = FeaturesAtoms(atoms)
+featurizer(sim, pairs::Vector{Tuple{Int,Int}}) = FeaturesPairs(pairs)
+featurizer(sim, features::Function) = features
+
+function featurizer(sim, features::Symbol)
+    @assert features == :all
+    length(getcoords(sim)) > 100 && @warn "Computing _all_ pairwise distances for a bigger (>100 atoms) molecule. Try using a cutoff by setting features::Number in OpenMMSimulatioon"
+    return FeaturesAll()
+end
+
+
+
+
+# implementation of some featurizers
+
+struct FeaturesAll end
+(f::FeaturesAll)(coords) = ISOKANN.flatpairdists(coords)
+
+struct FeaturesAtoms
+    atominds::Vector{Int}
+end
+
+(f::FeaturesAtoms)(coords) = ISOKANN.flatpairdists(coords, f.atominds)
+
+struct FeaturesPairs
+    pairs::Vector{Tuple{Int,Int}}
+end
+
+(f::FeaturesPairs)(coords) = ISOKANN.pdists(coords, f.pairs)
+
+function FeaturesPairs(sim::OpenMMSimulation, maxdist::Number, atomfilter::Function)
+    pairs = local_atom_pairs(sim.pysim, maxdist; atomfilter=atomfilter)
+    return FeaturesPairs(pairs)
+end
+
+# N random pairs
+function FeaturesRandomPairs(sim::OpenMMSimulation, features::Int)
+    n = natoms(sim)
+    @assert features <= (n * n - 1) / 2
+    p = Set{Tuple{Int,Int}}()
+    while length(p) < features
+        i = rand(1:n)
+        j = rand(1:n)
+        i < j || continue
+        push!(p, (i, j))
+    end
+    pairs = sort(collect(p))
+    FeaturesPairs(pairs)
+end
+
+
 
 """ generate `n` random inintial points for the simulation `mm` """
 function randx0(sim::OpenMMSimulation, n)
@@ -147,7 +220,14 @@ end
 lagtime(sim::OpenMMSimulation) = sim.step * sim.steps
 dim(sim::OpenMMSimulation) = return length(getcoords(sim))
 defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
-pdb(s::OpenMMSimulation) = s.pdb
+
+pdbfile(s::OpenMMSimulation) = pdbfile(s.pdb)
+pdbfile(str::String) = str
+function pdbfile(pdb::PyObject)
+    file = tempname()
+    pdb.writeFile(pdb.topology, pdb.positions, file)
+    file
+end
 
 """
     propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
@@ -218,6 +298,8 @@ getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)::Vector{Flo
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, sim.momenta)
 
 getcoords(sim::PyObject, momenta) = py"get_numpy_state($sim.context, $momenta).flatten()"
+
+natoms(sim::OpenMMSimulation) = div(length(getcoords(sim)), 3)
 
 function minimize(sim::OpenMMSimulation, coords, iter=100)
     setcoords(sim, coords)
