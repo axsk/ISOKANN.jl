@@ -189,7 +189,7 @@ function writechemfile(filename, data::Array{<:Any,2}; source)
     try
         frame = Chemfiles.read(trajectory)
         trajectory = Chemfiles.Trajectory(filename, 'w', uppercase(split(filename, ".")[end]))
-        for i in 1:size(data, 3)
+        for i in 1:size(data, 2)
             Chemfiles.positions(frame) .= reshape(data[:, i], 3, :) .* 10 # convert from nm to Angstrom
             write(trajectory, frame)
         end

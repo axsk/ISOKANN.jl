@@ -482,9 +482,9 @@ Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for exte
 function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing)
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
-    kBT = 1 # c * sim.temperature
-    dt = sim.step / 1000 # sim,step is in picosecond, we calculate in nanoseconds
-    gamma = sim.friction * 1000 # convert 1/ps = 1000/ns
+    kBT = 0.008314463 * temp(sim)
+    dt = step(sim) # sim,step is in picosecond, we calculate in nanoseconds
+    gamma = friction(sim) # convert 1/ps = 1000/ns
     m = repeat(masses(sim), inner=3)
     out = isnothing(saveevery) ? x : similar(x, length(x), cld(steps, saveevery))
 
@@ -506,23 +506,23 @@ end
 function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
     # TODO: check units on the following three lines
     kB = 0.008314463
-    dt = sim.step
-    gamma = sim.friction
+    dt = step(sim)
+    gamma = friction(sim)
 
-    sigma = sqrt(2 * gamma * kB * sim.temp)
+    sigma = sqrt(2 * gamma * kB * temp(sim))
     m = repeat(masses(sim), inner=3)
-    
+
     x = copy(x0)
     g = 0.
 
     for i in 1:steps
-        g += od_langevin_step_girsanov!(x, F, m, gamma, kBT, dt, u, g)
+        g += od_langevin_step_girsanov!(x, F, m, sigma, dt, u, g)
     end
 
     return x, g
 end
 
-function od_langevin_step_girsanov!(x, F, m, gamma, kBT, dt, u, g)
+function od_langevin_step_girsanov!(x, F, m, sigma, dt, u, g)
     dB = randn(length(x))
     ux = u(x)
     @. x += 1 / m * ((F + sigma * ux) * dt + sigma * sqrt(dt) * dB)
