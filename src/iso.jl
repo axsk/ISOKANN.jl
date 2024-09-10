@@ -7,14 +7,14 @@
     transform
     losses = Float64[]
     loggers = [autoplot(1)]
-    minibatch = 0
+    minibatch = 100
 end
 
 """
-    Iso(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
+    Iso(data; opt=NesterovRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
 
 """
-function Iso(data; opt=AdamRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
+function Iso(data; opt=NesterovRegularized(), model=defaultmodel(data), gpu=CUDA.has_cuda(), kwargs...)
     opt = Flux.setup(opt, model)
     transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
 

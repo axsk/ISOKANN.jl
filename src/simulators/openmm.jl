@@ -70,7 +70,7 @@ struct OpenMMSimulation
     steps::Int
     constructor
 
-    function OpenMMSimulation(; steps, k...)
+    function OpenMMSimulation(; steps=100, k...)
         k = NamedTuple(k)
         if haskey(k, :py)
             @pyinclude(k.py)
