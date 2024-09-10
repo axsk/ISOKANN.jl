@@ -7,7 +7,7 @@ import JLD2
 import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
-    savecoords, getcoords, force, pdb,
+    savecoords, getcoords, force, pdbfile,
     force, potential, lagtime, trajectory
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
@@ -34,49 +34,15 @@ end
 
 ###
 
-""" A Simulation wrapping the Python OpenMM Simulation object """
-struct OpenMMSimulation <: IsoSimulation
-    pysim::PyObject
-    pdb
-    ligand
-    forcefields
-    temp
-    friction
-    step
-    steps
-    features
-    nthreads::Int
-    mmthreads::Union{Int,String}
-    momenta::Bool
-end
-
-steps(sim) = sim.steps::Int
-# TODO: we have redundant values, decide which ones to use
-friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
-temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
-stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
-
-friction(sim) = friction(sim.pysim)
-temp(sim) = temp(sim.pysim)
-stepsize(sim) = stepsize(sim.pysim)
-
-function OpenMMScript(filename::String;
-    steps::Int,
-    features=nothing,
-)
-    @pyinclude(filename)
-    pysim = py"simulation"
-    pdb = py"pdb"
-    mmthreads = CUDA.has_cuda() ? "gpu" : 1
-
-    OpenMMSimulation(pysim, pdb, nothing, nothing, temp(pysim), friction(pysim), stepsize(pysim), steps, features, 1, mmthreads, false)
-end
-
+#abstract type OpenMMSimulation <: IsoSimulation end
 
 """
-    OpenMMSimulation(; pdb=DEFAULT_PDB, ligand="", forcefields=["amber14-all.xml", "amber14/tip3pfb.xml"], temp=298, friction=1, step=0.002, steps=100, features=nothing, minimize=false)
+    OpenMMSimulation(; pdb, steps, ...)
+    OpenMMSimulation(; py, steps)
 
 Constructs an OpenMM simulation object.
+Either use  `OpenMMSimulation(;py, steps)` where `py`` is the location of a .py python script creating a OpenMM simulation object
+or supply a .pdb file via `pdb` and the following parameters (see also defaultsystem):
 
 ## Arguments
 - `pdb::String`: Path to the PDB file.
@@ -99,66 +65,85 @@ Constructs an OpenMM simulation object.
 - `OpenMMSimulation`: An OpenMMSimulation object.
 
 """
-function OpenMMSimulation(;
+struct OpenMMSimulation
+    pysim::PyObject
+    steps::Int
+    constructor
+
+    function OpenMMSimulation(; steps, k...)
+        k = NamedTuple(k)
+        if haskey(k, :py)
+            @pyinclude(k.py)
+            pysim = py"simulation"
+            return new(pysim, steps, k)
+        else
+            pysim = defaultsystem(; k...)
+            return new(pysim, steps, k)
+        end
+    end
+end
+
+function defaultsystem(;
     pdb=DEFAULT_PDB,
     ligand="",
     forcefields=["amber14-all.xml"],
-    temp=298, # kelvin
+    temp=310, # kelvin
     friction=1,  # 1/picosecond
     step=0.002, # picoseconds
-    steps=100,
-    features=:all,
     minimize=false,
-    gpu=false,
-    nthreads=gpu ? 1 : Threads.nthreads(),
-    mmthreads=gpu ? "gpu" : 1,
     addwater=false,
     padding=3,
     ionicstrength=0.0,
     forcefield_kwargs=Dict(),
-    momenta=false)
+    kwargs...
+)
+    mmthreads = get(kwargs, :mmthreads, CUDA.has_cuda() ? "gpu" : 1)
+    platform, properties = mmthreads == "gpu" ? ("CUDA", Dict()) : ("CPU", Dict("Threads" => "$mmthreads"))
 
-    platform, properties = if mmthreads == "gpu"
-        "CUDA", Dict()
-    else
-        "CPU", Dict("Threads" => "$mmthreads")
-    end
-
-    pysim = @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, platform, properties)::PyObject
-
-    if features isa Number
-        radius = features
-        features = [calpha_pairs(pysim); local_atom_pairs(pysim, radius)] |> unique
-    end
-
-    return OpenMMSimulation(pysim::PyObject, pdb, ligand, forcefields, temp, friction, step, steps, features, nthreads, mmthreads, momenta)
+    @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, platform, properties)::PyObject
 end
 
-#=
-function featurizer(sim::OpenMMSimulation)
-    if sim.features isa (Vector{Int})
-        ix = vec([1, 2, 3] .+ ((sim.features .- 1) * 3)')
-        return ISOKANN.pairdistfeatures(ix)
-    elseif sim.features isa (Vector{Tuple{Int,Int}}) # local pairwise distances
-        inds = sim.features
-        return coords -> ISOKANN.pdists(coords, inds)
-    elseif sim.features == :all
-        if length(getcoords(sim)) > 100
-            @warn "Computing _all_ pairwise distances for a bigger (>100 atoms) molecule. Try using a cutoff by setting features::Number in OpenMMSimulatioon"
-        end
-        return ISOKANN.flatpairdists
-    else
-        error("unknown featurizer")
-    end
-end
-=#
 
-featurizer(sim::OpenMMSimulation) = featurizer(sim, sim.features)
+# TODO: this are remnants of the old detailed openmm system, remove them eventually
+mmthreads(sim::OpenMMSimulation) = get(sim.constructor, :mmthreads, CUDA.has_cuda() ? "gpu" : 1)
+nthreads(sim::OpenMMSimulation) = get(sim.constructor, :nthreads, CUDA.has_cuda() ? 1 : Threads.nthreads())
+momenta(sim::OpenMMSimulation) = get(sim.constructor, :momenta, false)
+pdbfile(sim::OpenMMSimulation) = get(sim.constructor, :pdb, () -> createpdb(sim))
+
+steps(sim) = sim.steps::Int
+friction(sim) = friction(sim.pysim)
+temp(sim) = temp(sim.pysim)
+stepsize(sim) = stepsize(sim.pysim)
+
+
+lagtime(sim::OpenMMSimulation) = steps(sim) * stepsize(sim) # in ps
+dim(sim::OpenMMSimulation) = length(getcoords(sim))
+defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
+
+getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, momenta(sim))::Vector{Float64}
+setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, momenta(sim))
+natoms(sim::OpenMMSimulation) = div(dim(sim), 3)
+
+friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
+temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
+stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
+getcoords(sim::PyObject, momenta) = py"get_numpy_state($sim.context, $momenta).flatten()"
+
+function createpdb(sim)
+    pysim = sim.pysim
+    file = tempname() * ".pdb"
+    pdb = py"app.PDBFile"
+    pdb.writeFile(pysim.topology, pysim.positions, file)  # TODO: fix this
+    return file
+end
+
+featurizer(sim::OpenMMSimulation) = featurizer(sim, get(sim.constructor, :features, nothing))
 
 featurizer(sim, ::Nothing) = error("No default featurizer specified")
 featurizer(sim, atoms::Vector{Int}) = FeaturesAtoms(atoms)
 featurizer(sim, pairs::Vector{Tuple{Int,Int}}) = FeaturesPairs(pairs)
 featurizer(sim, features::Function) = features
+featurizer(sim, radius::Number) = FeaturesPairs([calpha_pairs(sim.pysim); local_atom_pairs(sim.pysim, radius)] |> unique)
 
 function featurizer(sim, features::Symbol)
     @assert features == :all
@@ -167,9 +152,8 @@ function featurizer(sim, features::Symbol)
 end
 
 
-
-
-# implementation of some featurizers
+struct FeaturesCoords end
+(f::FeaturesCoords)(coords) = coords
 
 struct FeaturesAll end
 (f::FeaturesAll)(coords) = ISOKANN.flatpairdists(coords)
@@ -177,57 +161,29 @@ struct FeaturesAll end
 struct FeaturesAtoms
     atominds::Vector{Int}
 end
-
 (f::FeaturesAtoms)(coords) = ISOKANN.flatpairdists(coords, f.atominds)
 
 struct FeaturesPairs
     pairs::Vector{Tuple{Int,Int}}
 end
-
 (f::FeaturesPairs)(coords) = ISOKANN.pdists(coords, f.pairs)
 
-function FeaturesPairs(sim::OpenMMSimulation, maxdist::Number, atomfilter::Function)
+
+import StatsBase
+function FeaturesPairs(sim::OpenMMSimulation; maxdist::Number, atomfilter::Function=a -> true, maxfeatures::Int=0)
     pairs = local_atom_pairs(sim.pysim, maxdist; atomfilter=atomfilter)
+
+    if 0 < maxfeatures < length(pairs)
+        pairs = StatsBase.sample(pairs, maxfeatures, replace=false)
+    end
+
     return FeaturesPairs(pairs)
 end
 
-# N random pairs
-function FeaturesRandomPairs(sim::OpenMMSimulation, features::Int)
-    n = natoms(sim)
-    @assert features <= (n * n - 1) / 2
-    p = Set{Tuple{Int,Int}}()
-    while length(p) < features
-        i = rand(1:n)
-        j = rand(1:n)
-        i < j || continue
-        push!(p, (i, j))
-    end
-    pairs = sort(collect(p))
-    FeaturesPairs(pairs)
-end
-
-
-
+# TODO: replace this with laggedtrajectory?
 """ generate `n` random inintial points for the simulation `mm` """
-function randx0(sim::OpenMMSimulation, n)
-    x0 = hcat(getcoords(sim))
-    xs = propagate(sim, x0, n)
-    return dropdims(xs, dims=3)
-end
+randx0(sim::OpenMMSimulation, n) = ISOKANN.laggedtrajectory(sim, n)
 
-
-" compute the lagtime in ps "
-lagtime(sim::OpenMMSimulation) = sim.step * sim.steps
-dim(sim::OpenMMSimulation) = return length(getcoords(sim))
-defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
-
-pdbfile(s::OpenMMSimulation) = pdbfile(s.pdb)
-pdbfile(str::String) = str
-function pdbfile(pdb::PyObject)
-    file = tempname()
-    pdb.writeFile(pdb.topology, pdb.positions, file)
-    file
-end
 
 """
     propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
@@ -246,19 +202,17 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=s.step, steps=s.steps, nthreads=s.nthreads, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
-    s.mmthreads == "gpu" && CUDA.has_cuda() && CUDA.reclaim()
+function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
+    mmthreads == "gpu" && CUDA.has_cuda() && CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, s.pysim, stepsize, steps, nthreads, mmthreads, momenta)::Vector{Float32}
+    ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, mmthreads, momenta)::Vector{Float32}
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1, 3, 2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
     return ys#convert(Array{Float32,3}, ys)
 end
-
-#propagate(s::OpenMMSimulation, x0::CuArray, ny; nthreads=Threads.nthreads()) = cu(propagate(s, collect(x0), ny; nthreads))
 
 struct OpenMMOverflow{T} <: Exception where {T}
     result::T
@@ -277,34 +231,27 @@ end
 
 Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.
 """
-function trajectory(s::OpenMMSimulation; x0::AbstractVector{T}=getcoords(s), steps=s.steps, saveevery=1, stepsize=s.step, mmthreads=s.mmthreads, momenta=s.momenta) where {T}
+function trajectory(sim::OpenMMSimulation; x0::AbstractVector{T}=getcoords(sim), steps=steps(sim), saveevery=1, stepsize=stepsize(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
     x0 = reinterpret(Tuple{T,T,T}, x0)
-    xs = py"trajectory"(s.pysim, x0, stepsize, steps, saveevery, mmthreads, momenta)
+    xs = py"trajectory"(sim.pysim, x0, stepsize, steps, saveevery, mmthreads, momenta)
     xs = permutedims(xs, (3, 2, 1))
     xs = reshape(xs, :, size(xs, 3))
     return xs
 end
 
-@deprecate trajectory(s, x0, steps, saveevery; kwargs...) trajectory(s; x0, steps, saveevery, kwargs...)
+@deprecate trajectory(sim, x0, steps, saveevery; kwargs...) trajectory(sim; x0, steps, saveevery, kwargs...)
 
-function ISOKANN.laggedtrajectory(s::OpenMMSimulation, n_lags, steps_per_lag=s.steps; x0=getcoords(s), keepstart=false)
+function ISOKANN.laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim), keepstart=false)
     steps = steps_per_lag * n_lags
     saveevery = steps_per_lag
-    xs = trajectory(s, x0, steps, saveevery)
+    xs = trajectory(sim, x0, steps, saveevery)
     return keepstart ? xs : xs[:, 2:end]
 end
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, sim.momenta)::Vector{Float64}
-setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, sim.momenta)
-
-getcoords(sim::PyObject, momenta) = py"get_numpy_state($sim.context, $momenta).flatten()"
-
-natoms(sim::OpenMMSimulation) = div(length(getcoords(sim)), 3)
-
-function minimize(sim::OpenMMSimulation, coords, iter=100)
+function minimize!(sim::OpenMMSimulation, coords=getcoords(sim); iter=100)
     setcoords(sim, coords)
-    sim.pysim.minimizeEnergy(maxIterations=iter)
-    return getcoords(sim)
+    return sim.pysim.minimizeEnergy(maxIterations=iter)
+    return nothing
 end
 
 function setcoords(sim::PyObject, coords::AbstractVector{T}, momenta) where {T}
@@ -320,10 +267,9 @@ end
 
 """ mutates the state in sim """
 function set_random_velocities!(sim, x)
-    v = py"set_random_velocities($(sim.pysim.context), $(sim.mmthreads))"
+    v = py"set_random_velocities($(sim.pysim.context))"
     n = length(x) ÷ 2
     x[n+1:end] = v
-
     return x
 end
 
@@ -334,15 +280,8 @@ masses(sim::OpenMMSimulation) = [sim.pysim.system.getParticleMass(i - 1)._value 
 function force(sim::OpenMMSimulation, x)
     CUDA.reclaim()
     setcoords(sim, x)
-    sys = sim.pysim.system
-
-    f = sim.pysim.context.getState(getForces=true).getForces(asNumpy=true)
-    f = f.value_in_unit(f.unit) |> permutedims
-    #m = [sys.getParticleMass(i - 1)._value for i in 1:sys.getNumParticles()]
-    #f ./= m'
-    f = vec(f)
-    @assert(!any(isnan.(f)))
-    f
+    pysim = sim.pysim
+    return PyArray(py"$pysim.context.getState(getForces=True).getForces(asNumpy=True)._value.reshape(-1)"o)
 end
 
 function potential(sim::OpenMMSimulation, x)
@@ -351,8 +290,6 @@ function potential(sim::OpenMMSimulation, x)
     v = sim.pysim.context.getState(getEnergy=true).getPotentialEnergy()
     v = v.value_in_unit(v.unit)
 end
-
-### PYTHON CODE
 
 
 function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}) where {T}
@@ -371,14 +308,14 @@ end
 
 ### FEATURE FILTERS
 
-function atomfilter(atom)
+function remove_H_H2O_NACL(atom)
     !(
         atom.element.symbol == "H" ||
         atom.residue.name in ["HOH", "NA", "CL"]
     )
 end
 
-function local_atom_pairs(pysim::PyObject, radius; atomfilter=atomfilter)
+function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
     coords = reshape(getcoords(pysim, false), 3, :)
     atoms = filter(atomfilter, pysim.topology.atoms() |> collect)
     inds = map(atom -> atom.index + 1, atoms)
@@ -409,69 +346,42 @@ end
 ### SERIALIZATION
 
 struct OpenMMSimulationSerialized
-    pdb
-    ligand
-    forcefields
-    temp
-    friction
-    step
     steps
-    features
-    nthreads
-    mmthreads
+    constructor
 end
 
 JLD2.writeas(::Type{OpenMMSimulation}) = OpenMMSimulationSerialized
 
-Base.convert(::Type{OpenMMSimulationSerialized}, a::OpenMMSimulation) =
-    OpenMMSimulationSerialized(
-        a.pdb,
-        a.ligand,
-        a.forcefields,
-        a.temp,
-        a.friction,
-        a.step,
-        a.steps,
-        a.features,
-        a.nthreads,
-        a.mmthreads)
+Base.convert(::Type{OpenMMSimulationSerialized}, sim::OpenMMSimulation) =
+    OpenMMSimulationSerialized(steps(sim), sim.constructor)
 
-Base.convert(::Type{OpenMMSimulation}, a::OpenMMSimulationSerialized) =
-    OpenMMSimulation(;
-        pdb=a.pdb,
-        ligand=a.ligand,
-        forcefields=a.forcefields,
-        temp=a.temp,
-        friction=a.friction,
-        step=a.step,
-        steps=a.steps,
-        features=a.features,
-        nthreads=a.nthreads,
-        mmthreads=a.mmthreads)
+Base.convert(::Type{OpenMMSimulation}, s::OpenMMSimulationSerialized) =
+    OpenMMSimulation(; steps=s.steps, s.constructor...)
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
-    featstr = if sim.features isa Vector{Tuple{Int,Int}}
-        "{$(length(sim.features)) pairwise distances}"
-    else
-        sim.features
-    end
+    #featstr = if sim.features isa Vector{Tuple{Int,Int}}
+    #    "{$(length(sim.features)) pairwise distances}"
+    #else
+    #    sim.features
+    #end
+    # features=$featstr)
+    #ligand="$(sim.ligand)",
+    #        forcefields=$(sim.forcefields),
     println(
         io, """
         OpenMMSimulation(;
-            pdb="$(sim.pdb)",
-            ligand="$(sim.ligand)",
-            forcefields=$(sim.forcefields),
-            temp=$(sim.temp),
-            friction=$(sim.friction),
-            step=$(sim.step),
-            steps=$(sim.steps),
-            features=$featstr)
-        with $(div(length(getcoords(sim)),3)) atoms"""
+            pdb="$(pdbfile(sim))",
+            temp=$(temp(sim)),
+            friction=$(friction(sim)),
+            step=$(stepsize(sim)),
+            steps=$(steps(sim))
+        with $(natoms(sim)) atoms"""
     )
+
 end
 
 
-""" 
+"""
     integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
 
 Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for external forces.
@@ -483,7 +393,7 @@ function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=step
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
     kBT = 0.008314463 * temp(sim)
-    dt = step(sim) # sim,step is in picosecond, we calculate in nanoseconds
+    dt = stepsize(sim) # sim,step is in picosecond, we calculate in nanoseconds
     gamma = friction(sim) # convert 1/ps = 1000/ns
     m = repeat(masses(sim), inner=3)
     out = isnothing(saveevery) ? x : similar(x, length(x), cld(steps, saveevery))
@@ -506,7 +416,7 @@ end
 function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
     # TODO: check units on the following three lines
     kB = 0.008314463
-    dt = step(sim)
+    dt = stepsize(sim)
     gamma = friction(sim)
 
     sigma = sqrt(2 * gamma * kB * temp(sim))

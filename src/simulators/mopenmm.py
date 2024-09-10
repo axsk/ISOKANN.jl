@@ -18,7 +18,7 @@ def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=F
         except OpenMMException as e:
           print("Error integrating trajectory", e)
           return get_numpy_state(c, withmomenta).fill(np.nan)
-        
+
         x = get_numpy_state(c, withmomenta)
         return x
 
@@ -34,7 +34,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   trajectory[0] = x0
 
   c = newcontext(sim.context, mmthreads)
-  
+
   set_numpy_state(c, x0, withmomenta)
   c.getIntegrator().setStepSize(stepsize)
 
@@ -123,7 +123,7 @@ def set_numpy_state(context, x, withmomenta):
         context.setPositions(x)
         context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
 
-def set_random_velocities(context,  mmthreads):
+def set_random_velocities(context):
     context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
     v = context.getState(getVelocities=True).getVelocities(asNumpy=True).value_in_unit(nanometer/picosecond).flatten()
     return v
