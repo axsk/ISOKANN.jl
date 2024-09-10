@@ -65,7 +65,7 @@ or supply a .pdb file via `pdb` and the following parameters (see also defaultsy
 - `OpenMMSimulation`: An OpenMMSimulation object.
 
 """
-struct OpenMMSimulation
+struct OpenMMSimulation <: IsoSimulation
     pysim::PyObject
     steps::Int
     constructor
@@ -139,18 +139,11 @@ end
 
 featurizer(sim::OpenMMSimulation) = featurizer(sim, get(sim.constructor, :features, nothing))
 
-featurizer(sim, ::Nothing) = error("No default featurizer specified")
+featurizer(sim, ::Nothing) = natoms(sim) < 100 ? FeaturesAll() : error("No default featurizer specified")
 featurizer(sim, atoms::Vector{Int}) = FeaturesAtoms(atoms)
 featurizer(sim, pairs::Vector{Tuple{Int,Int}}) = FeaturesPairs(pairs)
 featurizer(sim, features::Function) = features
 featurizer(sim, radius::Number) = FeaturesPairs([calpha_pairs(sim.pysim); local_atom_pairs(sim.pysim, radius)] |> unique)
-
-function featurizer(sim, features::Symbol)
-    @assert features == :all
-    length(getcoords(sim)) > 100 && @warn "Computing _all_ pairwise distances for a bigger (>100 atoms) molecule. Try using a cutoff by setting features::Number in OpenMMSimulatioon"
-    return FeaturesAll()
-end
-
 
 struct FeaturesCoords end
 (f::FeaturesCoords)(coords) = coords
@@ -244,7 +237,7 @@ end
 function ISOKANN.laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim), keepstart=false)
     steps = steps_per_lag * n_lags
     saveevery = steps_per_lag
-    xs = trajectory(sim, x0, steps, saveevery)
+    xs = trajectory(sim; x0, steps, saveevery)
     return keepstart ? xs : xs[:, 2:end]
 end
 
