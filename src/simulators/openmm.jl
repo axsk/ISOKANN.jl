@@ -108,7 +108,7 @@ end
 mmthreads(sim::OpenMMSimulation) = get(sim.constructor, :mmthreads, CUDA.has_cuda() ? "gpu" : 1)
 nthreads(sim::OpenMMSimulation) = get(sim.constructor, :nthreads, CUDA.has_cuda() ? 1 : Threads.nthreads())
 momenta(sim::OpenMMSimulation) = get(sim.constructor, :momenta, false)
-pdbfile(sim::OpenMMSimulation) = get(sim.constructor, :pdb, () -> createpdb(sim))
+pdbfile(sim::OpenMMSimulation) = get(() -> createpdb(sim), sim.constructor, :pdb)
 
 steps(sim) = sim.steps::Int
 friction(sim) = friction(sim.pysim)
@@ -133,7 +133,7 @@ function createpdb(sim)
     pysim = sim.pysim
     file = tempname() * ".pdb"
     pdb = py"app.PDBFile"
-    pdb.writeFile(pysim.topology, pysim.positions, file)  # TODO: fix this
+    pdb.writeFile(pysim.topology, PyReverseDims(reshape(getcoords(sim), 3, :)), file)  # TODO: fix this
     return file
 end
 

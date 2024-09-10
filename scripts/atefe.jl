@@ -4,7 +4,7 @@
     using CUDA
 end
 
-@time "loading" sim = OpenMMScript("data/atefe/mor.py", steps=10_000)
+@time "loading" sim = OpenMMSimulation(py="data/atefe/mor.py", steps=10_000)
 
 NFEATURES = 3000
 NX = 1_000

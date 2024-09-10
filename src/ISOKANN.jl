@@ -53,6 +53,8 @@ import LinearAlgebra
 import MLUtils: numobs
 import Flux: cpu, gpu
 
+export OpenMM
+
 export pairnet
 #export PDB_ACEMD, PDB_1UAO, PDB_diala_water
 #export MollyLangevin, propagate, solve#, MollySDE
