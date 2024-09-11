@@ -41,7 +41,7 @@ function plot_training(iso; subdata=nothing)
     p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss", xlabel="iter")
 
     for v in filter(x -> isa(x, ValidationLossLogger), iso.loggers)
-        p1 = plot!(v.loss, label="validation")
+        p1 = plot!(v.iters, v.losses, label="validation")
     end
     #=
     for tl in filter(l -> isa(l, TrainlossLogger), iso.loggers)
@@ -128,8 +128,9 @@ scatter_ramachandran(x, mat::AbstractMatrix; kwargs...) = plot(map(eachrow(mat))
 end...)
 
 function scatter_ramachandran(x::AbstractMatrix, z::Union{AbstractVector,Nothing}=nothing; kwargs...)
-    ph = phi(x)
-    ps = psi(x)
+    ph = phi(cpu(x))
+    ps = psi(cpu(x))
+    z = cpu(z)
     scatter(ph, ps, marker_z=z, xlims=[-pi, pi], ylims=[-pi, pi],
         markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:tofino, legend=false,
         xlabel="\\phi", ylabel="\\psi", title="Ramachandran", ; kwargs...

@@ -14,11 +14,22 @@ end
     Iso(data; opt=NesterovRegularized(), model=defaultmodel(data), gpu=false, kwargs...)
 
 """
-function Iso(data; opt=NesterovRegularized(), model=defaultmodel(data), gpu=CUDA.has_cuda(), kwargs...)
+function Iso(data;
+    opt=NesterovRegularized(),
+    model=defaultmodel(data),
+    gpu=CUDA.has_cuda(),
+    autoplot=0,
+    validation=nothing,
+    kwargs...)
+
     opt = Flux.setup(opt, model)
     transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
 
-    iso = Iso(; model, opt, data, transform, kwargs...)
+    loggers = []
+    autoplot > 0 && push!(loggers, ISOKANN.autoplot(autoplot))
+    isnothing(validation) || push!(loggers, ValidationLossLogger(data=validation))
+
+    iso = Iso(; model, opt, data, transform, loggers, kwargs...)
     gpu && (iso = ISOKANN.gpu(iso))
     return iso
 end
@@ -63,7 +74,7 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
         end
 
         for logger in iso.loggers
-            log(logger; iso, subdata=nothing)
+            log!(logger; iso, subdata=nothing)
         end
 
         showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
@@ -71,16 +82,33 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
     return iso
 end
 
-struct ValidationLossLogger
-    data
-    loss
+@kwdef struct ValidationLossLogger{T}
+    data::T
+    losses = Float32[]
+    iters = Int[]
+    logevery = 10
 end
 
-function log(v::ValidationLossLogger; iso, kw...)
-    xs, ys = getobs(iso.data)
-    target = isotarget(iso.model, xs, ys, iso.transform)
-    loss = sum(abs2, iso.model(xs) .- target) / numobs(xs)
-    push!(v.loss, loss)
+function validationloss(iso, data)
+    xs, ys = getobs(data)
+    kx = iso.model(xs) |> vec
+    ky = StatsBase.mean(iso.model(ys), dims=2) |> vec
+
+    unit = fill!(copy(kx), 1)
+    kx = hcat(kx, unit)
+    ky = hcat(ky, unit)
+
+    #  kx = ky * A
+    return mean(abs2, ky * (kx \ ky) - kx)
+end
+
+
+function log!(v::ValidationLossLogger; iso, kw...)
+    length(iso.losses) % v.logevery == 0 || return
+    vl = validationloss(iso, v.data)
+    push!(v.iters, length(iso.losses))
+    push!(v.losses, vl)
+    return
 end
 
 function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, minibatch; shuffle=true)
@@ -163,8 +191,8 @@ end
 
 
 
-log(f::Function; kwargs...) = f(; kwargs...)
-log(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
+log!(f::Function; kwargs...) = f(; kwargs...)
+log!(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
 
 """ evluation of koopman by shiftscale(mean(model(data))) on the data """
 function koopman(model, ys)
