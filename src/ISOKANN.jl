@@ -29,6 +29,7 @@ using SparseArrays: sparse
 import Distances
 import ProgressMeter
 import ChainRulesCore
+import Chemfiles
 import Flux
 import StatsBase, Zygote, Optimisers, Flux, JLD2
 import LsqFit
@@ -74,7 +75,7 @@ export SimulationData
 export addcoords
 export getxs, getys
 export exit_rates
-export load_trajectory, save_trajectory
+export load_coords, save_coords
 export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
 export data_from_trajectory, mergedata
@@ -119,5 +120,7 @@ include("reactionpath.jl")
 
 include("makie.jl")
 include("bonito.jl")
+
+include("fileio.jl")
 
 end
