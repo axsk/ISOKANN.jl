@@ -14,7 +14,7 @@ export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
 export FeaturesAll, FeaturesAll, FeaturesPairs, FeaturesRandomPairs
 
-DEFAULT_PDB = "$(@__DIR__)/../../data/systems/alanine dipeptide.pdb"
+DEFAULT_PDB = normpath("$(@__DIR__)/../../data/systems/alanine dipeptide.pdb")
 FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber/tip3p_standard.xml"]
@@ -76,9 +76,11 @@ struct OpenMMSimulation <: IsoSimulation
             @pyinclude(k.py)
             pysim = py"simulation"
             return new(pysim, steps, k)
-        else
+        elseif haskey(k, :pdb)
             pysim = defaultsystem(; k...)
             return new(pysim, steps, k)
+        else
+            return OpenMMSimulation(; pdb=DEFAULT_PDB, steps, k...)
         end
     end
 end
@@ -94,19 +96,17 @@ function defaultsystem(;
     addwater=false,
     padding=3,
     ionicstrength=0.0,
+    mmthreads=CUDA.functional() ? "gpu" : 1,
     forcefield_kwargs=Dict(),
     kwargs...
 )
-    mmthreads = get(kwargs, :mmthreads, CUDA.has_cuda() ? "gpu" : 1)
-    platform, properties = mmthreads == "gpu" ? ("CUDA", Dict()) : ("CPU", Dict("Threads" => "$mmthreads"))
-
-    @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, platform, properties)::PyObject
+    @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, mmthreads)::PyObject
 end
 
 
 # TODO: this are remnants of the old detailed openmm system, remove them eventually
-mmthreads(sim::OpenMMSimulation) = get(sim.constructor, :mmthreads, CUDA.has_cuda() ? "gpu" : 1)
-nthreads(sim::OpenMMSimulation) = get(sim.constructor, :nthreads, CUDA.has_cuda() ? 1 : Threads.nthreads())
+mmthreads(sim::OpenMMSimulation) = get(sim.constructor, :mmthreads, CUDA.functional() ? "gpu" : 1)
+nthreads(sim::OpenMMSimulation) = get(sim.constructor, :nthreads, CUDA.functional() ? 1 : Threads.nthreads())
 momenta(sim::OpenMMSimulation) = get(sim.constructor, :momenta, false)
 pdbfile(sim::OpenMMSimulation) = get(() -> createpdb(sim), sim.constructor, :pdb)
 
@@ -127,7 +127,10 @@ natoms(sim::OpenMMSimulation) = div(dim(sim), 3)
 friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
 temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
 stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
-getcoords(sim::PyObject, momenta) = py"get_numpy_state($sim.context, $momenta).flatten()"
+getcoords(pysim::PyObject, momenta) = py"get_numpy_state($pysim.context, $momenta).flatten()"
+
+iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
+iscuda(pysim::PyObject) = pysim.context.getPlatform().getName() == "CUDA"
 
 function createpdb(sim)
     pysim = sim.pysim
@@ -196,11 +199,11 @@ Note: For CPU we observed better performance with nthreads = num cpus, mmthreads
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
-    mmthreads == "gpu" && CUDA.has_cuda() && CUDA.reclaim()
+    iscuda(sim) && CUDA.functional() && CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, mmthreads, momenta)::Vector{Float32}
+    ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, momenta)::Vector{Float32}
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1, 3, 2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error

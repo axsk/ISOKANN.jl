@@ -5,10 +5,10 @@ from openmm.app import *
 from openmm.unit import *
 import numpy as np
 
-def threadedrun(xs, sim, stepsize, steps, nthreads, nthreadssim=1, withmomenta=False):
+def threadedrun(xs, sim, stepsize, steps, nthreads, withmomenta=False):
     def singlerun(i):
         if nthreads > 1:
-            c = newcontext(sim.context, nthreadssim)
+            c = newcontext(sim.context)
         else:
             c = sim.context
         set_numpy_state(c, xs[i], withmomenta)
@@ -34,7 +34,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   trajectory = np.zeros((n_states,) + np.array(x0).shape)
   trajectory[0] = x0
 
-  c = newcontext(sim.context, mmthreads)
+  c = newcontext(sim.context)
 
   set_numpy_state(c, x0, withmomenta)
   c.getIntegrator().setStepSize(stepsize)
@@ -46,9 +46,15 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   return trajectory
 
 # from the OpenMM documentation
-def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, platform='CPU', properties={'Threads': '1'}, addwater=False, padding=3, ionicstrength=0, forcefield_kwargs={}):
-    platform = Platform.getPlatformByName(platform)
+def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=3, ionicstrength=0, forcefield_kwargs={}):
     pdb = PDBFile(pdb)
+
+    if mmthreads == 'gpu':
+      platform = Platform.getPlatformByName('CUDA')
+      platformargs = {}
+    else:
+      platform = Platform.getPlatformByName('CPU')
+      platformargs = {'Threads': str(mmthreads)}
 
     if ligand != "":
         from openff.toolkit import Molecule
@@ -71,8 +77,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
                                 positiveIon="Na+", negativeIon="Cl-",
                                 ionicStrength=ionicstrength * molar, neutralize=True)
         system = system_generator.create_system(modeller.topology, molecules=ligand_mol)
-        integrator = LangevinMiddleIntegrator(temp * kelvin, friction / picosecond, step * picoseconds)
-        simulation = Simulation(modeller.topology, system, integrator, platform=platform)
+
 
     else:
         forcefield = ForceField(*forcefields)
@@ -88,8 +93,9 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
                 nonbondedMethod=CutoffNonPeriodic,
                 nonbondedCutoff=1*nanometer,
                 **forcefield_kwargs)
-        integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
-        simulation = Simulation(modeller.topology, system, integrator, platform, properties)
+
+    integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
+    simulation = Simulation(modeller.topology, system, integrator, platform, platformargs)
 
     simulation.context.setPositions(modeller.positions)
     simulation.context.setVelocitiesToTemperature(simulation.integrator.getTemperature())
@@ -102,7 +108,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, plat
     #        )
 
     if minimize:
-        simulation.minimizeEnergy(maxIterations=100)
+        simulation.minimizeEnergy()
     return simulation
 
 def get_numpy_state(context, withmomenta):
@@ -130,16 +136,8 @@ def set_random_velocities(context):
     return v
 
 
-
-def newcontext(context, mmthreads):
-  if mmthreads == 'gpu':
-    platform = Platform.getPlatformByName('CUDA')
-    platformargs = {}
-  else:
-    platform = context.getPlatform()
-    platformargs = {'Threads': str(mmthreads)}
-  c = Context(context.getSystem(), copy.copy(context.getIntegrator()), platform, platformargs)
-  return c
+def newcontext(context):
+  return Context(context.getSystem(), copy.copy(context.getIntegrator()), context.getPlatform())
 
 def test():
   ff99 = ['amber99sbildn.xml', 'amber99_obc.xml']
