@@ -21,6 +21,55 @@ function onlychanges(a::Observable)
     end
     return o
 end
+onlychanges(x) = x
+
+observe(x) = x isa Observable ? x : Observable(x)
+
+function visgradients(iso::Iso, x=getcoords(iso.data))
+    dx = mapreduce(hcat, eachcol(x)) do c
+        ISOKANN.dchidx(iso, c)
+    end
+
+    plotmol(x, iso.data.sim.pysim, grad=dx, showatoms=false)
+end
+
+
+
+function plotmol(c, pysim, color=1; grad=nothing, kwargs...)
+    c = observe(c)
+    color = observe(color)
+
+    fig = Figure()
+    frameselector = SliderGrid(fig[1, 1],
+        (label="Frame", range=@lift(1:size($c, 2)), startvalue=1))
+
+    i = frameselector.sliders[1].value
+    col = @lift $c[:, $i]
+
+
+    ax = LScene(fig[2, 1], show_axis=false)
+    plotmol!(ax, col, pysim, color; kwargs...)
+
+    if !isnothing(grad)
+        grad = @lift($(observe(grad))[:, $i])
+        plotgrad!(ax, @lift(reshape($col, 3, :)), @lift(reshape($grad, 3, :)),
+            arrowsize=0.01, lengthscale=0.2, linecolor=:red, linewidth=0.005)
+    end
+
+    return fig
+end
+
+function plotgrad!(ax, c::Observable{T}, dc::Observable{T}; kwargs...) where {T<:AbstractMatrix}
+
+    x = @lift vec($c[1, :])
+    y = @lift vec($c[2, :])
+    z = @lift vec($c[3, :])
+    u = @lift vec($dc[1, :])
+    v = @lift vec($dc[2, :])
+    w = @lift vec($dc[3, :])
+
+    arrows!(ax, x, y, z, u, v, w; kwargs...)
+end
 
 function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=true, showbackbone=true, alpha=1.0, linewidth=4)
     z = zeros(3, 0)
@@ -54,10 +103,10 @@ function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=true, showbackb
 
     color = onlychanges(color)
 
-
     meshscatter!(ax, onlychanges(a), markersize=0.1, color=@lift($color .* ones(size($a, 2))), colorrange=(0.0, 1.0), colormap=:roma,)
     lines!(ax, onlychanges(p); linewidth, color=color, colorrange=(0.0, 1.0), colormap=:roma,)
     linesegments!(ax, onlychanges(b); color=color, colorrange=(0.0, 1.0), colormap=:roma, alpha)
+
 
     ax
 end
