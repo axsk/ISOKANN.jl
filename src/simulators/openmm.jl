@@ -198,17 +198,32 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
+
 function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
-    iscuda(sim) && CUDA.functional() && CUDA.reclaim()
+    mmthreads == "gpu" && CUDA.has_cuda() && CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
-    xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, momenta)::Vector{Float32}
+    if !(haskey(sim.constructor, :F_ext))
+        xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
+        ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, mmthreads, momenta)::Vector{Float32}
+    else
+        ys = integrate_girsanov_matrix(sim; x0=xs, steps=steps, u=sim.constructor.F_ext)
+
+        return ys
+    end
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1, 3, 2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
     return ys#convert(Array{Float32,3}, ys)
 end
+
+function integrate_girsanov_matrix(sim::OpenMMSimulation; x0::Matrix=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
+    vectors = map(eachcol(x0)) do y
+        integrate_girsanov(sim; x0=Vector(y), steps, u)[1]
+    end
+    return reshape(vcat(vectors...), length(vectors[1]), length(vectors))
+end
+ 
 
 struct OpenMMOverflow{T} <: Exception where {T}
     result::T
@@ -442,5 +457,51 @@ function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
 end
 
 
+function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(length(x)))
+    kB = 0.008314463
+    x = copy(x0)
+    p = zero(x)
+    dt = stepsize(sim)*0.001
+    γ = friction(sim)
+    steps = steps*1000
+
+    M = repeat(masses(sim), inner=3)
+    T = temp(sim)
+    σ = @. sqrt(2 * kB * T / (γ * M))
+    mkBT = M * kB * T
+    t2m = dt ./(2 * M)
+    t2 = dt/2
+    exp_sigma_dt = @. exp(-σ * dt)
+    sqrt_mkbt = @. sqrt(mkBT * (1 - exp_sigma_dt^2))
+    q              = zeros(steps + 1, size(x0, 1)) 
+    dg             = zeros(steps + 1, size(x0, 1)) 
+    p              = zeros(steps + 1, size(x0, 1)) 
+    f	       = zeros(steps + 1, size(x0, 1)) 
+    q[1,:] = x0
+    f[1,:]         = -force(sim, q[1,:])
+    for k in 1:steps
+        dB = randn(length(x)) 
+        q[k + 1,:] = q[k,:] + t2m .* p[k,:]
+        p[k + 1,:] = p[k,:] - t2 * force(sim, q[k + 1,:])
+        p[k + 1,:] = exp_sigma_dt .* p[k + 1,:] + sqrt_mkbt .* dB
+        p[k + 1,:] = p[k + 1,:] - t2 * force(sim, q[k + 1,:])
+        f[k + 1,:] = -force(sim, q[k + 1,:])+u(q[k + 1,:])
+        q[k + 1,:] = q[k + 1,:] + t2m .* p[k + 1,:]  
+        dg[k + 1, :] = M_ABOBA(u(q[k + 1,:]), dB, dt, T, M, σ, kB)
+    end
+    return q[end, :], p, f, dg
+end
+
+function M_ABOBA(fU, eta, timestep, T, m, σ, kB)
+    #C omputes path reweighting factor for ABOBA scheme based on [Kieninger Keller 2023]
+    h = timestep/1
+    sigma = @. sqrt(T * kB ./ m) 
+    b = @. sqrt(1 -  exp(- 2 * σ * h))
+    a = @. exp(- σ * h)
+    DeltaEta0 = @. 1 / (b * sigma * m) * (1 + a) * timestep / 2 
+    DeltaEta0 = DeltaEta0 .* fU
+    logM = @. eta * DeltaEta0 + 0.5 * (DeltaEta0 * DeltaEta0)
+    return logM
+end
 
 end #module
