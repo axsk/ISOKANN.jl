@@ -441,6 +441,54 @@ function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
     return dg
 end
 
+using Random: randn!
+
+langevin_girsanov(sim, q::AbstractMatrix, steps, u) =
+    mapreduce(hcat, eachcol(q)) do q
+        langevin_girsanov(sim, q, steps, u)
+    end
+
+function langevin_girsanov(sim, q, steps, u)
+    # from https://pubs.acs.org/doi/full/10.1021/acs.jpcb.4c01702
+
+    kB = 0.008314463
+    dt = stepsize(sim)
+    ξ = friction(sim)
+    T = temp(sim)
+    M = repeat(masses(sim), inner=3)
+
+    # Maxwell-Boltzmann distribution
+    p = randn(length(M)) .* sqrt(M .* kB .* T)
+
+    t2 = dt / 2
+    a = @. t2 / M # eq 18
+    d = @. exp(-ξ * dt) # eq 17
+    f = @. sqrt(kB * T * M * (1 - exp(-2 * γ * dt))) # eq 17
+
+    b = similar(p)
+    η = similar(p)
+    Δη = similar(p)
+    g = 0
+
+    for i in 1:steps
+        randn!(η)
+        @. q += a * p # A
+
+        # girsanov part
+        F = u(q) # perturbation force ∇U_bias = -F
+        @. Δη = (d + 1) / f + dt / 2 * F
+        g += η' * Δη + Δη' * Δη / 2
+        F .+= force(sim, q) # total force: -∇V - ∇U_bias
+
+        @. b = t2 * F
+        @. p += b  # B
+        @. p = d * p + f * η # O
+        @. p += b  # B
+        @. q += a * p # A
+    end
+
+    return q, exp(-g)
+end
 
 
 end #module
