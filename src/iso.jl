@@ -257,13 +257,13 @@ Save the coordinates of the specified observation indices from the data of of `i
 
 Save the coordinates of the specified matrix of coordinates to a file, using the molecule in `iso` as a template.
 """
-function savecoords(path::String, iso::Iso, inds=1:numobs(iso.data))
+function save_coords(path::String, iso::Iso, inds=1:numobs(iso.data))
     coords = getcoords(iso.data)[:,inds]
-    savecoords(path, iso, coords)
+    save_coords(path, coords, iso)
 end
 
-function savecoords(path::String, iso::Iso, coords::AbstractMatrix)
-    savecoords(path, iso.data.sim, coords)
+function save_coords(path::String, coords::AbstractMatrix, iso::Iso)
+    OpenMM.save_coords_openmm(path, coords, iso.data.sim)
 end
 
 """

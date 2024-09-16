@@ -287,8 +287,9 @@ function potential(sim::OpenMMSimulation, x)
     v = v.value_in_unit(v.unit)
 end
 
+@deprecate savecoords(path, sim::OpenMMSimulation, coords)  save_traj_openmm(path, coords, sim)
 
-function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}) where {T}
+function save_coords_openmm(path, coords::AbstractArray{T}, sim::OpenMMSimulation) where {T}
     coords = ISOKANN.cpu(coords)
     s = sim.pysim
     p = py"pdbfile.PDBFile"
