@@ -458,24 +458,26 @@ function langevin_girsanov(sim, q, steps, u)
     M = repeat(masses(sim), inner=3)
 
     # Maxwell-Boltzmann distribution
-    p = randn(length(M)) .* sqrt(M .* kB .* T)
+    p = randn(length(M)) .* sqrt.(M .* kB .* T)
 
     t2 = dt / 2
     a = @. t2 / M # eq 18
     d = @. exp(-ξ * dt) # eq 17
-    f = @. sqrt(kB * T * M * (1 - exp(-2 * γ * dt))) # eq 17
+    f = @. sqrt(kB * T * M * (1 - exp(-2 * ξ * dt))) # eq 17
 
     b = similar(p)
     η = similar(p)
     Δη = similar(p)
+    F = similar(p)
     g = 0
+
 
     for i in 1:steps
         randn!(η)
         @. q += a * p # A
 
         # girsanov part
-        F = u(q) # perturbation force ∇U_bias = -F
+        F .= u(q) # perturbation force ∇U_bias = -F
         @. Δη = (d + 1) / f + dt / 2 * F
         g += η' * Δη + Δη' * Δη / 2
         F .+= force(sim, q) # total force: -∇V - ∇U_bias
@@ -488,6 +490,10 @@ function langevin_girsanov(sim, q, steps, u)
     end
 
     return q, exp(-g)
+end
+
+function batcheddot(x, y)
+    sum(a .* y, dims=1)
 end
 
 
