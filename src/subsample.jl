@@ -84,16 +84,34 @@ function pickclosest_test(hs, ns)
     i1
 end
 
+### Resampling according to the KDE of the data
 
+"""
+    resample_kde(xs, ys, n; kwargs...)
 
-function kde_needles(chis, n=10; padding=0.0, bandwidth)
-    needles = []
-    for _ in 1:n
-        k = KernelDensity.kde(chis, boundary=(0.0 - padding, 1.0 + padding); bandwidth)
-        #plot(k.x, k.density) |> display
-        c = k.x[argmin(k.density)]
+Return `n` indices of `ys` such that the corresponding points "fill the gaps" in the KDE of `xs`.
+For possible `kwargs` see `kde_needles`.
+"""
+function resample_kde(xs, ys, n; kwargs...)
+    needles = kde_needles(xs, n; kwargs...)
+    iy = pickclosest(ys, needles)
+    return iy
+end
+
+to_pdf(f::Function) = f
+to_pdf(d::Distributions.Distribution) = x -> Distributions.pdf(d, x)
+
+function kde_needles(xs, n=10; bandwidth, target=Distributions.Uniform())
+    xs = copy(xs)
+    needles = similar(xs, 0)
+    target = to_pdf(target)
+    for i in 1:n
+        k = KernelDensity.kde(xs; bandwidth)
+        delta = @. k.density - target(k.x)
+        #plot(k.x, [k.density delta]) |> display
+        c = k.x[argmin(delta)]
         push!(needles, c)
-        push!(chis, c)
+        push!(xs, c)
     end
     return needles
 end

@@ -33,6 +33,17 @@ function visgradients(iso::Iso, x=getcoords(iso.data))
     plotmol(x, iso.data.sim.pysim, grad=dx, showatoms=false)
 end
 
+plotmol(iso::Iso; kwargs...) = plotmol(Observable(iso); kwargs...)
+
+function plotmol(o::Observable{<:Iso}; kwargs...)
+    iso = o[]
+    c = Observable(getcoords(iso.data))
+    on(o) do val
+        c[] = getcoords(iso.data)
+    end
+    plotmol(c, iso.data.sim.pysim; kwargs...)
+end
+
 
 
 function plotmol(c, pysim, color=1; grad=nothing, kwargs...)
@@ -42,6 +53,11 @@ function plotmol(c, pysim, color=1; grad=nothing, kwargs...)
     fig = Figure()
     frameselector = SliderGrid(fig[1, 1],
         (label="Frame", range=@lift(1:size($c, 2)), startvalue=1))
+
+    on(c) do c
+        n = size(c, 2)
+        frameselector.sliders[1].value[] = n
+    end
 
     i = frameselector.sliders[1].value
     col = @lift $c[:, $i]
@@ -71,7 +87,7 @@ function plotgrad!(ax, c::Observable{T}, dc::Observable{T}; kwargs...) where {T<
     arrows!(ax, x, y, z, u, v, w; kwargs...)
 end
 
-function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=true, showbackbone=true, alpha=1.0, linewidth=4)
+function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=false, showbackbone=true, alpha=1.0, linewidth=4)
     z = zeros(3, 0)
 
     c = @lift if length($c) > 0

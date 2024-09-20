@@ -27,6 +27,7 @@ using SimpleWeightedGraphs: SimpleWeightedDiGraph
 using SparseArrays: sparse
 
 import Distances
+import Distributions
 import ProgressMeter
 import ChainRulesCore
 import Flux
