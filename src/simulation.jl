@@ -29,6 +29,10 @@ end
 trajectory(sim::IsoSimulation, steps) = error("not implemented")
 laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 
+#laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim))
+#    trajectory(sim, n_lags * steps_per_lag; saveevery=steps_per_lag, x0)
+
+
 #TODO:
 
 
@@ -239,7 +243,7 @@ Simulate a single long trajectory of `steps` times the lagtime and start `nk` bu
 
 
 x0---x----x---
-    / |  / | 
+    / |  / |
     y y  y y
 """
 function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=getcoords(sim), kwargs...)

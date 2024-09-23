@@ -11,6 +11,10 @@ else
     @info "No functional GPU found. Skipping GPU tests"
 end
 
+@time @testset "workflow run" verbose = true begin
+    include("workflow.jl")
+end
+
 function with_possible_broken_domain(f)
     try
         r = f()

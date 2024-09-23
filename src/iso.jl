@@ -282,7 +282,7 @@ end
 Save the complete Iso object to a JLD2 file """
 function save(path::String, iso::Iso)
     iso = cpu(iso)
-    JLD2.save(path, "iso", iso)
+    JLD2.jldsave(path; iso)
 end
 
 """
@@ -294,9 +294,6 @@ An OpenMMSimulation will be reconstructed anew from the saved pdb file.
 """
 function load(path::String)
     iso = JLD2.load(path, "iso")
-    if iso.data.sim isa OpenMMSimulation
-        @warn "currently only the OpenMM `defaultsystem` is supported, any custom OpenMM simulations will not be reconstructed"
-    end
     return iso
 end
 
