@@ -90,7 +90,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
                                 positiveIon="Na+", negativeIon="Cl-",
                                 ionicStrength=ionicstrength * molar, neutralize=True)
         system = forcefield.createSystem(modeller.topology,
-                nonbondedMethod=CutoffNonPeriodic,
+                nonbondedMethod=CutoffNonPeriodic,  # TODO: shouldnt be this periodic?!
                 nonbondedCutoff=1*nanometer,
                 **forcefield_kwargs)
 

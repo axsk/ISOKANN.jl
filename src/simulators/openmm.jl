@@ -4,11 +4,12 @@ using PyCall, CUDA
 using LinearAlgebra: norm, dot
 
 import JLD2
+import ProgressMeter
 import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdbfile,
-    force, potential, lagtime, trajectory
+    force, potential, lagtime, trajectory, laggedtrajectory
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
@@ -120,14 +121,15 @@ lagtime(sim::OpenMMSimulation) = steps(sim) * stepsize(sim) # in ps
 dim(sim::OpenMMSimulation) = length(getcoords(sim))
 defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, momenta(sim))::Vector{Float64}
+getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector{Float64}
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, momenta(sim))
 natoms(sim::OpenMMSimulation) = div(dim(sim), 3)
 
 friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
 temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
 stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
-getcoords(pysim::PyObject, momenta) = py"get_numpy_state($pysim.context, $momenta).flatten()"
+#getcoords(pysim::PyObject, momenta) = py"get_numpy_state($pysim.context, $momenta).flatten()"
+getcoords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true).flatten()
 
 iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
 iscuda(pysim::PyObject) = pysim.context.getPlatform().getName() == "CUDA"
@@ -176,7 +178,6 @@ function FeaturesPairs(sim::OpenMMSimulation; maxdist::Number, atomfilter::Funct
     return FeaturesPairs(pairs)
 end
 
-# TODO: replace this with laggedtrajectory?
 """ generate `n` random inintial points for the simulation `mm` """
 randx0(sim::OpenMMSimulation, n) = ISOKANN.laggedtrajectory(sim, n)
 
@@ -222,6 +223,7 @@ function checkoverflow(ys, overflow=100)
     !all(select) && throw(OpenMMOverflow(ys, select))
 end
 
+#=
 """
     trajectory(s::OpenMMSimulation, x0, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads)
 
@@ -243,8 +245,47 @@ function ISOKANN.laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=s
     xs = trajectory(sim; x0, steps, saveevery)
     return keepstart ? xs : xs[:, 2:end]
 end
+=#
+laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim), resample_velocities=true) =
+    trajectory(sim, n_lags * steps_per_lag; saveevery=steps_per_lag, x0, resample_velocities)
 
-function minimize!(sim::OpenMMSimulation, coords=getcoords(sim); iter=100)
+
+function trajectory(sim::OpenMMSimulation, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false)
+    n = div(steps, saveevery)
+    xs = similar(x0, length(x0), n)
+    int = sim.pysim.context.getIntegrator()
+
+    p = ProgressMeter.Progress(n)
+    done = 0
+    runtime = 0.0
+    lagtime = stepsize(sim) * saveevery / 1000
+    tottime = stepsize(sim) * steps / 1000
+
+    setcoords(sim, x0)
+    set_random_velocities!(sim)
+
+    try
+        for i in 1:n
+            resample_velocities && set_random_velocities!(sim)
+            runtime += @elapsed int.step(saveevery)
+            xs[:, i] = getcoords(sim)
+            done = i
+
+            simtime = round(lagtime * i, sigdigits=3)
+            ProgressMeter.next!(p; showvalues=[("simulated time", "$simtime / $tottime ns"),
+                ("speed", "$(simtime/runtime) ns/s")])
+        end
+    catch e
+        println()
+        st = (e isa InterruptException) ? "InterruptException() " : sprint(showerror, e, catch_backtrace()) * "\n"
+        @warn """$(st)during trajectory simulation.
+        Returing partial result consisting of $done samples """
+        return xs[:, 1:done]
+    end
+    return xs
+end
+
+function minimize!(sim::OpenMMSimulation, coords=getcoords(sim); iter=0)
     setcoords(sim, coords)
     return sim.pysim.minimizeEnergy(maxIterations=iter)
     return nothing
@@ -269,6 +310,11 @@ function set_random_velocities!(sim, x)
     return x
 end
 
+function set_random_velocities!(sim::OpenMMSimulation)
+    context = sim.pysim.context
+    context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
+end
+
 force(sim::OpenMMSimulation, x::CuArray) = force(sim, Array(x)) |> cu
 potential(sim::OpenMMSimulation, x::CuArray) = potential(sim, Array(x))
 masses(sim::OpenMMSimulation) = [sim.pysim.system.getParticleMass(i - 1)._value for i in 1:sim.pysim.system.getNumParticles()] # in daltons
@@ -288,6 +334,11 @@ function potential(sim::OpenMMSimulation, x)
 end
 
 
+"""
+    savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T})
+
+Save the given `coordinates` in a .pdb file using OpenMM
+"""
 function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}) where {T}
     coords = ISOKANN.cpu(coords)
     s = sim.pysim
@@ -312,7 +363,7 @@ function remove_H_H2O_NACL(atom)
 end
 
 function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
-    coords = reshape(getcoords(pysim, false), 3, :)
+    coords = reshape(getcoords(pysim), 3, :)
     atoms = filter(atomfilter, pysim.topology.atoms() |> collect)
     inds = map(atom -> atom.index + 1, atoms)
 
@@ -366,7 +417,9 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
     println(
         io, """
         OpenMMSimulation(;
-            pdb="$(pdbfile(sim))",
+            """#pdb="$(pdbfile(sim))",
+            *
+            """
             temp=$(temp(sim)),
             friction=$(friction(sim)),
             step=$(stepsize(sim)),
