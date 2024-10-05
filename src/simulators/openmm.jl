@@ -1,14 +1,14 @@
 module OpenMM
 
 using PyCall, CUDA
-using LinearAlgebra: norm, dot
+using LinearAlgebra: norm, dot, diag
 
 import JLD2
 import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdbfile,
-    force, potential, lagtime, trajectory
+    force, potential, lagtime, trajectory, GirsanovSamples
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
@@ -27,6 +27,7 @@ function __init__()
         pyimport_conda("joblib", "joblib")
 
         @pyinclude("$(@__DIR__)/mopenmm.py")
+        println("$(@__DIR__)/mopenmm.py")
     catch
         @warn "Could not load openmm."
     end
@@ -199,29 +200,49 @@ Note: For CPU we observed better performance with nthreads = num cpus, mmthreads
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 
-function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
+function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim), u=nothing) where {T}
+    
+    
     mmthreads == "gpu" && CUDA.has_cuda() && CUDA.reclaim()
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
-    if !(haskey(sim.constructor, :F_ext))
-        xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-        ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, mmthreads, momenta)::Vector{Float32}
+    if (!isnothing(u))
+        ys, ws = integrate_girsanov_matrix(sim; x0=xs, steps=steps, u=u)
+        ys = reshape(ys, dim, nx, ny)
+        ws = reshape(ws, nx, ny);
+        ws = permutedims(ws, (2, 1))
+        ys = permutedims(ys, (1, 3, 2))
+        checkoverflow(ys, weights=ws) 
+        return GirsanovSamples(ys, ws)
+    elseif !(haskey(sim.constructor, :F_ext))
+        x1 = permutedims(reinterpret(Tuple{T,T,T}, xs))
+        println(typeof(xs))
+        println(size(xs))
+        ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, momenta)::Vector{Float32}
     else
-        ys = integrate_girsanov_matrix(sim; x0=xs, steps=steps, u=sim.constructor.F_ext)
-
-        return ys
+        ys, ws = integrate_girsanov_matrix(sim; x0=xs, steps=steps, u=sim.constructor.F_ext)
+        ys = reshape(ys, dim, nx, ny)
+        ws = reshape(ws, nx, ny);
+        ws = permutedims(ws, (2, 1))
+        ys = permutedims(ys, (1, 3, 2))
+        checkoverflow(ys, weights=ws) 
+        return GirsanovSamples(ys, ws)
     end
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1, 3, 2))
     checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
-    return ys#convert(Array{Float32,3}, ys)
+    return ys #convert(Array{Float32,3}, ys)
 end
 
-function integrate_girsanov_matrix(sim::OpenMMSimulation; x0::Matrix=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
-    vectors = map(eachcol(x0)) do y
-        integrate_girsanov(sim; x0=Vector(y), steps, u)[1]
-    end
-    return reshape(vcat(vectors...), length(vectors[1]), length(vectors))
+function integrate_girsanov_matrix(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(length(x)))
+    tuples = collect(map(eachcol(x0)) do y
+        x, g = ABOBA_langevin_girsanov!(sim; x0=Vector(y), steps=steps, u=u)
+        return (x, g)
+    end)
+
+    matrix = hcat([tuple[1] for tuple in tuples]...)
+    vector = [t[2] for t in tuples]
+    return (matrix, vector)
 end
  
 
@@ -230,12 +251,21 @@ struct OpenMMOverflow{T} <: Exception where {T}
     select::Vector{Bool}  # flags which results are valid
 end
 
-function checkoverflow(ys, overflow=100)
-    select = map(eachslice(ys, dims=3)) do y
+function checkoverflow(ys, overflow=100; weights=nothing)
+    selectys = map(eachslice(ys, dims=3)) do y
         !any(@.(abs(y) > overflow || isnan(y)))
     end
-    !all(select) && throw(OpenMMOverflow(ys, select))
+    selectws = map(eachslice(weights, dims=2)) do ws
+        !any(@.(abs(ws-1) > 0.5))
+    end
+    select = min(selectys, selectws)
+    if (!isnothing(weights))
+        !all(select) && throw(OpenMMOverflow(GirsanovSamples(ys, weights), select))
+    else
+        !all(select) && throw(OpenMMOverflow(ys, select))
+    end
 end
+
 
 """
     trajectory(s::OpenMMSimulation, x0, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads)
@@ -289,10 +319,11 @@ potential(sim::OpenMMSimulation, x::CuArray) = potential(sim, Array(x))
 masses(sim::OpenMMSimulation) = [sim.pysim.system.getParticleMass(i - 1)._value for i in 1:sim.pysim.system.getNumParticles()] # in daltons
 
 function force(sim::OpenMMSimulation, x)
-    CUDA.reclaim()
+    #CUDA.reclaim() #takes 0.2s per 10000 iterations
     setcoords(sim, x)
     pysim = sim.pysim
-    return PyArray(py"$pysim.context.getState(getForces=True).getForces(asNumpy=True)._value.reshape(-1)"o)
+    pyarray = PyArray(py"$pysim.context.getState(getForces=True).getForces(asNumpy=True)._value.reshape(-1)"o)
+    return pyarray
 end
 
 function potential(sim::OpenMMSimulation, x)
@@ -391,7 +422,6 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
 
 end
 
-
 """
     integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
 
@@ -404,7 +434,8 @@ function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=step
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
     kBT = 0.008314463 * temp(sim)
-    dt = stepsize(sim) # sim,step is in picosecond, we calculate in nanoseconds
+    dt = stepsize(sim)*0.01# sim,step is in picosecond, we calculate in nanoseconds
+    steps = steps
     gamma = friction(sim) # convert 1/ps = 1000/ns
     m = repeat(masses(sim), inner=3)
     out = isnothing(saveevery) ? x : similar(x, length(x), cld(steps, saveevery))
@@ -427,7 +458,8 @@ end
 function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
     # TODO: check units on the following three lines
     kB = 0.008314463
-    dt = stepsize(sim)
+    dt = stepsize(sim)*0.001
+    steps = steps*100
     γ = friction(sim)
 
     M = repeat(masses(sim), inner=3)
@@ -459,41 +491,104 @@ end
 
 function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(length(x)))
     kB = 0.008314463
-    x = copy(x0)
-    p = zero(x)
-    dt = stepsize(sim)*0.001
-    γ = friction(sim)
-    steps = steps*1000
-
-    M = repeat(masses(sim), inner=3)
+    dt = stepsize(sim)
+    ξ = friction(sim)
     T = temp(sim)
-    σ = @. sqrt(2 * kB * T / (γ * M))
-    mkBT = M * kB * T
-    t2m = dt ./(2 * M)
-    t2 = dt/2
-    exp_sigma_dt = @. exp(-σ * dt)
-    sqrt_mkbt = @. sqrt(mkBT * (1 - exp_sigma_dt^2))
-    q              = zeros(steps + 1, size(x0, 1)) 
-    dg             = zeros(steps + 1, size(x0, 1)) 
-    p              = zeros(steps + 1, size(x0, 1)) 
-    f	       = zeros(steps + 1, size(x0, 1)) 
-    q[1,:] = x0
-    f[1,:]         = -force(sim, q[1,:])
+    M = repeat(masses(sim), inner=3)
+    # Maxwell-Boltzmann distribution
+    p = randn(length(M)) .* sqrt.(M .* kB .* T)
+
+    t2 = dt / 2
+    a = @. t2 / M # eq 18
+    d = @. exp(-ξ * dt) # eq 17
+    f = @. sqrt(kB * T * M * (1 - exp(-2 * ξ * dt))) # eq 17
+    q = x0
+
+    b = similar(p)
+    η = similar(p)
+    Δη = similar(p)
+    g = 0
+    t_Force = 0
     for k in 1:steps
-        dB = randn(length(x)) 
-        q[k + 1,:] = q[k,:] + t2m .* p[k,:]
-        p[k + 1,:] = p[k,:] - t2 * force(sim, q[k + 1,:])
-        p[k + 1,:] = exp_sigma_dt .* p[k + 1,:] + sqrt_mkbt .* dB
-        p[k + 1,:] = p[k + 1,:] - t2 * force(sim, q[k + 1,:])
-        f[k + 1,:] = -force(sim, q[k + 1,:])+u(q[k + 1,:])
-        q[k + 1,:] = q[k + 1,:] + t2m .* p[k + 1,:]  
-        dg[k + 1, :] = M_ABOBA(u(q[k + 1,:]), dB, dt, T, M, σ, kB)
+        η = randn(size(η))
+        @. q += a * p # A
+        F = u(q, ones(size(q))) # perturbation force ∇U_bias = -F
+        @. Δη = (d + 1) / f * dt / 2 * F
+        g += η' * Δη + Δη' * Δη / 2
+        F .+= force(sim, q) # total force: -∇V - ∇U_bias
+
+        @. b = t2 * F
+        @. p += b  # B
+        @. p = d * p + f .* η # O
+        @. p += b  # B
+        @. q += a * p # A
     end
-    return q[end, :], p, f, dg
+
+    return q,exp(-g)
+end
+
+# not faster thant integrate_matrix
+function ABOBA_langevin_girsanov_matrix!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(size(x)))
+    kB = 0.008314463
+    dt = stepsize(sim)
+    ξ = friction(sim)
+    T = temp(sim)
+    M = repeat(masses(sim), inner=3)
+    # Maxwell-Boltzmann distribution
+    p = randn(size(x0)) .* sqrt.(M .* kB .* T)
+
+    t2 = dt / 2
+    a = @. t2 / M # eq 18
+    d = @. exp(-ξ * dt) # eq 17
+    f = @. sqrt(kB * T * M * (1 - exp(-2 * ξ * dt))) # eq 17
+    q = x0
+
+    b = similar(p)
+    η = similar(p)
+    Δη = similar(p)
+    g = zeros(1,size(x0, 2))
+
+    worker_task, request_channel = start_force_worker(sim)
+
+    for k in 1:steps
+        # Generate random η
+        η = randn(size(η))
+        @. q += a * p # A
+
+        # Girsanov part
+        F = u(q) # perturbation force ∇U_bias = -F
+        @. Δη = (d + 1) / f * dt / 2 * F
+        g .+= sum(η .* Δη, dims=1) + 0.5 * sum(Δη .* Δη, dims=1)
+
+        # Dispatch force requests
+        num_axes = size(q, 2)
+        response_channels = Vector{Channel{Any}}(undef, num_axes)
+        for i in 1:num_axes
+            # Create a response channel for each force call
+            response_channels[i] = Channel{Any}(1)
+            # Send the force request to the worker
+            put!(request_channel, (q[:, i], response_channels[i]))
+        end
+
+        # Collect force results
+        for i in 1:num_axes
+            F[:, i] = take!(response_channels[i])
+        end
+
+        # Continue with the rest of the loop
+        @. b = t2 * F
+        @. p += b  # B
+        @. p = d * p + f .* η # O
+        @. p += b  # B
+        @. q += a * p # A
+    end
+
+    # Stop the force worker after the loop
+    return q,exp.(-g)
 end
 
 function M_ABOBA(fU, eta, timestep, T, m, σ, kB)
-    #C omputes path reweighting factor for ABOBA scheme based on [Kieninger Keller 2023]
+    # Computes path reweighting factor for ABOBA scheme based on [Kieninger Keller 2023]
     h = timestep/1
     sigma = @. sqrt(T * kB ./ m) 
     b = @. sqrt(1 -  exp(- 2 * σ * h))

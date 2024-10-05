@@ -47,13 +47,16 @@ A struct combining a simulation with the simulated coordinates and corresponding
 - `featurizer::F`: A function mapping coordinates to ISOKANN features.
 
 """
-mutable struct SimulationData{S,D,C,F}
+mutable struct SimulationData{S,D,C,F,W}
     sim::S
     features::D
     coords::C
     featurizer::F
+    weights::W
+
 end
 
+X = SimulationData
 
 """
     SimulationData(sim::IsoSimulation, nx::Int, nk::Int; ...)
@@ -65,18 +68,26 @@ Generates SimulationData from a simulation with either
 - `xs` as initial points and `nk` Koopman sample
 - `xs` as inintial points and `ys` as Koopman samples
 """
+
+SimulationData(sim::S, features::D, coords::C, featurizer::F) where {S, D, C, F} = SimulationData(sim, features, coords, featurizer, nothing)
+
 SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, randx0(sim, nx), nk; kwargs...)
 
-function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...)
+function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; u=nothing, kwargs...)
     local ys
     try
-        ys = propagate(sim, xs, nk)
+        ys = propagate(sim, xs, nk; u=u)
     catch e
         if e isa OpenMM.OpenMMOverflow
             nx = size(xs, 2)
             xs = xs[:, e.select]
-            ys = e.result[:, :, e.select]
+            println(typeof(e.result))
+            if (e.result isa GirsanovSamples)
+                ys = GirsanovSamples(e.result.ys[:, :, e.select], e.result.weights[:, e.select])
+            else
+                ys = e.result[:, :, e.select]
+            end
             @warn "SimulationData: discarded $(nx-sum(e.select))/$nx starting points due to simulation errors."
             if sum(e.select) == 0
                 return sim
@@ -85,21 +96,28 @@ function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs.
             rethrow(e)
         end
     end
-    SimulationData(sim, (xs, ys); kwargs...)
+    if (ys isa GirsanovSamples)
+        SimulationData(sim, (xs, ys.ys); kwargs..., weights=ys.weights)
+    else
+        SimulationData(sim, (xs, ys); kwargs...)
+    end
 end
 
 
-
-function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim))
+# Fixed for Girsanov 
+function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim), weights=nothing)
     coords = (xs, ys)
     features = featurizer.(coords)
-    return SimulationData(sim, features, coords, featurizer)
+    if (!isnothing(weights))
+        return SimulationData(sim, features, coords, featurizer, weights)
+    end
+    return SimulationData(sim, features, coords, featurizer, weights)
 end
 
 #features(sim::SimulationData, x) = sim.featurizer(x)
 
-gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), d.coords, d.featurizer)
-cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), d.coords, d.featurizer)
+gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), d.coords, d.featurizer, d.weights)
+cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), d.coords, d.featurizer, d.weights)
 
 function features(d::SimulationData, x)
     d.features[1] isa CuArray && (x = cu(x))
@@ -114,7 +132,7 @@ Base.length(d::SimulationData) = size(d.features[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
 
 # facilitates easy indexing into the data, returning a new data object
-Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
+Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer, getobs(d.weights, i))
 
 MLUtils.getobs(d::SimulationData) = d.features
 
@@ -147,8 +165,9 @@ function mergedata(d1::SimulationData, d2::SimulationData)
     else
         d1.featurizer.(d2.coords)
     end
+    weights = hcat(d1.weights, d2.weights) # TODO: Maybe not optimal
     features = lastcat.(d1.features, d2f)
-    return SimulationData(d1.sim, features, coords, d1.featurizer)
+    return SimulationData(d1.sim, features, coords, d1.featurizer, weights)
 end
 
 @deprecate Base.merge(d1::SimulationData, d2::SimulationData) mergedata(d1, d2) false
@@ -176,8 +195,9 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
 
     dim, nk, _ = size(fs)
     fs, cs = flattenlast.((fs, cs))
-
-    xs = cs[:, subsample_inds(model, fs, n; keepedges)]
+    idxs = subsample_inds(model, fs, n; keepedges)
+    xs = cs[:, idxs]
+    return xs;
 end
 
 

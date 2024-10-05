@@ -17,13 +17,17 @@ If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi))
     permute::Bool = true
 end
 
-function isotarget(model, xs::S, ys, t::TransformPseudoInv) where {S}
+function isotarget(model, xs::S, ys, t::TransformPseudoInv; weights=nothing) where {S}
     (; normalize, direct, eigenvecs, permute) = t
     chi = model(xs) |> cpu
     @assert size(chi, 1) > 1 "TransformPseudoInv does not work with one dimensional chi functions"
 
     cs = model(ys)::AbstractArray{<:Number,3}
-    kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :] |> cpu
+    if (!isnothing(weights))
+        kchi = StatsBase.mean((cs.*weights)[:,:,:], dims=2)[:, 1, :] |> cpu
+    else
+        kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :] |> cpu
+    end
 
     kchi_inv = try
         pinv(kchi)
@@ -83,13 +87,24 @@ end
 Classical 1D shift-scale (ISOKANN 1) """
 struct TransformShiftscale end
 
-function isotarget(model, xs, ys, t::TransformShiftscale)
+function isotarget(model, xs, ys, t::TransformShiftscale, ; weights=nothing, shiftscale=false)
     cs = model(ys)
     @assert size(cs, 1) == 1 "TransformShiftscale only works with one dimensional chi functions"
-    ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
+    if (!isnothing(weights))
+        weights = reshape(weights, 1, size(weights, 1), size(weights, 2))
+        weights = Flux.gpu(weights)
+        ks = StatsBase.mean((cs.*weights)[:,:,:], dims=2)[:, 1, :]
+    else
+        ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
+    end
     min, max = extrema(ks)
     max > min || throw(DomainError("Could not compute the shift-scale. chi function is constant"))
     target = (ks .- min) ./ (max - min)
+    if (shiftscale)
+        shift = min / (min + 1 - max)
+        lambda = max-min
+        return target, shift, lambda
+    end
     return target
 end
 

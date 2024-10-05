@@ -9,7 +9,24 @@ We represent data as a tuple of xs and ys.
 xs is a matrix of size (d, n) where d is the dimension of the system and n the number of samples.
 ys is a tensor of size (d, k, n) where k is the number of koopman samples.
 """
-DataTuple = Tuple{<:AbstractArray{T},<:AbstractArray{T,3}} where {T<:Number}
+
+
+struct GirsanovSamples{T, AT, VT} <: AbstractArray{T, 3}
+    ys::AT
+    weights::VT
+    function GirsanovSamples(ys::AbstractArray{T1, 3}, weights::AbstractArray{T2, 2}) where {T1 <: AbstractFloat, T2 <: AbstractFloat}
+        size(weights) == size(ys)[2:3] || error("Inconsistent dimensions")
+        new{T1, typeof(ys), typeof(weights)}(ys, weights)
+    end
+end
+
+# DataTuple = Tuple{<:AbstractArray{T},<:GirsanovSamples{T,AbstractArray{T, 3}, AbstractArray{T, 2}}} where {T<:Number, H<:Number}
+DataTuple = Tuple{Matrix{Float64}, ISOKANN.GirsanovSamples{Float64, Array{Float64, 3}, Matrix{Float64}}}
+
+@inline Base.@propagate_inbounds Base.getindex(fooarr::GirsanovSamples, i::Int) = getindex(fooarr.ys, i)
+@inline Base.@propagate_inbounds Base.getindex(fooarr::GirsanovSamples, I::Vararg{Int, 2}) = getindex(fooarr.ys, I...)
+@inline Base.@propagate_inbounds Base.size(fooarr::GirsanovSamples) = size(fooarr.ys)
+Base.IndexStyle(::Type{<:GirsanovSamples}) = IndexLinear()
 
 getxs(x) = getxs(getobs(x))
 getys(x) = getys(getobs(x))
@@ -39,8 +56,9 @@ end
 
 Returns `n` indices of `xs` such that `model(xs[inds])` is approximately uniformly distributed.
 """
-function subsample_inds(model, xs, n; keepedges=true)
-    mapreduce(vcat, eachrow(model(xs))) do row
+function subsample_inds(model, xs, n; keepedges=true, weights=nothing)
+    ks = model(xs)
+    mapreduce(vcat, eachrow(ks)) do row
         subsample_uniformgrid(shiftscale(row), n; keepedges)
     end::Vector{Int}
 end
