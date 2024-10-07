@@ -14,15 +14,12 @@ NX = 1_000
 NK = 1
 NTRAIN = 30_000
 
-#begin
-#    @time xs = laggedtrajectory(sim, 1_000)
-#    @time JLD2.save("data/atafe/traj.jld2", "xs", xs)
-#end
+
+#xs = laggedtrajectory(sim, 1000)
+xs2 = laggedtrajectory(sim, NX, resample_velocities=false)
+JLD2.save("data/atefe/laggedtraj_$(NX)_momentum.jld2", "xs", xs2)
 
 featurizer = OpenMM.FeaturesPairs(sample(OpenMM.calpha_pairs(sim.pysim), NFEATURES, replace=false))
-
-
-
 
 
 data = @time "sampling" trajectorydata_bursts(sim, NX, NK; featurizer)

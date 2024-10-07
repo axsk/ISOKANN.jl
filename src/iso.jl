@@ -127,6 +127,7 @@ chis(iso::Iso) = iso.model(getxs(iso.data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
+# add new datapoints to iso, starting at positions `coords`
 addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
 laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
 

@@ -70,19 +70,19 @@ struct OpenMMSimulation <: IsoSimulation
     pysim::PyObject
     steps::Int
     constructor
+end
 
-    function OpenMMSimulation(; steps=100, k...)
-        k = NamedTuple(k)
-        if haskey(k, :py)
-            @pyinclude(k.py)
-            pysim = py"simulation"
-            return new(pysim, steps, k)
-        elseif haskey(k, :pdb)
-            pysim = defaultsystem(; k...)
-            return new(pysim, steps, k)
-        else
-            return OpenMMSimulation(; pdb=DEFAULT_PDB, steps, k...)
-        end
+function OpenMMSimulation(; steps=100, k...)
+    k = NamedTuple(k)
+    if haskey(k, :py)
+        @pyinclude(k.py)
+        pysim = py"simulation"
+        return OpenMMSimulation(pysim, steps, k)
+    elseif haskey(k, :pdb)
+        pysim = defaultsystem(; k...)
+        return OpenMMSimulation(pysim, steps, k)
+    else
+        return OpenMMSimulation(; pdb=DEFAULT_PDB, steps, k...)
     end
 end
 
@@ -181,76 +181,35 @@ end
 """ generate `n` random inintial points for the simulation `mm` """
 randx0(sim::OpenMMSimulation, n) = ISOKANN.laggedtrajectory(sim, n)
 
-
 """
-    propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
+    propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
 
-Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x0`.
+Propagates `nk` replicas of the OpenMMSimulation `sim` from the inintial states `x0`.
 
 # Arguments
-- `s`: An instance of the OpenMMSimulation type.
+- `sim`: An OpenMMSimulation object.
 - `x0`: Matrix containing the initial states as columns
-- `ny`: The number of replicas to create.
+- `nk`: The number of replicas to create.
 
-# Optional Arguments
-- `nthreads`: The number of threads to use for parallelization of multiple simulations.
-- `mmthreads`: The number of threads to use for each OpenMM simulation. Set to "gpu" to use the GPU platform.
-
-Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
-With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
+function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
     iscuda(sim) && CUDA.functional() && CUDA.reclaim()
     dim, nx = size(x0)
-    xs = repeat(x0, outer=[1, ny])
-    xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, momenta)::Vector{Float32}
-    ys = reshape(ys, dim, nx, ny)
-    ys = permutedims(ys, (1, 3, 2))
-    checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
-    return ys#convert(Array{Float32,3}, ys)
-end
-
-struct OpenMMOverflow{T} <: Exception where {T}
-    result::T
-    select::Vector{Bool}  # flags which results are valid
-end
-
-function checkoverflow(ys, overflow=100)
-    select = map(eachslice(ys, dims=3)) do y
-        !any(@.(abs(y) > overflow || isnan(y)))
+    ys = similar(x0, dim, nk, nx)
+    p = ProgressMeter.Progress(nk * nx)
+    for i in 1:nx
+        for j in 1:nk
+            ys[:, j, i] .= laggedtrajectory(sim, 1, x0=x0[:, i], throw=true)
+            ProgressMeter.next!(p)
+        end
     end
-    !all(select) && throw(OpenMMOverflow(ys, select))
+    return ys
 end
 
-#=
-"""
-    trajectory(s::OpenMMSimulation, x0, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads)
+laggedtrajectory(sim::OpenMMSimulation, lags; steps=steps(sim), resample_velocities=true, kwargs...) =
+    trajectory(sim, lags * steps; saveevery=steps, resample_velocities, kwargs...)
 
-Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.
-"""
-function trajectory(sim::OpenMMSimulation; x0::AbstractVector{T}=getcoords(sim), steps=steps(sim), saveevery=1, stepsize=stepsize(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
-    x0 = reinterpret(Tuple{T,T,T}, x0)
-    xs = py"trajectory"(sim.pysim, x0, stepsize, steps, saveevery, mmthreads, momenta)
-    xs = permutedims(xs, (3, 2, 1))
-    xs = reshape(xs, :, size(xs, 3))
-    return xs
-end
-
-@deprecate trajectory(sim, x0, steps, saveevery; kwargs...) trajectory(sim; x0, steps, saveevery, kwargs...)
-
-function ISOKANN.laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim), keepstart=false)
-    steps = steps_per_lag * n_lags
-    saveevery = steps_per_lag
-    xs = trajectory(sim; x0, steps, saveevery)
-    return keepstart ? xs : xs[:, 2:end]
-end
-=#
-laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim), resample_velocities=true) =
-    trajectory(sim, n_lags * steps_per_lag; saveevery=steps_per_lag, x0, resample_velocities)
-
-
-function trajectory(sim::OpenMMSimulation, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false)
+function trajectory(sim::OpenMMSimulation, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true)
     n = div(steps, saveevery)
     xs = similar(x0, length(x0), n)
     int = sim.pysim.context.getIntegrator()
@@ -272,10 +231,11 @@ function trajectory(sim::OpenMMSimulation, steps=steps(sim); saveevery=1, x0=get
             done = i
 
             simtime = round(lagtime * i, sigdigits=3)
-            ProgressMeter.next!(p; showvalues=[("simulated time", "$simtime / $tottime ns"),
+            showprogress && ProgressMeter.next!(p; showvalues=[("simulated time", "$simtime / $tottime ns"),
                 ("speed", "$(simtime/runtime) ns/s")])
         end
     catch e
+        throw && rethrow()
         println()
         st = (e isa InterruptException) ? "InterruptException() " : sprint(showerror, e, catch_backtrace()) * "\n"
         @warn """$(st)during trajectory simulation.

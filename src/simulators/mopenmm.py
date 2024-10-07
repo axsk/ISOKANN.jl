@@ -88,10 +88,14 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
             modeller.addSolvent(forcefield, model="tip3p",
                                 padding=padding * angstroms,
                                 positiveIon="Na+", negativeIon="Cl-",
-                                ionicStrength=ionicstrength * molar, neutralize=True)
+                                ionicStrength=ionicstrength * molar, neutralize=True,
+                                )
         system = forcefield.createSystem(modeller.topology,
-                nonbondedMethod=CutoffNonPeriodic,  # TODO: shouldnt be this periodic?!
+                nonbondedMethod=CutoffNonPeriodic,
                 nonbondedCutoff=1*nanometer,
+                removeCMMotion=False,
+                flexibleConstraints=True,
+                #rigidWater=False,
                 **forcefield_kwargs)
 
     integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
