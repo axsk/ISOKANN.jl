@@ -53,10 +53,8 @@ mutable struct SimulationData{S,D,C,F,W}
     coords::C
     featurizer::F
     weights::W
-
 end
 
-X = SimulationData
 
 """
     SimulationData(sim::IsoSimulation, nx::Int, nk::Int; ...)
@@ -77,7 +75,7 @@ SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
 function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; u=nothing, kwargs...)
     local ys
     try
-        ys = propagate(sim, xs, nk; u=u)
+        ys = propagate(sim, xs, nk, u)
     catch e
         if e isa OpenMM.OpenMMOverflow
             nx = size(xs, 2)
@@ -108,9 +106,6 @@ end
 function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim), weights=nothing)
     coords = (xs, ys)
     features = featurizer.(coords)
-    if (!isnothing(weights))
-        return SimulationData(sim, features, coords, featurizer, weights)
-    end
     return SimulationData(sim, features, coords, featurizer, weights)
 end
 
@@ -165,7 +160,7 @@ function mergedata(d1::SimulationData, d2::SimulationData)
     else
         d1.featurizer.(d2.coords)
     end
-    weights = hcat(d1.weights, d2.weights) # TODO: Maybe not optimal
+    weights = hcat(d1.weights, d2.weights)
     features = lastcat.(d1.features, d2f)
     return SimulationData(d1.sim, features, coords, d1.featurizer, weights)
 end

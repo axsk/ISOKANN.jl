@@ -1,7 +1,5 @@
 @deprecate Iso2 Iso
 
-using Zygote
-
 @kwdef mutable struct Iso{M,D}
     model::M
     opt
@@ -33,8 +31,6 @@ function Iso(data;
 
     iso = Iso(; model, opt, data, transform, loggers, kwargs...)
     gpu && (iso = ISOKANN.gpu(iso))
-    println(typeof(iso.data))
-
     return iso
 end
 
@@ -53,10 +49,6 @@ and constructs the Iso object. See also Iso(data; kwargs...)
 Iso(sim::IsoSimulation; nx=100, nk=2, kwargs...) = Iso(SimulationData(sim, nx, nk); kwargs...)
 
 
-
-
-
-
 #Iso(iso::IsoRun) = Iso(iso.model, iso.opt, iso.data, TransformShiftscale(), iso.losses, iso.loggers, iso.minibatch)
 
 """
@@ -69,30 +61,15 @@ Run the training process for the Iso model.
 - `n::Int`: The number of (outer) Koopman iterations.
 - `epochs::Int`: The number of (inner) epochs to train the model for each Koopman evaluation.
 """
-function run!(iso::Iso, n=1, epochs=1; showprogress=true, optctrl=false)
+function run!(iso::Iso, n=1, epochs=1; showprogress=true)
     p = ProgressMeter.Progress(n)
     iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
-    s = 0;
-    l = 0; 
+
     for _ in 1:n
         xs, ys = getobs(iso.data)
-        if (optctrl)
-            target, s, l = isotarget(iso.model, xs, ys, iso.transform; weights=iso.data.weights, shiftscale=true)
-        else
-            if (!isnothing(iso.data.weights))
-                target = isotarget(iso.model, xs, ys, iso.transform; weights=iso.data.weights)
-            else
-                target = isotarget(iso.model, xs, ys, iso.transform)
-            end
-        end
+        target = isotarget(iso.model, xs, ys, iso.transform; weights=iso.data.weights)
         for i in 1:epochs
             loss = train_batch!(iso.model, xs, target, iso.opt, iso.minibatch)
-            xs = getxs(iso.data)
-            chi = iso.model(xs) |> cpu
-            pscatter = scatter(cpu(target)')
-            scatter!(chi')
-            scatter!(isotarget(iso)' |> cpu)
-            display(pscatter)
             push!(iso.losses, loss)
         end
 
@@ -101,9 +78,6 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true, optctrl=false)
         end
 
         showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
-    end
-    if (optctrl)
-            return s, l
     end
     return iso
 end
@@ -153,6 +127,7 @@ chis(iso::Iso) = iso.model(getxs(iso.data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform; iso.data.weights)
 
+# add new datapoints to iso, starting at positions `coords`
 addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
 laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
 
@@ -179,7 +154,7 @@ end
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01, kde=0, kde_padding=0, optctrl=false)
+function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01, kde=0, kde_padding=0)
     p = ProgressMeter.Progress(generations)
     t_sim = 0.
     t_kde = 0.0
@@ -193,16 +168,10 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
         t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
 
         if length(iso.data) > cutoff
-            # first_part = iso.data[1:1000]
-            
-            # Slice the last (cutoff - 2000) points
-            last_part = iso.data[end - (cutoff-0) + 1:end]
-            # Concatenate the first and last parts
-            # iso.data = mergedata(first_part, last_part)
-            iso.data = last_part
+            iso.data = iso.data[end-cutoff+1:end]
         end
 
-        t_train += @elapsed run!(iso, iter; showprogress=false, optctrl=optctrl)
+        t_train += @elapsed run!(iso, iter, showprogress=false)
 
         ProgressMeter.next!(p;
             showvalues=() -> [
@@ -214,7 +183,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
                 ("simulated time", "$(simulationtime(iso))"), #TODO: doesnt work with cutoff
                 (:macrorates, exit_rates(iso))],
             ignore_predictor=true)
-        plot_training(iso)
+
         #CUDA.reclaim()
     end
 end

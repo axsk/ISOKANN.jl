@@ -56,9 +56,8 @@ end
 
 Returns `n` indices of `xs` such that `model(xs[inds])` is approximately uniformly distributed.
 """
-function subsample_inds(model, xs, n; keepedges=true, weights=nothing)
-    ks = model(xs)
-    mapreduce(vcat, eachrow(ks)) do row
+function subsample_inds(model, xs, n; keepedges=true)
+    mapreduce(vcat, eachrow(model(xs))) do row
         subsample_uniformgrid(shiftscale(row), n; keepedges)
     end::Vector{Int}
 end
