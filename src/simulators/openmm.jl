@@ -2,6 +2,7 @@ module OpenMM
 
 using PyCall, CUDA
 using LinearAlgebra: norm, dot, diag
+using Random: randn!
 
 import JLD2
 import ..ISOKANN: ISOKANN, IsoSimulation,
@@ -235,7 +236,7 @@ function integrate_girsanov_matrix(sim::OpenMMSimulation; x0=getcoords(sim), ste
     vector = [t[2] for t in tuples]
     return (matrix, vector)
 end
- 
+
 
 struct OpenMMOverflow{T} <: Exception where {T}
     result::T
@@ -254,7 +255,7 @@ function checkoverflow(ys, weights, overflow=100)
         !any(@.(abs(y) > overflow || isnan(y)))
     end
     selectws = map(eachslice(weights, dims=2)) do ws
-        !any(@.(abs(ws-1) > 0.5))
+        !any(@.(abs(ws - 1) > 0.5))
     end
     select = min(selectys, selectws)
     !all(select) && throw(OpenMMOverflow(GirsanovSamples(ys, weights), select))
@@ -429,7 +430,7 @@ function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=step
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
     kBT = 0.008314463 * temp(sim)
-    dt = stepsize(sim)*0.01# sim,step is in picosecond, we calculate in nanoseconds
+    dt = stepsize(sim) # sim.step is in picosecond, we calculate in picoseconds
     steps = steps
     gamma = friction(sim) # convert 1/ps = 1000/ns
     m = repeat(masses(sim), inner=3)
@@ -453,8 +454,7 @@ end
 function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
     # TODO: check units on the following three lines
     kB = 0.008314463
-    dt = stepsize(sim)*0.001
-    steps = steps*100
+    dt = stepsize(sim)
     γ = friction(sim)
 
     M = repeat(masses(sim), inner=3)
@@ -462,7 +462,7 @@ function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=step
     σ = @. sqrt(2 * kB * T / (γ * M))
 
     x = copy(x0)
-    g = 0.
+    g = 0.0
 
     z = similar(x, length(x), steps)
 
@@ -479,7 +479,7 @@ end
 function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
     dB = randn(length(x)) * sqrt(dt)
     @. x += (1 / (γ * M) * F + (σ * u)) * dt + σ * dB
-    dg = dot(u, u) / 2 * dt + dot(u, dB) * sqrt(dt)
+    dg = dot(u, u) / 2 * dt + dot(u, dB)
     return dg
 end
 
@@ -490,6 +490,7 @@ function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), step
     ξ = friction(sim)
     T = temp(sim)
     M = repeat(masses(sim), inner=3)
+
     # Maxwell-Boltzmann distribution
     p = randn(length(M)) .* sqrt.(M .* kB .* T)
 
@@ -503,9 +504,8 @@ function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), step
     η = similar(p)
     Δη = similar(p)
     g = 0
-    t_Force = 0
     for k in 1:steps
-        η = randn(size(η))
+        randn!(η)
         @. q += a * p # A
         F = u(q, ones(size(q))) # perturbation force ∇U_bias = -F
         @. Δη = (d + 1) / f * dt / 2 * F
@@ -519,7 +519,7 @@ function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), step
         @. q += a * p # A
     end
 
-    return q,exp(-g)
+    return q, exp(-g)
 end
 
 end #module
