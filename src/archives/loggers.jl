@@ -26,7 +26,7 @@ function add_validationloss!(iso::IsoRun, nx=100, ny=100, every=100)
 end
 
 
-function l2diff(model1, model2, data::DataTuple)
+function l2diff(model1, model2, data)
     ks = model1(data) |> vec
     ref = model2(data) |> vec
     e = min(sum(abs2, (1 .- ks) .- ref), sum(abs2, ks .- ref)) / length(ks)

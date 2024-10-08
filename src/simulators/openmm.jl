@@ -9,7 +9,7 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdbfile,
-    force, potential, lagtime, trajectory, GirsanovSamples
+    force, potential, lagtime, trajectory, WeightedSamples
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
@@ -66,22 +66,23 @@ or supply a .pdb file via `pdb` and the following parameters (see also defaultsy
 - `OpenMMSimulation`: An OpenMMSimulation object.
 
 """
-struct OpenMMSimulation <: IsoSimulation
+struct OpenMMSimulation{T} <: IsoSimulation
     pysim::PyObject
     steps::Int
     constructor
+    bias::T
 
-    function OpenMMSimulation(; steps=100, k...)
+    function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
         k = NamedTuple(k)
         if haskey(k, :py)
             @pyinclude(k.py)
             pysim = py"simulation"
-            return new(pysim, steps, k)
+            return new{T}(pysim, steps, k, bias)
         elseif haskey(k, :pdb)
             pysim = defaultsystem(; k...)
-            return new(pysim, steps, k)
+            return new{T}(pysim, steps, k, bias)
         else
-            return OpenMMSimulation(; pdb=DEFAULT_PDB, steps, k...)
+            return OpenMMSimulation(; pdb=DEFAULT_PDB, bias, steps, k...)
         end
     end
 end
@@ -199,7 +200,7 @@ Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x
 Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny, u::Nothing=nothing; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
+function propagate(sim::OpenMMSimulation{Nothing}, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
     haskey(sim.constructor, :F_ext) && return propagate(sim, x0, ny, sim.constructor[:F_ext]; stepsize, steps, nthreads, mmthreads, momenta)
     iscuda(sim) && CUDA.functional() && CUDA.reclaim()
     dim, nx = size(x0)
@@ -208,34 +209,21 @@ function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny, u::Nothing=
     ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, momenta)::Vector{Float32}
     ys = reshape(ys, dim, nx, ny)
     ys = permutedims(ys, (1, 3, 2))
-    checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
+    # checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
     return ys#convert(Array{Float32,3}, ys)
 end
 
-function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny, u; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
+function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
     iscuda(sim) && CUDA.functional() && CUDA.reclaim()
     dim, nx = size(x0)
-    xs = repeat(x0, outer=[1, ny])
-
-    ys, ws = integrate_girsanov_matrix(sim; x0=xs, steps=steps, u=u)
-    ys = reshape(ys, dim, nx, ny)
-    ws = reshape(ws, nx, ny)
-    ws = permutedims(ws, (2, 1))
-    ys = permutedims(ys, (1, 3, 2))
-    checkoverflow(ys, ws)
-    return GirsanovSamples(ys, ws)
+    ys = similar(x0, dim, ny, nx)
+    ws = ones(1, ny, nx)
+    for j in 1:nx, i in 1:ny
+        ys[:, i, j], ws[1, i, j] = langevin_girsanov!(sim; x0=x0[:, j], steps, u=sim.bias)
+    end
+    return WeightedSamples(ys, ws)
 end
 
-function integrate_girsanov_matrix(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(length(x)))
-    tuples = collect(map(eachcol(x0)) do y
-        x, g = ABOBA_langevin_girsanov!(sim; x0=Vector(y), steps=steps, u=u)
-        return (x, g)
-    end)
-
-    matrix = hcat([tuple[1] for tuple in tuples]...)
-    vector = [t[2] for t in tuples]
-    return (matrix, vector)
-end
 
 
 struct OpenMMOverflow{T} <: Exception where {T}
@@ -243,13 +231,14 @@ struct OpenMMOverflow{T} <: Exception where {T}
     select::Vector{Bool}  # flags which results are valid
 end
 
-function checkoverflow(ys, weights::Nothing, overflow=100)
+function checkoverflow(ys, overflow=100)
     select = map(eachslice(ys, dims=3)) do y
         !any(@.(abs(y) > overflow || isnan(y)))
     end
     !all(select) && throw(OpenMMOverflow(ys, select))
 end
 
+#=
 function checkoverflow(ys, weights, overflow=100)
     selectys = map(eachslice(ys, dims=3)) do y
         !any(@.(abs(y) > overflow || isnan(y)))
@@ -258,9 +247,9 @@ function checkoverflow(ys, weights, overflow=100)
         !any(@.(abs(ws - 1) > 0.5))
     end
     select = min(selectys, selectws)
-    !all(select) && throw(OpenMMOverflow(GirsanovSamples(ys, weights), select))
+    !all(select) && throw(OpenMMOverflow(WeightedSamples(ys, weights), select))
 end
-
+=#
 
 """
     trajectory(s::OpenMMSimulation, x0, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads)
@@ -418,6 +407,8 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
 end
 
 
+### CUSTOM INTEGRATORS
+
 """
     integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
 
@@ -427,12 +418,12 @@ Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for exte
 - saveevery: If `nothing`, returns just the last point, otherwise returns an array saving every `saveevery` frame.
 """
 function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing)
+    # we use the default openmm units, i.e. nm, ps
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
     kBT = 0.008314463 * temp(sim)
-    dt = stepsize(sim) # sim.step is in picosecond, we calculate in picoseconds
-    steps = steps
-    gamma = friction(sim) # convert 1/ps = 1000/ns
+    dt = stepsize(sim)
+    gamma = friction(sim)
     m = repeat(masses(sim), inner=3)
     out = isnothing(saveevery) ? x : similar(x, length(x), cld(steps, saveevery))
 
@@ -483,8 +474,8 @@ function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
     return dg
 end
 
-
-function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(length(x)))
+function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(length(x)))
+    # ABOBA scheme from from https://pubs.acs.org/doi/full/10.1021/acs.jpcb.4c01702
     kB = 0.008314463
     dt = stepsize(sim)
     ξ = friction(sim)
@@ -493,6 +484,8 @@ function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), step
 
     # Maxwell-Boltzmann distribution
     p = randn(length(M)) .* sqrt.(M .* kB .* T)
+
+    σ = @. sqrt(2 * kB * T * ξ * M)
 
     t2 = dt / 2
     a = @. t2 / M # eq 18
@@ -507,7 +500,7 @@ function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), step
     for k in 1:steps
         randn!(η)
         @. q += a * p # A
-        F = u(q, ones(size(q))) # perturbation force ∇U_bias = -F
+        F = u(q; t=(k - 1) * dt, sigma=σ) # perturbation force ∇U_bias = -F
         @. Δη = (d + 1) / f * dt / 2 * F
         g += η' * Δη + Δη' * Δη / 2
         F .+= force(sim, q) # total force: -∇V - ∇U_bias
@@ -518,7 +511,6 @@ function ABOBA_langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), step
         @. p += b  # B
         @. q += a * p # A
     end
-
     return q, exp(-g)
 end
 

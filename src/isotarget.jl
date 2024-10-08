@@ -1,5 +1,11 @@
 ### ISOKANN target transformations
 
+""" expectation(f, xs)
+
+Computes the expectation value of `f` over `xs`.
+"""
+expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
+
 """
     TransformPseudoInv(normalize, direct, eigenvecs, permute)
 
@@ -17,17 +23,12 @@ If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi))
     permute::Bool = true
 end
 
-function isotarget(model, xs::S, ys, t::TransformPseudoInv; weights=nothing) where {S}
+function isotarget(model, xs::S, ys, t::TransformPseudoInv) where {S}
     (; normalize, direct, eigenvecs, permute) = t
     chi = model(xs) |> cpu
     @assert size(chi, 1) > 1 "TransformPseudoInv does not work with one dimensional chi functions"
 
-    cs = model(ys)::AbstractArray{<:Number,3}
-    if (!isnothing(weights))
-        kchi = StatsBase.mean((cs.*weights)[:,:,:], dims=2)[:, 1, :] |> cpu
-    else
-        kchi = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :] |> cpu
-    end
+    kchi = expectation(model, ys) |> cpu
 
     kchi_inv = try
         pinv(kchi)
@@ -71,12 +72,9 @@ function myisa(X)
 end
 
 function isotarget(model, xs::T, ys, t::TransformISA) where {T}
-    chi = model(xs)
+    chi = model(xs) |> cpu
     @assert size(chi, 1) > 1 "TransformISA does not work with one dimensional chi functions"
-    cs = model(ys)
-    ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
-    ks = cpu(ks)
-    chi = cpu(chi)
+    ks = expectation(model, ys) |> cpu
     target = myisa(ks')' * ks
     t.permute && (target = fixperm(target, chi))
     return T(target)
@@ -87,19 +85,14 @@ end
 Classical 1D shift-scale (ISOKANN 1) """
 struct TransformShiftscale end
 
-function isotarget(model, xs, ys, t::TransformShiftscale, ; weights=nothing, shiftscale=false)
-    cs = model(ys)
-    @assert size(cs, 1) == 1 "TransformShiftscale only works with one dimensional chi functions"
-    if (!isnothing(weights))
-        weights = reshape(weights, 1, size(weights, 1), size(weights, 2))
-        weights = Flux.gpu(weights)
-        ks = StatsBase.mean((cs.*weights)[:,:,:], dims=2)[:, 1, :]
-    else
-        ks = StatsBase.mean(cs[:, :, :], dims=2)[:, 1, :]
-    end
+function isotarget(model, xs, ys, t::TransformShiftscale; shiftscale=false)
+    ks = expectation(model, ys)
+    @assert size(ks, 1) == 1 "TransformShiftscale only works with one dimensional chi functions"
+
     min, max = extrema(ks)
     max > min || throw(DomainError("Could not compute the shift-scale. chi function is constant"))
     target = (ks .- min) ./ (max - min)
+    # TODO: find another solution for this, this is not typestable
     if (shiftscale)
         shift = min / (min + 1 - max)
         lambda = max-min

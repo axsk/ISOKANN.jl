@@ -47,12 +47,11 @@ A struct combining a simulation with the simulated coordinates and corresponding
 - `featurizer::F`: A function mapping coordinates to ISOKANN features.
 
 """
-mutable struct SimulationData{S,D,C,F,W}
+mutable struct SimulationData{S,D,C,F}
     sim::S
     features::D
     coords::C
     featurizer::F
-    weights::W
 end
 
 
@@ -66,53 +65,26 @@ Generates SimulationData from a simulation with either
 - `xs` as initial points and `nk` Koopman sample
 - `xs` as inintial points and `ys` as Koopman samples
 """
-
-SimulationData(sim::S, features::D, coords::C, featurizer::F) where {S, D, C, F} = SimulationData(sim, features, coords, featurizer, nothing)
-
 SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, randx0(sim, nx), nk; kwargs...)
 
-function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; u=nothing, kwargs...)
-    local ys
-    try
-        ys = propagate(sim, xs, nk, u)
-    catch e
-        if e isa OpenMM.OpenMMOverflow
-            nx = size(xs, 2)
-            xs = xs[:, e.select]
-            println(typeof(e.result))
-            if (e.result isa GirsanovSamples)
-                ys = GirsanovSamples(e.result.ys[:, :, e.select], e.result.weights[:, e.select])
-            else
-                ys = e.result[:, :, e.select]
-            end
-            @warn "SimulationData: discarded $(nx-sum(e.select))/$nx starting points due to simulation errors."
-            if sum(e.select) == 0
-                return sim
-            end
-        else
-            rethrow(e)
-        end
-    end
-    if (ys isa GirsanovSamples)
-        SimulationData(sim, (xs, ys.ys); kwargs..., weights=ys.weights)
-    else
-        SimulationData(sim, (xs, ys); kwargs...)
-    end
+function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...)
+    ys = propagate(sim, xs, nk)
+    SimulationData(sim, (xs, ys); kwargs...)
 end
 
 
-# Fixed for Girsanov 
-function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim), weights=nothing)
+
+function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim))
     coords = (xs, ys)
-    features = featurizer.(coords)
-    return SimulationData(sim, features, coords, featurizer, weights)
+    features = (featurizer(xs), fmap(featurizer, ys)) # fmap preserves girsanov weights
+    return SimulationData(sim, features, coords, featurizer)
 end
 
 #features(sim::SimulationData, x) = sim.featurizer(x)
 
-gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), d.coords, d.featurizer, d.weights)
-cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), d.coords, d.featurizer, d.weights)
+gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), d.coords, d.featurizer)
+cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), d.coords, d.featurizer)
 
 function features(d::SimulationData, x)
     d.features[1] isa CuArray && (x = cu(x))
@@ -127,7 +99,7 @@ Base.length(d::SimulationData) = size(d.features[1], 2)
 Base.lastindex(d::SimulationData) = length(d)
 
 # facilitates easy indexing into the data, returning a new data object
-Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer, getobs(d.weights, i))
+Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
 
 MLUtils.getobs(d::SimulationData) = d.features
 
@@ -160,9 +132,8 @@ function mergedata(d1::SimulationData, d2::SimulationData)
     else
         d1.featurizer.(d2.coords)
     end
-    weights = hcat(d1.weights, d2.weights)
     features = lastcat.(d1.features, d2f)
-    return SimulationData(d1.sim, features, coords, d1.featurizer, weights)
+    return SimulationData(d1.sim, features, coords, d1.featurizer)
 end
 
 @deprecate Base.merge(d1::SimulationData, d2::SimulationData) mergedata(d1, d2) false
@@ -191,8 +162,7 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
     dim, nk, _ = size(fs)
     fs, cs = flattenlast.((fs, cs))
     idxs = subsample_inds(model, fs, n; keepedges)
-    xs = cs[:, idxs]
-    return xs;
+    return cs[:, idxs]
 end
 
 
@@ -202,7 +172,7 @@ function resample_kde(data, model, n; padding=0.0, bandwidth=0.02)
     chiy = data.features[2] |> model |> vec |> cpu
     needles = kde_needles(chix, n; padding, bandwidth)
     inds = pickclosest(chiy, needles)
-    ys = data.coords[2] |> flattenlast
+    ys = values(data.coords[2]) |> flattenlast
     newdata = addcoords(data, ys[:, inds])
     return newdata
 end
@@ -215,8 +185,8 @@ function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
         io, """
         SimulationData(;
             sim=$(simstr),
-            features=$(size.(d.features)), $(split(string(typeof(d.features[1])),",")[1]),
-            coords=$(size.(d.coords)), $(split(string(typeof(d.coords[1])),",")[1]),
+            features=$(size.(d.features)), $(typeof(d.features[2]).name.name),
+            coords=$(size.(d.coords)), $(typeof(d.coords[2]).name.name),
             featurizer=$(d.featurizer))"""
     )
 end

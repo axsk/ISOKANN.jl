@@ -6,7 +6,7 @@ using ForwardDiff
 g = (x, y) -> zeros(size(x,1))
 
 sim = OpenMMSimulation(
-    steps=10000,
+    steps=100,
     temp=25 + 272.15,
     featurizer=x -> ISOKANN.flatpairdists(x),
     minimize=false,
@@ -43,15 +43,15 @@ function addcoordsControl(d::SimulationData, coords::AbstractMatrix, u)
 end
 opt = ISOKANN.NesterovRegularized(1e-3, 1e-3)
 iso = Iso(sim, nx=10, nk=1; opt=opt)
-generations = 3
+generations = 30
 for g in 1:generations
     run!(iso, 500)
     cpumodel = cpu(iso.model)
     ## compute the shift scale
 
     xs, ys = ISOKANN.getobs(iso.data)
-    @show _, s, l = ISOKANN.isotarget(iso.model, xs, ys, iso.transform; weights=iso.data.weights, shiftscale=true)
-
+    _, s, l = ISOKANN.isotarget(iso.model, xs, ys, iso.transform; weights=iso.data.weights, shiftscale=true)
+    @show s, l
     u = (x, sigma) -> control(x, 0.002, 1, sigma, y -> abs(first(cpumodel(iso.data.featurizer(y)))), min(log(l), 0), s, 0.1)    
     @time iso.data = adddata(iso.data, iso.model, 4, u)
     plot_training(iso)

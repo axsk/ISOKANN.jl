@@ -9,24 +9,7 @@ We represent data as a tuple of xs and ys.
 xs is a matrix of size (d, n) where d is the dimension of the system and n the number of samples.
 ys is a tensor of size (d, k, n) where k is the number of koopman samples.
 """
-
-
-struct GirsanovSamples{T, AT, VT} <: AbstractArray{T, 3}
-    ys::AT
-    weights::VT
-    function GirsanovSamples(ys::AbstractArray{T1, 3}, weights::AbstractArray{T2, 2}) where {T1 <: AbstractFloat, T2 <: AbstractFloat}
-        size(weights) == size(ys)[2:3] || error("Inconsistent dimensions")
-        new{T1, typeof(ys), typeof(weights)}(ys, weights)
-    end
-end
-
-# DataTuple = Tuple{<:AbstractArray{T},<:GirsanovSamples{T,AbstractArray{T, 3}, AbstractArray{T, 2}}} where {T<:Number, H<:Number}
-DataTuple = Tuple{Matrix{Float64}, ISOKANN.GirsanovSamples{Float64, Array{Float64, 3}, Matrix{Float64}}}
-
-@inline Base.@propagate_inbounds Base.getindex(fooarr::GirsanovSamples, i::Int) = getindex(fooarr.ys, i)
-@inline Base.@propagate_inbounds Base.getindex(fooarr::GirsanovSamples, I::Vararg{Int, 2}) = getindex(fooarr.ys, I...)
-@inline Base.@propagate_inbounds Base.size(fooarr::GirsanovSamples) = size(fooarr.ys)
-Base.IndexStyle(::Type{<:GirsanovSamples}) = IndexLinear()
+DataTuple = Tuple{<:AbstractArray{T},<:AbstractArray{T,3}} where {T<:Number}
 
 getxs(x) = getxs(getobs(x))
 getys(x) = getys(getobs(x))
@@ -41,7 +24,7 @@ function flattenfirst(A)
 end
 
 """
-    bootstrap(sim, nx, ny) :: DataTuple
+    bootstrap(sim, nx, ny)
 
 compute initial data by propagating the molecules initial state
 to obtain the xs and propagating them further for the ys """
@@ -77,32 +60,6 @@ subsample(model, ys::AbstractArray{<:Any,3}, n) =
 
 subsample(model, data::Tuple, n) = getobs(data, subsample_inds(model, first(data), n))
 
-
-## TODO: this seems to be deprecated by addata in simulation.jl
-"""
-    adddata(data::D, model, sim, ny, lastn=1_000_000)::D
-
-Generate new data for ISOKANN by adaptive subsampling using the chi-stratified/-uniform method.
-
-1. Adaptively subsample `ny` points from `data` uniformly along their `model` values.
-2. propagate according to the simulation `model`.
-3. return the newly obtained data concatenated to the input data
-
-The subsamples are taken only from the `lastn` last datapoints in `data`.
-
-# Examples
-```julia-repl
-julia> (xs, ys) = adddata((xs,ys), chi, mollysim)
-```
-"""
-function adddata(data, model, sim, ny)
-    ny == 0 && return data
-    nk = size(last(data), 2)
-    xs = subsample(model, last(data), ny)
-    ys = propagate(sim, xs, nk)
-    return joindata(data, (xs, ys))
-end
-
 mergedata(d1::Tuple, d2::Tuple) = lastcat.(d1, d2)
 
 lastcat(x::T, y::T) where {N,T<:AbstractArray{<:Any,N}} = cat(x, y, dims=N)
@@ -125,7 +82,7 @@ end
 
 
 """
-    data_from_trajectory(xs::AbstractMatrix; reverse=false) :: DataTuple
+    data_from_trajectory(xs::AbstractMatrix; reverse=false)
 
 Generate the lag-1 data from the trajectory `xs`.
 If `reverse` is true, also take the time-reversed lag-1 data.
@@ -196,3 +153,29 @@ function exportsorted(iso, path="out/sorted.pdb")
     traj = ISOKANN.aligntrajectory(xs[:, p] |> cpu)
     save_trajectory(path, traj, top=pdbfile(iso.data))
 end
+
+
+### Weighted Samples used for Girsanov sampling
+struct WeightedSamples{T}
+    values::T
+    weights::T
+end
+
+@functor WeightedSamples (values,)
+
+# helps with gpu/cpu functor dispatch
+WeightedSamples(v::T1, w::T2) where {T1,T2} = WeightedSamples(v, T1(w))
+
+(c::Flux.Chain)(gs::ISOKANN.WeightedSamples) = c(values(gs))
+
+weights(gs::WeightedSamples) = gs.weights
+Base.values(gs::WeightedSamples) = gs.values
+Base.size(fooarr::WeightedSamples) = size(fooarr.values)
+Base.size(fooarr::WeightedSamples, dim) = size(fooarr.values, dim)
+
+lastcat(x::WeightedSamples, y::WeightedSamples) = WeightedSamples(lastcat(x.values, y.values), lastcat(x.weights, y.weights))
+
+# weighted expectation
+expectation(f, gs::WeightedSamples) = dropdims(sum(f(values(gs)) .* weights(gs); dims=2); dims=2) ./ dropdims(sum(weights(gs); dims=2); dims=2)
+
+###

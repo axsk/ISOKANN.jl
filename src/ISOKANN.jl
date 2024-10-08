@@ -25,6 +25,7 @@ using StochasticDiffEq: StochasticDiffEq
 using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 using SimpleWeightedGraphs: SimpleWeightedDiGraph
 using SparseArrays: sparse
+using Functors: @functor, fmap
 
 import Distances
 import ProgressMeter

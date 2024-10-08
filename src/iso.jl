@@ -67,7 +67,7 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
 
     for _ in 1:n
         xs, ys = getobs(iso.data)
-        target = isotarget(iso.model, xs, ys, iso.transform; weights=iso.data.weights)
+        target = isotarget(iso.model, xs, ys, iso.transform)
         for i in 1:epochs
             loss = train_batch!(iso.model, xs, target, iso.opt, iso.minibatch)
             push!(iso.losses, loss)
@@ -125,9 +125,8 @@ end
 
 chis(iso::Iso) = iso.model(getxs(iso.data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
-isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform; iso.data.weights)
+isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
-# add new datapoints to iso, starting at positions `coords`
 addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
 laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
 
