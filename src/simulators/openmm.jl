@@ -517,4 +517,34 @@ function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=step
     return q, exp(-g)
 end
 
+# optimal control for sampling of chi function with OVERDAMPED langevin
+function optcontrol(iso, forcescale=1.0)
+    sim = iso.data.sim
+
+    kB = 0.008314463
+    γ = friction(sim)
+    M = repeat(masses(sim), inner=3)
+    TT = temp(sim)
+    σ = @. sqrt(2 * kB * TT / (γ * M)) # ODL noise
+
+    _, shift, lambda = ISOKANN.isotarget(iso.model, iso.data.features[1], iso.data.features[2], iso.transform, shiftscale=true)
+    Tmax = stepsize(sim) * steps(sim)
+    q = log(lambda) / Tmax
+    b = shift
+    @assert q <= 0
+
+    χ(x) = ISOKANN.chicoords(iso, x) |> ISOKANN.myonly
+
+    function bias(x; t)
+        @show size(x)
+        λ = exp(q * (Tmax - t))
+        logψ(x) = log(λ * (χ(x) - b) + b)
+        u = σ .* only(ISOKANN.Zygote.gradient(logψ, x))
+        return forcescale .* u
+    end
+
+    return bias
+end
+
+
 end #module
