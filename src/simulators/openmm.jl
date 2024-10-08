@@ -133,6 +133,7 @@ getcoords(pysim::PyObject, momenta) = py"get_numpy_state($pysim.context, $moment
 
 iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
 iscuda(pysim::PyObject) = pysim.context.getPlatform().getName() == "CUDA"
+claim_memory(sim::OpenMMSimulation) = iscuda(sim) && CUDA.functional() && CUDA.reclaim()
 
 function createpdb(sim)
     pysim = sim.pysim
@@ -201,8 +202,7 @@ Note: For CPU we observed better performance with nthreads = num cpus, mmthreads
 With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
 function propagate(sim::OpenMMSimulation{Nothing}, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
-    haskey(sim.constructor, :F_ext) && return propagate(sim, x0, ny, sim.constructor[:F_ext]; stepsize, steps, nthreads, mmthreads, momenta)
-    iscuda(sim) && CUDA.functional() && CUDA.reclaim()
+    claim_memory(sim)
     dim, nx = size(x0)
     xs = repeat(x0, outer=[1, ny])
     xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
@@ -214,12 +214,12 @@ function propagate(sim::OpenMMSimulation{Nothing}, x0::AbstractMatrix{T}, ny; st
 end
 
 function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
-    iscuda(sim) && CUDA.functional() && CUDA.reclaim()
+    claim_memory(sim)
     dim, nx = size(x0)
     ys = similar(x0, dim, ny, nx)
     ws = ones(1, ny, nx)
     for j in 1:nx, i in 1:ny
-        ys[:, i, j], ws[1, i, j] = langevin_girsanov!(sim; x0=x0[:, j], steps, u=sim.bias)
+        ys[:, i, j], ws[1, i, j] = langevin_girsanov!(sim; x0=x0[:, j], steps, bias=sim.bias, reclaim=false)
     end
     return WeightedSamples(ys, ws)
 end
@@ -298,20 +298,20 @@ function set_random_velocities!(sim, x)
     return x
 end
 
-force(sim::OpenMMSimulation, x::CuArray) = force(sim, Array(x)) |> cu
-potential(sim::OpenMMSimulation, x::CuArray) = potential(sim, Array(x))
+force(sim::OpenMMSimulation, x::CuArray; kwargs...) = force(sim, Array(x); kwargs...) |> cu
+potential(sim::OpenMMSimulation, x::CuArray; kwargs...) = potential(sim, Array(x); kwargs...)
 masses(sim::OpenMMSimulation) = [sim.pysim.system.getParticleMass(i - 1)._value for i in 1:sim.pysim.system.getNumParticles()] # in daltons
 
-function force(sim::OpenMMSimulation, x)
-    #CUDA.reclaim() #takes 0.2s per 10000 iterations, but may avoid OOM crashes of OpenMM
+function force(sim::OpenMMSimulation, x; reclaim=true)
+    reclaim && claim_memory(sim)
     setcoords(sim, x)
     pysim = sim.pysim
     pyarray = PyArray(py"$pysim.context.getState(getForces=True).getForces(asNumpy=True)._value.reshape(-1)"o)
     return pyarray
 end
 
-function potential(sim::OpenMMSimulation, x)
-    CUDA.reclaim()
+function potential(sim::OpenMMSimulation, x; reclaim=true)
+    reclaim && claim_memory(sim)
     setcoords(sim, x)
     v = sim.pysim.context.getState(getEnergy=true).getPotentialEnergy()
     v = v.value_in_unit(v.unit)
@@ -410,14 +410,15 @@ end
 ### CUSTOM INTEGRATORS
 
 """
-    integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
+    integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
 
 Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for external forces.
 
-- F_ext: An additional force perturbation. It is expected to have the form F_ext(F, x) and mutating the provided force F.
+- bias: An additional force perturbation. It is expected to have the form bias(F, x) and mutating the provided force F.
 - saveevery: If `nothing`, returns just the last point, otherwise returns an array saving every `saveevery` frame.
 """
-function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), F_ext::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing)
+function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing, reclaim=true)
+    reclaim && claim_memory(sim)
     # we use the default openmm units, i.e. nm, ps
     x = copy(x0)
     v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
@@ -428,8 +429,8 @@ function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=step
     out = isnothing(saveevery) ? x : similar(x, length(x), cld(steps, saveevery))
 
     for i in 1:steps
-        F = force(sim, x)
-        isnothing(F_ext) || (F_ext(F, x)) # note that F_ext(F, x) is assumed to be mutating F
+        F = force(sim, x, reclaim=false)
+        isnothing(bias) || (bias(F, x)) # note that bias(F, x) is assumed to be mutating F
         langevin_step!(x, v, F, m, gamma, kBT, dt)
         isnothing(saveevery) || i % saveevery == 0 && (out[:, div(i, saveevery)] = x)
     end
@@ -442,7 +443,8 @@ function langevin_step!(x, v, F, m, gamma, kBT, dt)
     @. x += v * dt
 end
 
-function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=nothing)
+function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), bias, reclaim=true)
+    reclaim && claim_memory(sim)
     # TODO: check units on the following three lines
     kB = 0.008314463
     dt = stepsize(sim)
@@ -458,8 +460,8 @@ function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=step
     z = similar(x, length(x), steps)
 
     for i in 1:steps
-        F = force(sim, x)
-        ux = u(x)
+        F = force(sim, x, reclaim=false)
+        ux = bias(x)
         g += od_langevin_step_girsanov!(x, F, M, σ, γ, dt, ux)
         z[:, i] = x
     end
@@ -474,7 +476,8 @@ function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
     return dg
 end
 
-function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), u::Union{Function,Nothing}=x -> zeros(length(x)))
+function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), bias, reclaim=true)
+    reclaim && claim_memory(sim)
     # ABOBA scheme from from https://pubs.acs.org/doi/full/10.1021/acs.jpcb.4c01702
     kB = 0.008314463
     dt = stepsize(sim)
@@ -500,10 +503,10 @@ function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=step
     for k in 1:steps
         randn!(η)
         @. q += a * p # A
-        F = u(q; t=(k - 1) * dt, sigma=σ) # perturbation force ∇U_bias = -F
+        F = bias(q; t=(k - 1) * dt, sigma=σ) # perturbation force ∇U_bias = -F
         @. Δη = (d + 1) / f * dt / 2 * F
         g += η' * Δη + Δη' * Δη / 2
-        F .+= force(sim, q) # total force: -∇V - ∇U_bias
+        F .+= force(sim, q, reclaim=false) # total force: -∇V - ∇U_bias
 
         @. b = t2 * F
         @. p += b  # B
