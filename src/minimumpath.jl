@@ -31,8 +31,8 @@ function reactionpath_minimum(iso::Iso, x0=randomcoords(iso); steps=101, xtol=1e
     xs = energyminimization_projected(iso, x0; xtol) #|> gpu
     chi = chicoords(iso, xs) |> myonly
 
-    steps2 = floor(Int, steps * (1 - chi)) + extrasteps
-    steps1 = floor(Int, steps * chi) + extrasteps
+    steps2 = max(floor(Int, steps * (1 - chi)) + extrasteps, 0)
+    steps1 = max(floor(Int, steps * chi) + extrasteps, 0)
     stepsize = 1 / steps
 
     x1 = reactionintegrator(iso, xs; steps=steps1, stepsize, direction=-1, xtol)[:, end:-1:1]
