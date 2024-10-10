@@ -5,11 +5,12 @@ using LinearAlgebra: norm, dot, diag
 using Random: randn!
 
 import JLD2
+import ProgressMeter
 import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, getcoords, force, pdbfile,
-    force, potential, lagtime, trajectory, WeightedSamples
+    force, potential, lagtime, trajectory, laggedtrajectory, WeightedSamples
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
@@ -71,19 +72,19 @@ struct OpenMMSimulation{T} <: IsoSimulation
     steps::Int
     constructor
     bias::T
+end
 
-    function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
-        k = NamedTuple(k)
-        if haskey(k, :py)
-            @pyinclude(k.py)
-            pysim = py"simulation"
-            return new{T}(pysim, steps, k, bias)
-        elseif haskey(k, :pdb)
-            pysim = defaultsystem(; k...)
-            return new{T}(pysim, steps, k, bias)
-        else
-            return OpenMMSimulation(; pdb=DEFAULT_PDB, bias, steps, k...)
-        end
+function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
+    k = NamedTuple(k)
+    if haskey(k, :py)
+        @pyinclude(k.py)
+        pysim = py"simulation"
+        return OpenMMSimulation{T}(pysim, steps, k, bias)
+    elseif haskey(k, :pdb)
+        pysim = defaultsystem(; k...)
+        return OpenMMSimulation{T}(pysim, steps, k, bias)
+    else
+        return OpenMMSimulation(; pdb=DEFAULT_PDB, bias, steps, k...)
     end
 end
 
@@ -122,14 +123,15 @@ lagtime(sim::OpenMMSimulation) = steps(sim) * stepsize(sim) # in ps
 dim(sim::OpenMMSimulation) = length(getcoords(sim))
 defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim, momenta(sim))::Vector{Float64}
+getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector{Float64}
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, momenta(sim))
 natoms(sim::OpenMMSimulation) = div(dim(sim), 3)
 
 friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
 temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
 stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
-getcoords(pysim::PyObject, momenta) = py"get_numpy_state($pysim.context, $momenta).flatten()"
+#getcoords(pysim::PyObject, momenta) = py"get_numpy_state($pysim.context, $momenta).flatten()"
+getcoords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true).flatten()
 
 iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
 iscuda(pysim::PyObject) = pysim.context.getPlatform().getName() == "CUDA"
@@ -179,101 +181,74 @@ function FeaturesPairs(sim::OpenMMSimulation; maxdist::Number, atomfilter::Funct
     return FeaturesPairs(pairs)
 end
 
-# TODO: replace this with laggedtrajectory?
 """ generate `n` random inintial points for the simulation `mm` """
 randx0(sim::OpenMMSimulation, n) = ISOKANN.laggedtrajectory(sim, n)
 
-
 """
-    propagate(s::OpenMMSimulation, x0::AbstractMatrix{T}, ny; nthreads=Threads.nthreads(), mmthreads=1) where {T}
+    propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
 
-Propagates `ny` replicas of the OpenMMSimulation `s` from the inintial states `x0`.
+Propagates `nk` replicas of the OpenMMSimulation `sim` from the inintial states `x0`.
 
 # Arguments
-- `s`: An instance of the OpenMMSimulation type.
+- `sim`: An OpenMMSimulation object.
 - `x0`: Matrix containing the initial states as columns
-- `ny`: The number of replicas to create.
+- `nk`: The number of replicas to create.
 
-# Optional Arguments
-- `nthreads`: The number of threads to use for parallelization of multiple simulations.
-- `mmthreads`: The number of threads to use for each OpenMM simulation. Set to "gpu" to use the GPU platform.
-
-Note: For CPU we observed better performance with nthreads = num cpus, mmthreads = 1 then the other way around.
-With GPU nthreads > 1 should be supported, but on our machine lead to slower performance then nthreads=1.
 """
-function propagate(sim::OpenMMSimulation{Nothing}, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
+function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
     claim_memory(sim)
     dim, nx = size(x0)
-    xs = repeat(x0, outer=[1, ny])
-    xs = permutedims(reinterpret(Tuple{T,T,T}, xs))
-    ys = @pycall py"threadedrun"(xs, sim.pysim, stepsize, steps, nthreads, momenta)::Vector{Float32}
-    ys = reshape(ys, dim, nx, ny)
-    ys = permutedims(ys, (1, 3, 2))
-    # checkoverflow(ys)  # control the simulated data for NaNs and too large entries and throws an error
-    return ys#convert(Array{Float32,3}, ys)
-end
-
-function propagate(sim::OpenMMSimulation, x0::AbstractMatrix{T}, ny; stepsize=stepsize(sim), steps=steps(sim), nthreads=nthreads(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
-    claim_memory(sim)
-    dim, nx = size(x0)
-    ys = similar(x0, dim, ny, nx)
-    ws = ones(1, ny, nx)
-    for j in 1:nx, i in 1:ny
-        ys[:, i, j], ws[1, i, j] = langevin_girsanov!(sim; x0=x0[:, j], steps, bias=sim.bias, reclaim=false)
+    ys = isnothing(sim.bias) ? similar(x0, dim, nk, nx) : WeightedSamples(similar(x0, dim, nk, nx), zeros(1, nk, nx))
+    p = ProgressMeter.Progress(nk * nx)
+    for i in 1:nx
+        for j in 1:nk
+            ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=false)
+            ProgressMeter.next!(p)
+        end
     end
-    return WeightedSamples(ys, ws)
+    return ys
 end
 
+laggedtrajectory(sim::OpenMMSimulation, lags; steps=steps(sim), resample_velocities=true, kwargs...) =
+    trajectory(sim, lags * steps; saveevery=steps, resample_velocities, kwargs...)
 
+function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true)
+    n = div(steps, saveevery)
+    xs = similar(x0, length(x0), n)
+    int = sim.pysim.context.getIntegrator()
 
-struct OpenMMOverflow{T} <: Exception where {T}
-    result::T
-    select::Vector{Bool}  # flags which results are valid
-end
+    p = ProgressMeter.Progress(n)
+    done = 0
+    runtime = 0.0
+    lagtime = stepsize(sim) * saveevery / 1000
+    tottime = stepsize(sim) * steps / 1000
 
-function checkoverflow(ys, overflow=100)
-    select = map(eachslice(ys, dims=3)) do y
-        !any(@.(abs(y) > overflow || isnan(y)))
+    setcoords(sim, x0)
+    set_random_velocities!(sim)
+
+    try
+        for i in 1:n
+            resample_velocities && set_random_velocities!(sim)
+            runtime += @elapsed int.step(saveevery)
+            xs[:, i] = getcoords(sim)
+            done = i
+
+            simtime = round(lagtime * i, sigdigits=3)
+            showprogress && ProgressMeter.next!(p; showvalues=[("simulated time", "$simtime / $tottime ns"),
+                ("speed", "$(simtime/runtime) ns/s")])
+        end
+    catch e
+        throw && rethrow()
+        println()
+        st = (e isa InterruptException) ? "InterruptException() " : sprint(showerror, e, catch_backtrace()) * "\n"
+        @warn """$(st)during trajectory simulation.
+        Returing partial result consisting of $done samples """
+        return xs[:, 1:done]
     end
-    !all(select) && throw(OpenMMOverflow(ys, select))
-end
-
-#=
-function checkoverflow(ys, weights, overflow=100)
-    selectys = map(eachslice(ys, dims=3)) do y
-        !any(@.(abs(y) > overflow || isnan(y)))
-    end
-    selectws = map(eachslice(weights, dims=2)) do ws
-        !any(@.(abs(ws - 1) > 0.5))
-    end
-    select = min(selectys, selectws)
-    !all(select) && throw(OpenMMOverflow(WeightedSamples(ys, weights), select))
-end
-=#
-
-"""
-    trajectory(s::OpenMMSimulation, x0, steps=s.steps, saveevery=1; stepsize = s.step, mmthreads = s.mmthreads)
-
-Return the coordinates of a single trajectory started at `x0` for the given number of `steps` where each `saveevery` step is stored.
-"""
-function trajectory(sim::OpenMMSimulation; x0::AbstractVector{T}=getcoords(sim), steps=steps(sim), saveevery=1, stepsize=stepsize(sim), mmthreads=mmthreads(sim), momenta=momenta(sim)) where {T}
-    x0 = reinterpret(Tuple{T,T,T}, x0)
-    xs = py"trajectory"(sim.pysim, x0, stepsize, steps, saveevery, mmthreads, momenta)
-    xs = permutedims(xs, (3, 2, 1))
-    xs = reshape(xs, :, size(xs, 3))
     return xs
 end
 
-@deprecate trajectory(sim, x0, steps, saveevery; kwargs...) trajectory(sim; x0, steps, saveevery, kwargs...)
-
-function ISOKANN.laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim), keepstart=false)
-    steps = steps_per_lag * n_lags
-    saveevery = steps_per_lag
-    xs = trajectory(sim; x0, steps, saveevery)
-    return keepstart ? xs : xs[:, 2:end]
-end
-
-function minimize!(sim::OpenMMSimulation, coords=getcoords(sim); iter=100)
+function minimize!(sim::OpenMMSimulation, coords=getcoords(sim); iter=0)
     setcoords(sim, coords)
     return sim.pysim.minimizeEnergy(maxIterations=iter)
     return nothing
@@ -298,6 +273,11 @@ function set_random_velocities!(sim, x)
     return x
 end
 
+function set_random_velocities!(sim::OpenMMSimulation)
+    context = sim.pysim.context
+    context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
+end
+
 force(sim::OpenMMSimulation, x::CuArray; kwargs...) = force(sim, Array(x); kwargs...) |> cu
 potential(sim::OpenMMSimulation, x::CuArray; kwargs...) = potential(sim, Array(x); kwargs...)
 masses(sim::OpenMMSimulation) = [sim.pysim.system.getParticleMass(i - 1)._value for i in 1:sim.pysim.system.getNumParticles()] # in daltons
@@ -318,6 +298,11 @@ function potential(sim::OpenMMSimulation, x; reclaim=true)
 end
 
 
+"""
+    savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T})
+
+Save the given `coordinates` in a .pdb file using OpenMM
+"""
 function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}) where {T}
     coords = ISOKANN.cpu(coords)
     s = sim.pysim
@@ -342,7 +327,7 @@ function remove_H_H2O_NACL(atom)
 end
 
 function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
-    coords = reshape(getcoords(pysim, false), 3, :)
+    coords = reshape(getcoords(pysim), 3, :)
     atoms = filter(atomfilter, pysim.topology.atoms() |> collect)
     inds = map(atom -> atom.index + 1, atoms)
 
@@ -396,7 +381,9 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
     println(
         io, """
         OpenMMSimulation(;
-            pdb="$(pdbfile(sim))",
+            """#pdb="$(pdbfile(sim))",
+            *
+            """
             temp=$(temp(sim)),
             friction=$(friction(sim)),
             step=$(stepsize(sim)),
@@ -476,8 +463,16 @@ function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
     return dg
 end
 
-function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), bias, reclaim=true)
+
+trajectory(sim::OpenMMSimulation, steps=steps(sim); kwargs...) = langevin_girsanov!(sim, steps; kwargs...)
+
+function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=getcoords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true)
     reclaim && claim_memory(sim)
+    prog = ProgressMeter.Progress(steps)
+    nout = div(steps, saveevery)
+    qs = similar(x0, length(x0), nout)
+    gs = zeros(1, nout)
+
     # ABOBA scheme from from https://pubs.acs.org/doi/full/10.1021/acs.jpcb.4c01702
     kB = 0.008314463
     dt = stepsize(sim)
@@ -500,6 +495,7 @@ function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=step
     η = similar(p)
     Δη = similar(p)
     g = 0
+
     for k in 1:steps
         randn!(η)
         @. q += a * p # A
@@ -513,8 +509,18 @@ function langevin_girsanov!(sim::OpenMMSimulation; x0=getcoords(sim), steps=step
         @. p = d * p + f .* η # O
         @. p += b  # B
         @. q += a * p # A
+
+        if k % saveevery == 0
+            let i = div(k, saveevery)
+                qs[:, i] = q
+                gs[1, i] = g
+            end
+            resample_velocities && (p = randn(length(M)) .* sqrt.(M .* kB .* T))  # note that here the girsanov weights become meaningless
+        end
+
+        showprogress && ProgressMeter.next!(prog)
     end
-    return q, exp(-g)
+    return WeightedSamples(qs, exp.(-gs))
 end
 
 # optimal control for sampling of chi function with OVERDAMPED langevin
@@ -535,8 +541,7 @@ function optcontrol(iso, forcescale=1.0)
 
     χ(x) = ISOKANN.chicoords(iso, x) |> ISOKANN.myonly
 
-    function bias(x; t)
-        @show size(x)
+    function bias(x; t, sigma)
         λ = exp(q * (Tmax - t))
         logψ(x) = log(λ * (χ(x) - b) + b)
         u = σ .* only(ISOKANN.Zygote.gradient(logψ, x))

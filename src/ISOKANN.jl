@@ -28,6 +28,7 @@ using SparseArrays: sparse
 using Functors: @functor, fmap
 
 import Distances
+import Distributions
 import ProgressMeter
 import ChainRulesCore
 import Flux

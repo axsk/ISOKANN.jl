@@ -127,6 +127,7 @@ chis(iso::Iso) = iso.model(getxs(iso.data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
+# add new datapoints to iso, starting at positions `coords`
 addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
 laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
 
@@ -153,7 +154,7 @@ end
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01, kde=0, kde_padding=0)
+function runadaptive!(iso; generations=1, nx=0, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01, kde=1)
     p = ProgressMeter.Progress(generations)
     t_sim = 0.
     t_kde = 0.0
@@ -162,7 +163,7 @@ function runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf, keepedges
     for g in 1:generations
         GC.gc()
         t_sim += @elapsed adddata!(iso, nx; keepedges)
-        t_kde += @elapsed ISOKANN.resample_kde!(iso, kde; padding=kde_padding)
+        t_kde += @elapsed ISOKANN.resample_kde!(iso, kde)
 
         t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
 
@@ -282,7 +283,7 @@ end
 Save the complete Iso object to a JLD2 file """
 function save(path::String, iso::Iso)
     iso = cpu(iso)
-    JLD2.save(path, "iso", iso)
+    JLD2.jldsave(path; iso)
 end
 
 """
@@ -294,9 +295,6 @@ An OpenMMSimulation will be reconstructed anew from the saved pdb file.
 """
 function load(path::String)
     iso = JLD2.load(path, "iso")
-    if iso.data.sim isa OpenMMSimulation
-        @warn "currently only the OpenMM `defaultsystem` is supported, any custom OpenMM simulations will not be reconstructed"
-    end
     return iso
 end
 
@@ -307,3 +305,5 @@ end
 function resample_kde!(iso, ny; kwargs...)
     iso.data = resample_kde(iso.data, iso.model, ny; kwargs...)
 end
+
+getxs(iso::Iso) = iso.data.coords[1]

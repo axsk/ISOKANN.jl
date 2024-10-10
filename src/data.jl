@@ -161,6 +161,7 @@ struct WeightedSamples{T}
     weights::T
 end
 
+
 @functor WeightedSamples (values,)
 
 # helps with gpu/cpu functor dispatch
@@ -172,6 +173,13 @@ weights(gs::WeightedSamples) = gs.weights
 Base.values(gs::WeightedSamples) = gs.values
 Base.size(fooarr::WeightedSamples) = size(fooarr.values)
 Base.size(fooarr::WeightedSamples, dim) = size(fooarr.values, dim)
+MLUtils.getobs(gs::WeightedSamples, i) = WeightedSamples(gs.values[:, :, i], gs.weights[:, :, i])
+MLUtils.numobs(gs::WeightedSamples) = size(gs.values)[end]
+
+function Base.setindex!(out::ISOKANN.WeightedSamples, ws::ISOKANN.WeightedSamples, i...)
+    out.values[i...] = ws.values
+    out.weights[i...] = ws.weights
+end
 
 lastcat(x::WeightedSamples, y::WeightedSamples) = WeightedSamples(lastcat(x.values, y.values), lastcat(x.weights, y.weights))
 

@@ -29,6 +29,10 @@ end
 trajectory(sim::IsoSimulation, steps) = error("not implemented")
 laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 
+#laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim))
+#    trajectory(sim, n_lags * steps_per_lag; saveevery=steps_per_lag, x0)
+
+
 #TODO:
 
 
@@ -66,7 +70,7 @@ Generates SimulationData from a simulation with either
 - `xs` as inintial points and `ys` as Koopman samples
 """
 SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
-    SimulationData(sim, randx0(sim, nx), nk; kwargs...)
+    SimulationData(sim, values(randx0(sim, nx)), nk; kwargs...)
 
 function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...)
     ys = propagate(sim, xs, nk)
@@ -166,16 +170,18 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
 end
 
 
-function resample_kde(data, model, n; padding=0.0, bandwidth=0.02)
+function resample_kde(data::SimulationData, model, n; bandwidth=0.02)
     n == 0 && return data
     chix = data.features[1] |> model |> vec |> cpu
     chiy = data.features[2] |> model |> vec |> cpu
-    needles = kde_needles(chix, n; padding, bandwidth)
-    inds = pickclosest(chiy, needles)
+
+    iy = resample_kde(chix, chiy, n; bandwidth)
+
     ys = values(data.coords[2]) |> flattenlast
-    newdata = addcoords(data, ys[:, inds])
+    newdata = addcoords(data, ys[:, iy])
     return newdata
 end
+
 
 function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
     simstr = sprint() do io
@@ -191,22 +197,29 @@ function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
     )
 end
 
-function datasize((xs, ys)::Tuple)
-    return size(xs), size(ys)
-end
+datasize((xs, ys)::Tuple) = size(xs), size(ys)
 
+"""
+    laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
+
+Simulate a trajectory comprising of `n` simulations from the last point in `data`
+"""
 laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
+
 
 """
     trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
 
-Simulate a single long trajectory of `steps` times the lagtime and generate the corresponding ISOKANN data.
+Simulate a single long trajectory of `steps` times the lagtime and use this "chain" to generate the corresponding ISOKANN data.
 If `reverse` is true, also add the time-reversed transitions
+
+x (<)--> x (<)--> x
 """
 function trajectorydata_linear(sim::IsoSimulation, steps; reverse=false, kwargs...)
     xs = laggedtrajectory(sim, steps)
     SimulationData(sim, data_from_trajectory(xs; reverse), kwargs...)
 end
+
 
 """
     trajectorydata_bursts(sim::IsoSimulation, steps, nk; kwargs...)
@@ -215,7 +228,7 @@ Simulate a single long trajectory of `steps` times the lagtime and start `nk` bu
 
 
 x0---x----x---
-    / |  / | 
+    / |  / |
     y y  y y
 """
 function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=getcoords(sim), kwargs...)

@@ -139,7 +139,7 @@ end
 """
     save_trajectory(filename, coords::AbstractMatrix; top::String)
 
-save the trajectory given in `coords` to `filename` with the topology provided by the file `top`
+save the trajectory given in `coords` to `filename` with the topology provided by the file `top` using mdtraj.
 """
 function save_trajectory(filename, coords::AbstractMatrix; top::String)
     mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
@@ -172,7 +172,12 @@ function readchemfile(traj::Chemfiles.Trajectory, frames)
     xs = Array{Float32}(undef, length(Chemfiles.positions(frame)), length(frames))
     for (i, s) in enumerate(frames)
         Chemfiles.read_step!(traj, s - 1, frame)
-        xs[:, i] .= Chemfiles.positions(frame).data |> vec
+        try
+            xs[:, i] .= Chemfiles.positions(frame).data |> vec
+        catch e
+            i == size(xs, 2) || rethrow(e) ## hadle connect record which is not read properly by chemfiles
+            xs = xs[:, 1:end-1]
+        end
     end
     xs ./= 10 # convert from Angstrom to nm
     return xs
@@ -184,11 +189,15 @@ readchemfile(traj::Chemfiles.Trajectory, frames::Colon=:) =
 readchemfile(traj::Chemfiles.Trajectory, frame::Int) =
     readchemfile(traj, frame:frame) |> vec
 
+"""
+    writechemfile(filename, data::Array{<:Any,2}; source)
+
+Save the coordinates in `data` to `filename` with `source` as template using the Chemfiles library"""
 function writechemfile(filename, data::Array{<:Any,2}; source)
     trajectory = Chemfiles.Trajectory(source, 'r')
     try
         frame = Chemfiles.read(trajectory)
-        trajectory = Chemfiles.Trajectory(filename, 'w', uppercase(split(filename, ".")[end]))
+        trajectory = Chemfiles.Trajectory(filename, 'w')#, uppercase(split(filename, ".")[end]))
         for i in 1:size(data, 2)
             Chemfiles.positions(frame) .= reshape(data[:, i], 3, :) .* 10 # convert from nm to Angstrom
             write(trajectory, frame)
