@@ -88,6 +88,9 @@ function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
     end
 end
 
+
+# NOTE: make sure to use forcefield_kwargs=Dict(:flexibleConstraints=>true) when computing the reactive path with explicit water
+# c.f. https://github.com/openmm/openmm/issues/4670
 function defaultsystem(;
     pdb=DEFAULT_PDB,
     ligand="",
@@ -210,7 +213,8 @@ end
 laggedtrajectory(sim::OpenMMSimulation, lags; steps=steps(sim), resample_velocities=true, kwargs...) =
     trajectory(sim, lags * steps; saveevery=steps, resample_velocities, kwargs...)
 
-function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true)
+function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true, reclaim=true)
+    reclaim && claim_memory(sim)
     n = div(steps, saveevery)
     xs = similar(x0, length(x0), n)
     int = sim.pysim.context.getIntegrator()
@@ -352,15 +356,16 @@ end
 struct OpenMMSimulationSerialized
     steps
     constructor
+    bias
 end
 
 JLD2.writeas(::Type{OpenMMSimulation}) = OpenMMSimulationSerialized
 
 Base.convert(::Type{OpenMMSimulationSerialized}, sim::OpenMMSimulation) =
-    OpenMMSimulationSerialized(steps(sim), sim.constructor)
+    OpenMMSimulationSerialized(steps(sim), sim.constructor, sim.bias)
 
 Base.convert(::Type{OpenMMSimulation}, s::OpenMMSimulationSerialized) =
-    OpenMMSimulation(; steps=s.steps, s.constructor...)
+    OpenMMSimulation(; s.steps, s.bias, s.constructor...)
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
     #featstr = if sim.features isa Vector{Tuple{Int,Int}}
@@ -374,13 +379,12 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
     println(
         io, """
         OpenMMSimulation(;
-            """#pdb="$(pdbfile(sim))",
-            *
-            """
             temp=$(temp(sim)),
             friction=$(friction(sim)),
             step=$(stepsize(sim)),
-            steps=$(steps(sim))
+            steps=$(steps(sim)),
+            bias=$(sim.bias),
+            $(string(sim.constructor)[2:end-1]))
         with $(natoms(sim)) atoms"""
     )
 
@@ -537,7 +541,7 @@ function optcontrol(iso, forcescale=1.0)
     function bias(x; t, sigma)
         λ = exp(q * (Tmax - t))
         logψ(x) = log(λ * (χ(x) - b) + b)
-        u = σ .* only(ISOKANN.Zygote.gradient(logψ, x))
+        u = σ .* σ .* only(ISOKANN.Zygote.gradient(logψ, x))
         return forcescale .* u
     end
 

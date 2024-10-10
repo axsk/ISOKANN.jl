@@ -184,6 +184,6 @@ end
 lastcat(x::WeightedSamples, y::WeightedSamples) = WeightedSamples(lastcat(x.values, y.values), lastcat(x.weights, y.weights))
 
 # weighted expectation
-expectation(f, gs::WeightedSamples) = dropdims(sum(f(values(gs)) .* weights(gs); dims=2); dims=2) ./ dropdims(sum(weights(gs); dims=2); dims=2)
+expectation(f, gs::WeightedSamples) = dropdims(sum(f(values(gs)) .* weights(gs); dims=2); dims=2) ./ size(gs.values, 2)
 
 ###

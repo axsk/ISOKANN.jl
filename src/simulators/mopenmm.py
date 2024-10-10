@@ -94,7 +94,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
                 nonbondedMethod=CutoffNonPeriodic,
                 nonbondedCutoff=1*nanometer,
                 removeCMMotion=False,
-                flexibleConstraints=True,
+                #flexibleConstraints=True,
                 #rigidWater=False,
                 **forcefield_kwargs)
 
