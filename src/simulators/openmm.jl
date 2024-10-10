@@ -110,7 +110,6 @@ end
 # TODO: this are remnants of the old detailed openmm system, remove them eventually
 mmthreads(sim::OpenMMSimulation) = get(sim.constructor, :mmthreads, CUDA.functional() ? "gpu" : 1)
 nthreads(sim::OpenMMSimulation) = get(sim.constructor, :nthreads, CUDA.functional() ? 1 : Threads.nthreads())
-momenta(sim::OpenMMSimulation) = get(sim.constructor, :momenta, false)
 pdbfile(sim::OpenMMSimulation) = get(() -> createpdb(sim), sim.constructor, :pdb)
 
 steps(sim) = sim.steps::Int
@@ -124,13 +123,12 @@ dim(sim::OpenMMSimulation) = length(getcoords(sim))
 defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
 
 getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector{Float64}
-setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords, momenta(sim))
+setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
 natoms(sim::OpenMMSimulation) = div(dim(sim), 3)
 
 friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
 temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
 stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
-#getcoords(pysim::PyObject, momenta) = py"get_numpy_state($pysim.context, $momenta).flatten()"
 getcoords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true).flatten()
 
 iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
@@ -202,7 +200,7 @@ function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
     p = ProgressMeter.Progress(nk * nx)
     for i in 1:nx
         for j in 1:nk
-            ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=false)
+            ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=false, reclaim=false)
             ProgressMeter.next!(p)
         end
     end
@@ -254,15 +252,10 @@ function minimize!(sim::OpenMMSimulation, coords=getcoords(sim); iter=0)
     return nothing
 end
 
-function setcoords(sim::PyObject, coords::AbstractVector{T}, momenta) where {T}
-    if momenta
-        n = length(t) ÷ 2
-        x, v = t[1:n], t[n+1:end]
-        sim.context.setPositions(PyReverseDims(reshape(x, 3, :)))
-        sim.context.setVelocities(PyReverseDims(reshape(v, 3, :)))
-    else
-        sim.context.setPositions(PyReverseDims(reshape(coords, 3, :)))
-    end
+function setcoords(sim::PyObject, coords::AbstractVector{T}) where {T}
+    c = PyReverseDims(reshape(coords, 3, :))
+    sim.context.setPositions(c)::Nothing
+    return nothing
 end
 
 """ mutates the state in sim """
