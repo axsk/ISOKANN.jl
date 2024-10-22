@@ -16,6 +16,9 @@ export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
 export FeaturesAll, FeaturesAll, FeaturesPairs, FeaturesRandomPairs
 
+export trajectory, propagate, setcoords, getcoords, savecoords
+export atoms
+
 DEFAULT_PDB = normpath("$(@__DIR__)/../../data/systems/alanine dipeptide.pdb")
 FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
@@ -104,7 +107,8 @@ function defaultsystem(;
     ionicstrength=0.0,
     mmthreads=CUDA.functional() ? "gpu" : 1,
     forcefield_kwargs=Dict(),
-    kwargs...
+    features=nothing,
+    #kwargs...
 )
     @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, mmthreads)::PyObject
 end
@@ -262,14 +266,6 @@ function setcoords(sim::PyObject, coords::AbstractVector{T}) where {T}
     return nothing
 end
 
-""" mutates the state in sim """
-function set_random_velocities!(sim, x)
-    v = py"set_random_velocities($(sim.pysim.context))"
-    n = length(x) ÷ 2
-    x[n+1:end] = v
-    return x
-end
-
 function set_random_velocities!(sim::OpenMMSimulation)
     context = sim.pysim.context
     context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
@@ -300,7 +296,7 @@ end
 
 Save the given `coordinates` in a .pdb file using OpenMM
 """
-function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}) where {T}
+function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}=getcoords(sim)) where {T}
     coords = ISOKANN.cpu(coords)
     s = sim.pysim
     p = py"pdbfile.PDBFile"
@@ -322,6 +318,8 @@ function remove_H_H2O_NACL(atom)
         atom.residue.name in ["HOH", "NA", "CL"]
     )
 end
+
+atoms(sim::OpenMMSimulation) = collect(sim.pysim.topology.atoms())
 
 function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
     coords = reshape(getcoords(pysim), 3, :)
@@ -496,10 +494,11 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
     for k in 1:steps
         randn!(η)
         @. q += a * p # A
-        F = bias(q; t=(k - 1) * dt, sigma=σ) # perturbation force ∇U_bias = -F
-        @. Δη = (d + 1) / f * dt / 2 * F
+        F = force(sim, q, reclaim=false)
+        B = bias(q; t=(k - 1) * dt, sigma=σ, F=F) # perturbation force ∇U_bias = -F
+        @. Δη = (d + 1) / f * dt / 2 * B
         g += η' * Δη + Δη' * Δη / 2
-        F .+= force(sim, q, reclaim=false) # total force: -∇V - ∇U_bias
+        F .+= B  # total force: -∇V - ∇U_bias
 
         @. b = t2 * F
         @. p += b  # B
@@ -530,7 +529,7 @@ function optcontrol(iso, forcescale=1.0)
     TT = temp(sim)
     σ = @. sqrt(2 * kB * TT / (γ * M)) # ODL noise
 
-    _, shift, lambda = ISOKANN.isotarget(iso.model, iso.data.features[1], iso.data.features[2], iso.transform, shiftscale=true)
+    @show _, shift, lambda = ISOKANN.isotarget(iso.model, iso.data.features[1], iso.data.features[2], iso.transform, shiftscale=true)
     Tmax = stepsize(sim) * steps(sim)
     q = log(lambda) / Tmax
     b = shift
@@ -548,5 +547,14 @@ function optcontrol(iso, forcescale=1.0)
     return bias
 end
 
-
+using LinearAlgebra  # For pseudoinverse function
+function shift_and_scale(xs, ys)
+    X = [ones(length(xs)) xs]
+    X_pinv = pinv(X)
+    β = X_pinv * ys
+    bias = β[1]
+    scale = β[2]
+    limit = bias / (1 - scale)
+    return bias, scale, limit
+end
 end #module

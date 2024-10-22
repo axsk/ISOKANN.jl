@@ -73,7 +73,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
         modeller.add(lig_top.to_openmm(), lig_top.get_positions().to_openmm())
         if addwater:
             modeller.addSolvent(system_generator.forcefield, model="tip3p",
-                                padding=padding * angstroms,
+                                padding=padding * nanometer,
                                 positiveIon="Na+", negativeIon="Cl-",
                                 ionicStrength=ionicstrength * molar, neutralize=True)
         system = system_generator.create_system(modeller.topology, molecules=ligand_mol)
@@ -86,13 +86,12 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
             water_force_field = "amber/tip3p_standard.xml"
             forcefield = ForceField(*forcefields, water_force_field)
             modeller.addSolvent(forcefield, model="tip3p",
-                                padding=padding * angstroms,
+                                padding=padding * nanometer,
                                 positiveIon="Na+", negativeIon="Cl-",
                                 ionicStrength=ionicstrength * molar, neutralize=True,
                                 )
         system = forcefield.createSystem(modeller.topology,
-                nonbondedMethod=CutoffNonPeriodic,
-                nonbondedCutoff=1*nanometer,
+                nonbondedMethod=CutoffPeriodic,
                 removeCMMotion=False,
                 #flexibleConstraints=True,
                 #rigidWater=False,
