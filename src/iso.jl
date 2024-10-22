@@ -20,12 +20,12 @@ function Iso(data;
     gpu=CUDA.has_cuda(),
     autoplot=0,
     validation=nothing,
+    loggers::Vector{Any}=[],
     kwargs...)
 
     opt = Flux.setup(opt, model)
     transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
 
-    loggers = []
     autoplot > 0 && push!(loggers, ISOKANN.autoplot(autoplot))
     isnothing(validation) || push!(loggers, ValidationLossLogger(data=validation))
 
@@ -130,6 +130,8 @@ isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 # add new datapoints to iso, starting at positions `coords`
 addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
 laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
+resample_kde!(iso, ny; kwargs...) = (iso.data = resample_kde(iso.data, iso.model, ny; kwargs...))
+addcoords!(iso::Iso, ny::Integer) = addcoords!(iso, laggedtrajectory(iso.data.sim, ny, x0=iso.data.coords[1][:, end]))
 
 #Optimisers.adjust!(iso::Iso; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
 #Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
@@ -154,15 +156,14 @@ end
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=1, nx=0, iter=100, cutoff=Inf, keepedges=false, extrapolates=0, extrapolation=0.01, kde=1)
+function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, extrapolation=0.01, kde=1)
     p = ProgressMeter.Progress(generations)
-    t_sim = 0.
     t_kde = 0.0
     t_train = 0.
     t_extra = 0.0
     for g in 1:generations
         GC.gc()
-        t_sim += @elapsed adddata!(iso, nx; keepedges)
+
         t_kde += @elapsed ISOKANN.resample_kde!(iso, kde)
 
         t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
@@ -179,18 +180,12 @@ function runadaptive!(iso; generations=1, nx=0, iter=100, cutoff=Inf, keepedges=
                 (:loss, iso.losses[end]),
                 (:iterations, length(iso.losses)),
                 (:data, size(getys(iso.data))),
-                ("t_sim, t_train, t_extra, t_kde", (t_sim, t_train, t_extra, t_kde)),
+                ("t_train, t_extra, t_kde", (t_train, t_extra, t_kde)),
                 ("simulated time", "$(simulationtime(iso))"), #TODO: doesnt work with cutoff
                 (:macrorates, exit_rates(iso))],
             ignore_predictor=true)
-
-        #CUDA.reclaim()
     end
 end
-
-
-
-
 
 log!(f::Function; kwargs...) = f(; kwargs...)
 log!(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
@@ -296,14 +291,6 @@ An OpenMMSimulation will be reconstructed anew from the saved pdb file.
 function load(path::String)
     iso = JLD2.load(path, "iso")
     return iso
-end
-
-function adddata!(iso::Iso, nx; keepedges)
-    iso.data = adddata(iso.data, iso.model, nx; keepedges)
-end
-
-function resample_kde!(iso, ny; kwargs...)
-    iso.data = resample_kde(iso.data, iso.model, ny; kwargs...)
 end
 
 getxs(iso::Iso) = iso.data.coords[1]

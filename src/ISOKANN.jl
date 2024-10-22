@@ -73,7 +73,7 @@ export Iso
 export Doublewell, Triplewell, MuellerBrown
 export chis
 export SimulationData
-export addcoords
+export addcoords, addcoords!, resample_kde!, resample_kde
 export getxs, getys
 export exit_rates
 export load_trajectory, save_trajectory
@@ -83,6 +83,7 @@ export data_from_trajectory, mergedata
 export trajectorydata_bursts, trajectorydata_linear
 export reactionpath_minimum, reactionpath_ode
 export chicoords
+
 
 include("subsample.jl")  # adaptive sampling
 include("pairdists.jl")       # pair distances
