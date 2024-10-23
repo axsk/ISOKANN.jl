@@ -64,7 +64,7 @@ function plot_training(iso; subdata=nothing)
             push!(ps, l.plot())
         end
     end
-    plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)))
+    plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)), fmt=:png)
 end
 
 function plot_chi(iso; target=true)

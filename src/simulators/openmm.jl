@@ -214,9 +214,44 @@ function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
     return ys
 end
 
+"""
+    laggedtrajectory(sim::OpenMMSimulation, lags; steps=steps(sim), resample_velocities=true, kwargs...)
+
+Generate a lagged trajectory for a given OpenMMSimulation.
+E.g. x0--x--x--x  for `lags=3` and `steps=2`
+
+# Arguments
+- `sim::OpenMMSimulation`: The simulation object.
+- `lags`: The number of steps.
+- `steps`: The lagtime, i.e. number of steps to take in the simulation.
+- `resample_velocities`: Whether to resample velocities according to Maxwell-Boltzman at each step.
+- `kwargs...`: Additional keyword arguments to pass to the `trajectory` function.
+
+# Returns
+- A matrix of `lags` samples which each have `steps` simulation-steps inbetween them.
+"""
 laggedtrajectory(sim::OpenMMSimulation, lags; steps=steps(sim), resample_velocities=true, kwargs...) =
     trajectory(sim, lags * steps; saveevery=steps, resample_velocities, kwargs...)
 
+
+"""
+    trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true, reclaim=true)
+
+Simulates the trajectory of an OpenMM simulation.
+
+# Arguments
+- `sim::OpenMMSimulation{Nothing}`: The OpenMM simulation object.
+- `steps`: The number of steps to simulate. Defaults to the number of steps defined in the simulation object.
+- `saveevery`: Interval at which to save the trajectory. Defaults to 1.
+- `x0`: Initial coordinates for the simulation. Defaults to the current coordinates of the simulation object.
+- `resample_velocities`: Whether to resample velocities at the start of the simulation. Defaults to `false`.
+- `throw`: Whether to throw an error if the simulation fails. If false it returns the trajectory computed so far. Defaults to `false`.
+- `showprogress`: Whether to display a progress bar during the simulation. Defaults to `true`.
+- `reclaim`: Whether to reclaim CUDA memory before the simulation. Defaults to `true`.
+
+# Returns
+- The trajectory of the simulation as a matrix of coordinates.
+"""
 function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true, reclaim=true)
     reclaim && claim_memory(sim)
     n = div(steps, saveevery)

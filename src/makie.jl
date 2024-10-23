@@ -69,13 +69,13 @@ function plotmol(c, pysim, color=1; grad=nothing, kwargs...)
     if !isnothing(grad)
         grad = @lift($(observe(grad))[:, $i])
         plotgrad!(ax, @lift(reshape($col, 3, :)), @lift(reshape($grad, 3, :)),
-            arrowsize=0.01, lengthscale=0.2, linecolor=:red, linewidth=0.005)
+            arrowsize=0.01, lengthscale=0.2, linecolor=:red, linewidth=0.001)
     end
 
     return fig
 end
 
-function plotgrad!(ax, c::Observable{T}, dc::Observable{T}; kwargs...) where {T<:AbstractMatrix}
+function plotgrad!(ax, c::Observable{<:AbstractMatrix}, dc::Observable{<:AbstractMatrix}; kwargs...)
 
     x = @lift vec($c[1, :])
     y = @lift vec($c[2, :])
@@ -83,6 +83,9 @@ function plotgrad!(ax, c::Observable{T}, dc::Observable{T}; kwargs...) where {T<
     u = @lift vec($dc[1, :])
     v = @lift vec($dc[2, :])
     w = @lift vec($dc[3, :])
+
+    @show x[] |> size
+    @show u[] |> size
 
     arrows!(ax, x, y, z, u, v, w; kwargs...)
 end
