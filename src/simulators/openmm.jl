@@ -392,7 +392,7 @@ struct OpenMMSimulationSerialized
     bias
 end
 
-JLD2.writeas(::Type{OpenMMSimulation}) = OpenMMSimulationSerialized
+JLD2.writeas(::Type{T}) where {T<:OpenMMSimulation} = OpenMMSimulationSerialized
 
 Base.convert(::Type{OpenMMSimulationSerialized}, sim::OpenMMSimulation) =
     OpenMMSimulationSerialized(steps(sim), sim.constructor, sim.bias)
