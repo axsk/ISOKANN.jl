@@ -91,7 +91,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
                                 ionicStrength=ionicstrength * molar, neutralize=True,
                                 )
         system = forcefield.createSystem(modeller.topology,
-                nonbondedMethod=CutoffPeriodic,
+                nonbondedMethod=CutoffNonPeriodic,
                 removeCMMotion=False,
                 #flexibleConstraints=True,
                 #rigidWater=False,

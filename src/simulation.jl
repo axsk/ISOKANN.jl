@@ -149,11 +149,11 @@ end
 
 
 """
-    adddata(d::SimulationData, model, n)
+    resample_strat(d::SimulationData, model, n)
 
 χ-stratified subsampling. Select n samples amongst the provided ys/koopman points of `d` such that their χ-value according to `model` is approximately uniformly distributed and propagate them.
 Returns a new `SimulationData` which has the new data appended."""
-function adddata(d::SimulationData, model, n; keepedges=false)
+function resample_strat(d::SimulationData, model, n; keepedges=false)
     n == 0 && return d
     xs = chistratcoords(d, model, n; keepedges)
     addcoords(d, xs)

@@ -5,37 +5,36 @@ using PyCall
 
 ## Config
 
-comment = "hamilton"
+comment = "test"
 
 pdb = "data/villin nowater.pdb"
 steps = 10_000
 step = 0.002
 temp = 310
 friction = 0
-integrator = :langevinmiddle
 minimize = true
-momenta = false
 features = 0.5 # 0 => backbone only
 #forcefields = OpenMM.FORCE_AMBER_IMPLICIT  # TODO: this shouldnb be an option the way we build addwater now
-forcefields = ISOKANN.OpenMM.FORCE_AMBER
-addwater = true
-padding = 1
+forcefields = ISOKANN.OpenMM.FORCE_AMBER_IMPLICIT
+addwater = false
+padding = 0.01
 ionicstrength = 0.0
 
-nx = 10
-nchistrat = 10
+nx0 = 1000
+nx = 30
+nchistrat = 30
 nk = 1
-iter = 1000
+iter = 300
 generations = 2500
-cutoff = 20_000
+cutoff = 10_000
 
 kde_padding = 0.02
 extrapolates = 0 # *2
 extrapolate = 0.05
-keepedges = false
+keepedges = true
 
 layers = 4
-minibatch = 100
+minibatch = 1000
 opt = ISOKANN.NesterovRegularized(1e-3, 1e-4)
 
 sigma = 2
@@ -56,28 +55,10 @@ println("lagtime: $lagtime ns")
 println("simtime per generation: $simtime_per_gen ns")
 
 @time "creating system" sim = OpenMMSimulation(;
-    pdb, steps, forcefields, features, friction, step, momenta, temp, nthreads=1, mmthreads="gpu", addwater, padding, ionicstrength, minimize)
+    pdb, steps, forcefields, features, friction, step, temp, addwater, padding, ionicstrength, minimize)
 
 
-@pyimport openmm
-picosecond = openmm.unit.picosecond
-kelvin = openmm.unit.kelvin
 
-if integrator == :langevinmiddle
-    sim.pysim.context._integrator = openmm.LangevinMiddleIntegrator(sim.temp * kelvin, sim.friction / picosecond, sim.step * picosecond)
-elseif integrator == :varlangevin
-    sim.pysim.context._integrator = openmm.VariableLangevinIntegrator(sim.temp * kelvin, sim.friction / picosecond, sim.step)
-elseif integrator == :varverlet
-    sim.pysim.context._integrator = openmm.VariableVerletIntegrator(sim.step)
-elseif integrator == :nosehoover
-    sim.pysim.context._integrator = openmm.NoseHooverIntegrator(sim.temp * kelvin, sim.friction / picosecond, sim.step * picosecond)
-elseif integrator == :anderson
-    sim.pysim.context._integrator = openmm.AndersenThermostat(sim.temp * kelvin, sim.friction)
-elseif integrator == :verlet
-    sim.pysim.context._integrator = openmm.VerletIntegrator(sim.step * picosecond)
-else
-    error("unknown integrator")
-end
 
 
 data = if readdata isa String
@@ -85,12 +66,12 @@ data = if readdata isa String
         SimulationData(sim, i.data.coords)
     end
 else
-    @time "generating initial data" SimulationData(sim, nx, nk)
+    @time "generating initial data" SimulationData(sim, nx0, nk)
 end
 
 iso = Iso(data;
     opt, minibatch,
-    model=pairnet(length(sim.features); layers),
+    model=pairnet(data; layers),
     gpu=true,
     loggers=[])
 
@@ -101,26 +82,34 @@ data = nothing
 newsim = true
 simtime = ISOKANN.simulationtime(iso)
 
-for i in 1:generations
-    global simtime
+function loop()
+    for i in 1:generations
+        global simtime
 
-    GC.gc()
-    if length(iso.data) > cutoff
-        iso.data = iso.data[end-cutoff+1:end]
+        GC.gc()
+        if length(iso.data) > cutoff
+            iso.data = iso.data[end-cutoff+1:end]
+        end
+
+        #@show varinfo()
+        GC.gc()
+
+        #simtime -= ISOKANN.simulationtime(iso)
+        nchistrat > 0 && @time "chistratsampling" ISOKANN.resample_strat!(iso, nchistrat; keepedges)
+        extrapolates > 0 && @time "extrapolating" ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolate)
+        nx > 0 && @time "kde sampling" ISOKANN.resample_kde!(iso, nx)
+        #simtime += ISOKANN.simulationtime(iso)
+
+        @time "training" run!(iso, iter)
+
+        #@time "plot" plot_training(iso) |> display
+        if i % 10 == 0
+            @time "save" ISOKANN.save("vil.iso", iso)
+        end
     end
-
-    #@show varinfo()
-    GC.gc()
-
-    simtime -= ISOKANN.simulationtime(iso)
-    @time "chistratsampling" ISOKANN.adddata!(iso, nchistrat; keepedges)
-    @time "extrapolating" ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolate)
-    @time "kde sampling" ISOKANN.resample_kde!(iso, nx; padding=kde_padding)
-    simtime += ISOKANN.simulationtime(iso)
-
-    @time "training" run!(iso, iter)
-
-
+end
+loop()
+#=
     @time "saving" begin
 
         try
@@ -155,4 +144,6 @@ for i in 1:generations
 
         end
     end
+
 end
+=#

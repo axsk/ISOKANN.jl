@@ -85,7 +85,8 @@ function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
         return OpenMMSimulation{T}(pysim, steps, k, bias)
     elseif haskey(k, :pdb)
         pysim = defaultsystem(; k...)
-        return OpenMMSimulation{T}(pysim, steps, k, bias)
+        constructor = (; k..., steps, bias)
+        return OpenMMSimulation{T}(pysim, steps, constructor, bias)
     else
         return OpenMMSimulation(; pdb=DEFAULT_PDB, bias, steps, k...)
     end
@@ -272,11 +273,12 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
             resample_velocities && set_random_velocities!(sim)
             runtime += @elapsed int.step(saveevery)
             xs[:, i] = getcoords(sim)
+            @assert norm(xs[:, i]) <= 1e5
             done = i
 
             simtime = round(lagtime * i, sigdigits=3)
             showprogress && ProgressMeter.next!(p; showvalues=[("simulated time", "$simtime / $tottime ns"),
-                ("speed", "$(simtime/runtime) ns/s")])
+                ("speed", "$(simtime/runtime) ns/s"), ("norm", norm(xs[:, i]))])
         end
     catch e
         throw && rethrow()
@@ -387,18 +389,16 @@ end
 ### SERIALIZATION
 
 struct OpenMMSimulationSerialized
-    steps
     constructor
-    bias
 end
 
 JLD2.writeas(::Type{T}) where {T<:OpenMMSimulation} = OpenMMSimulationSerialized
 
 Base.convert(::Type{OpenMMSimulationSerialized}, sim::OpenMMSimulation) =
-    OpenMMSimulationSerialized(steps(sim), sim.constructor, sim.bias)
+    OpenMMSimulationSerialized(sim.constructor)
 
 Base.convert(::Type{OpenMMSimulation}, s::OpenMMSimulationSerialized) =
-    OpenMMSimulation(; s.steps, s.bias, s.constructor...)
+    OpenMMSimulation(; s.constructor...)
 
 function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
     #featstr = if sim.features isa Vector{Tuple{Int,Int}}
@@ -592,4 +592,11 @@ function shift_and_scale(xs, ys)
     limit = bias / (1 - scale)
     return bias, scale, limit
 end
-end #module
+
+function shift_and_scale(iso::ISOKANN.Iso)
+    xs = ISOKANN.expectation(iso.model, iso.data.features[1]) |> ISOKANN.cpu
+    ys = ISOKANN.expectation(iso.model, iso.data.features[2]) |> ISOKANN.cpu
+    shift_and_scale(xs, ys)
+end
+
+end#module

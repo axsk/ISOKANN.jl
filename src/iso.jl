@@ -57,7 +57,7 @@ Iso(sim::IsoSimulation; nx=100, nk=2, kwargs...) = Iso(SimulationData(sim, nx, n
 Run the training process for the Iso model.
 
 # Arguments
-- `iso::Iso`: The Iso model to train.
+a `iso::Iso`: The Iso model to train.
 - `n::Int`: The number of (outer) Koopman iterations.
 - `epochs::Int`: The number of (inner) epochs to train the model for each Koopman evaluation.
 """
@@ -132,6 +132,7 @@ addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
 laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
 resample_kde!(iso, ny; kwargs...) = (iso.data = resample_kde(iso.data, iso.model, ny; kwargs...))
 addcoords!(iso::Iso, ny::Integer) = addcoords!(iso, laggedtrajectory(iso.data.sim, ny, x0=iso.data.coords[1][:, end]))
+resample_strat!(iso, ny; kwargs...) = (iso.data = resample_strat(iso.data, iso.model, ny; kwargs...))
 
 #Optimisers.adjust!(iso::Iso; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
 #Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
@@ -214,7 +215,7 @@ function chi_exit_rate(x, Kx, tau)
     return α + β
 end
 
-chi_exit_rate(iso::Iso) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), iso.data.sim.step * iso.data.sim.steps)
+chi_exit_rate(iso::Iso) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), OpenMM.stepsize(iso.data.sim) * OpenMM.steps(iso.data.sim))
 
 
 function exit_rates(x, kx, tau)
@@ -294,3 +295,4 @@ function load(path::String)
 end
 
 getxs(iso::Iso) = iso.data.coords[1]
+getys(iso::Iso) = iso.data.coords[2]
