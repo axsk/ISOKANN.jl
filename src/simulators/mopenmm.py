@@ -56,6 +56,8 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
       platform = Platform.getPlatformByName('CPU')
       platformargs = {'Threads': str(mmthreads)}
 
+    nonbondedMethod = CutoffNonPeriodic
+
     if ligand != "":
         from openff.toolkit import Molecule
         from openmmforcefields.generators import SystemGenerator
@@ -85,13 +87,14 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
         if addwater:
             water_force_field = "amber/tip3p_standard.xml"
             forcefield = ForceField(*forcefields, water_force_field)
+            nonbondedMethod = CutoffPeriodic
             modeller.addSolvent(forcefield, model="tip3p",
                                 padding=padding * nanometer,
                                 positiveIon="Na+", negativeIon="Cl-",
                                 ionicStrength=ionicstrength * molar, neutralize=True,
                                 )
         system = forcefield.createSystem(modeller.topology,
-                nonbondedMethod=CutoffNonPeriodic,
+                nonbondedMethod=nonbondedMethod,
                 removeCMMotion=False,
                 #flexibleConstraints=True,
                 #rigidWater=False,
