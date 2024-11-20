@@ -46,7 +46,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   return trajectory
 
 # from the OpenMM documentation
-def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, flexibleConstraints = False, rigidWater=True):
+def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto"):
     pdb = PDBFile(pdb)
 
     if mmthreads == 'gpu':
@@ -55,6 +55,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
     else:
       platform = Platform.getPlatformByName('CPU')
       platformargs = {'Threads': str(mmthreads)}
+
 
     if ligand != "":
         from openff.toolkit import Molecule
@@ -83,17 +84,17 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
         forcefield = ForceField(*forcefields)
         modeller = Modeller(pdb.topology, pdb.positions)
 
-        nonbondedMethod = CutoffNonPeriodic if pdb.getTopology().getPeriodicBoxVectors() is None else CutoffPeriodic
+        nonbondedMethod = parse_nonbondedMethod(nonbondedMethod, pdb, addwater)
 
         if addwater:
             water_force_field = "amber/tip3p_standard.xml"
             forcefield = ForceField(*forcefields, water_force_field)
-            nonbondedMethod = CutoffPeriodic
             modeller.addSolvent(forcefield, model="tip3p",
                                 padding=padding * nanometer,
                                 positiveIon="Na+", negativeIon="Cl-",
                                 ionicStrength=ionicstrength * molar, neutralize=True,
                                 )
+
         system = forcefield.createSystem(modeller.topology,
                 nonbondedMethod=nonbondedMethod,
                 removeCMMotion=False,
@@ -156,3 +157,19 @@ def test():
   x0 = s.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
   threadedrun([x0], s, 500, 1)
   return s
+
+def parse_nonbondedMethod(method: str, pdb, addwater):
+    method_map = {
+        "NoCutoff": NoCutoff,
+        "CutoffNonPeriodic": CutoffNonPeriodic,
+        "CutoffPeriodic": CutoffPeriodic,
+        "Ewald": Ewald,
+        "PME": PME,
+        "LJPME": LJPME,
+        "auto": CutoffNonPeriodic if pdb.getTopology().getPeriodicBoxVectors() is None and not addwater else CutoffPeriodic
+    }
+
+    try:
+        return method_map[method]
+    except KeyError:
+        raise ValueError(f"Invalid method name: {method}. Must be one of {', '.join(method_map.keys())}.")
