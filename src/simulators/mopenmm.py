@@ -46,7 +46,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   return trajectory
 
 # from the OpenMM documentation
-def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=3, ionicstrength=0, forcefield_kwargs={}):
+def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}):
     pdb = PDBFile(pdb)
 
     if mmthreads == 'gpu':
