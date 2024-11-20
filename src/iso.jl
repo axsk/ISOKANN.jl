@@ -6,7 +6,7 @@
     data::D
     transform
     losses = Float64[]
-    loggers = [autoplot(1)]
+    loggers = Any[autoplot(1)]
     minibatch = 100
 end
 
@@ -20,7 +20,7 @@ function Iso(data;
     gpu=CUDA.has_cuda(),
     autoplot=0,
     validation=nothing,
-    loggers::Vector{Any}=[],
+    loggers=[],
     kwargs...)
 
     opt = Flux.setup(opt, model)

@@ -101,6 +101,8 @@ end
 to_pdf(f::Function) = f
 to_pdf(d::Distributions.Distribution) = x -> Distributions.pdf(d, x)
 
+import AverageShiftedHistograms
+
 function kde_needles(xs, n=10; bandwidth, target=Distributions.Uniform())
     xs = copy(xs)
     needles = similar(xs, 0)
@@ -114,4 +116,26 @@ function kde_needles(xs, n=10; bandwidth, target=Distributions.Uniform())
         push!(xs, c)
     end
     return needles
+end
+
+function resample_kde_ash(xs, ys, n=10; m=50, target=Distributions.Uniform())
+    iys = zeros(Int, n)
+    rng = 0:0.001:1
+    kde = AverageShiftedHistograms.ash(xs; rng, m)
+    #display(kde)
+    target = to_pdf(target)(rng)
+    for i in 1:n
+        @show chi = rng[argmax(target - kde.density)] # position of maximal difference to target pdf
+        min = Inf
+        local iy
+        for j in 1:length(ys)
+            if abs(ys[j] - chi) < min && !(j in iys)
+                min = abs(ys[j] - chi)
+                iy = j
+            end
+        end
+        AverageShiftedHistograms.ash!(kde, ys[iy])
+        iys[i] = iy
+    end
+    return iys
 end

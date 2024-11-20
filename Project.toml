@@ -4,6 +4,7 @@ authors = ["Sikorski <sikorski@zib.de> and contributors"]
 version = "1.0.0"
 
 [deps]
+AverageShiftedHistograms = "77b51b56-6f8f-5c3a-9cb4-d71f9594ea6e"
 Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
@@ -52,6 +53,7 @@ Molly = "aa0f7f06-fcc0-5ec4-a7f3-a573f33f9c4c"
 MollyExt = "Molly"
 
 [compat]
+AverageShiftedHistograms = "0.8.9"
 Bonito = "3.1.2"
 CUDA = "5.2.0"
 ChainRulesCore = "1.23.0"

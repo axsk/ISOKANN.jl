@@ -170,17 +170,20 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
 end
 
 
-function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=true)
+function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=false)
     n == 0 && return data
 
-    sampled = Set(eachcol(data.coords[1]))
-    selinds = unique ? [i for (i, c) in enumerate(eachcol(values(data.coords[2]) |> flattenlast)) if !(c in sampled)] : (:)
-
+    selinds = if unique
+        sampled = Set(eachcol(data.coords[1]))
+        [i for (i, c) in enumerate(eachcol(values(data.coords[2]) |> flattenlast)) if !(c in sampled)]
+    else
+        (:)
+    end
 
     chix = data.features[1] |> model |> vec |> cpu
     chiy = data.features[2] |> flattenlast |> x -> getindex(x, :, selinds) |> model |> vec |> cpu
 
-    iy = resample_kde(chix, chiy, n; bandwidth)
+    iy = resample_kde_ash(chix, chiy, n)
 
     ys = values(data.coords[2]) |> flattenlast |> x -> getindex(x, :, selinds)
     newdata = addcoords(data, ys[:, iy])
