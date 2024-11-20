@@ -125,7 +125,7 @@ function resample_kde_ash(xs, ys, n=10; m=50, target=Distributions.Uniform())
     #display(kde)
     target = to_pdf(target)(rng)
     for i in 1:n
-        @show chi = rng[argmax(target - kde.density)] # position of maximal difference to target pdf
+        chi = rng[argmax(target - kde.density)] # position of maximal difference to target pdf
         min = Inf
         local iy
         for j in 1:length(ys)
