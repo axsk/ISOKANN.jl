@@ -102,16 +102,15 @@ function defaultsystem(;
     temp=310, # kelvin
     friction=1,  # 1/picosecond
     step=0.002, # picoseconds
-    minimize=false,
     addwater=false,
-    padding=3,
+    minimize=addwater,
+    padding=1,
     ionicstrength=0.0,
     mmthreads=CUDA.functional() ? "gpu" : 1,
     forcefield_kwargs=Dict(),
-    features=nothing,
-    #kwargs...
+    kwargs...
 )
-    @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, mmthreads)::PyObject
+    @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, mmthreads, kwargs...)::PyObject
 end
 
 
@@ -153,7 +152,7 @@ end
 
 featurizer(sim::OpenMMSimulation) = featurizer(sim, get(sim.constructor, :features, nothing))
 
-featurizer(sim, ::Nothing) = natoms(sim) < 100 ? FeaturesAll() : error("No default featurizer specified")
+featurizer(sim, ::Nothing) = natoms(sim) < 100 ? FeaturesAll() : error("No default featurizer specified. Specify any of FeaturesAll, FeaturesAtoms, FeaturesCoords, FeaturesPairs")
 featurizer(sim, atoms::Vector{Int}) = FeaturesAtoms(atoms)
 featurizer(sim, pairs::Vector{Tuple{Int,Int}}) = FeaturesPairs(pairs)
 featurizer(sim, features::Function) = features

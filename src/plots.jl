@@ -38,7 +38,7 @@ function plot_training(iso; subdata=nothing)
 
     !isnothing(subdata) && (data = subdata)
 
-    p1 = plot(losses[1:end], yaxis=:log, title="loss", label="trainloss", xlabel="iter")
+    p1 = plot(losses, yaxis=:log, title="loss", label="trainloss", xlabel="iter", ylabel="squared loss")
 
     for v in filter(x -> isa(x, ValidationLossLogger), iso.loggers)
         p1 = plot!(v.iters, v.losses, label="validation")

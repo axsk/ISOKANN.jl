@@ -77,6 +77,7 @@ export addcoords, addcoords!, resample_kde!, resample_kde
 export getxs, getys
 export exit_rates
 export load_trajectory, save_trajectory
+export savecoords
 export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
 export data_from_trajectory, mergedata

@@ -46,7 +46,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   return trajectory
 
 # from the OpenMM documentation
-def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}):
+def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, flexibleConstraints = False, rigidWater=True):
     pdb = PDBFile(pdb)
 
     if mmthreads == 'gpu':
@@ -55,8 +55,6 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
     else:
       platform = Platform.getPlatformByName('CPU')
       platformargs = {'Threads': str(mmthreads)}
-
-    nonbondedMethod = CutoffNonPeriodic
 
     if ligand != "":
         from openff.toolkit import Molecule
@@ -84,6 +82,9 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
     else:
         forcefield = ForceField(*forcefields)
         modeller = Modeller(pdb.topology, pdb.positions)
+
+        nonbondedMethod = CutoffNonPeriodic if pdb.getTopology().getPeriodicBoxVectors() is None else CutoffPeriodic
+
         if addwater:
             water_force_field = "amber/tip3p_standard.xml"
             forcefield = ForceField(*forcefields, water_force_field)
@@ -96,8 +97,8 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
         system = forcefield.createSystem(modeller.topology,
                 nonbondedMethod=nonbondedMethod,
                 removeCMMotion=False,
-                #flexibleConstraints=True,
-                #rigidWater=False,
+                flexibleConstraints=flexibleConstraints,
+                rigidWater=rigidWater,
                 **forcefield_kwargs)
 
     integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
