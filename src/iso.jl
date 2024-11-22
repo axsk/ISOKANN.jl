@@ -89,6 +89,8 @@ end
     logevery = 10
 end
 
+gpu(v::ValidationLossLogger) = ValidationLossLogger(gpu(v.data), v.losses, v.iters, v.logevery)
+
 function validationloss(iso, data)
     xs, ys = getobs(data)
     kx = iso.model(xs) |> vec
@@ -137,7 +139,7 @@ resample_strat!(iso, ny; kwargs...) = (iso.data = resample_strat(iso.data, iso.m
 #Optimisers.adjust!(iso::Iso; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
 #Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
-gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, gpu.(iso.loggers), iso.minibatch)
 cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
 
 function Base.show(io::IO, mime::MIME"text/plain", iso::Iso)

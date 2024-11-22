@@ -46,7 +46,9 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
   return trajectory
 
 # from the OpenMM documentation
-def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto"):
+def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, 
+addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, 
+flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedCutoff=1):
     pdb = PDBFile(pdb)
 
     if mmthreads == 'gpu':
@@ -97,6 +99,7 @@ def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmth
 
         system = forcefield.createSystem(modeller.topology,
                 nonbondedMethod=nonbondedMethod,
+                nonbondedCutoff=nonbondedCutoff*nanometer,
                 removeCMMotion=False,
                 flexibleConstraints=flexibleConstraints,
                 rigidWater=rigidWater,

@@ -173,6 +173,7 @@ struct FeaturesPairs
     pairs::Vector{Tuple{Int,Int}}
 end
 (f::FeaturesPairs)(coords) = ISOKANN.pdists(coords, f.pairs)
+Base.show(io::IO, f::FeaturesPairs) = print(io, "FeaturesPairs() with $(length(f.pairs)) features")
 
 
 import StatsBase
@@ -396,31 +397,11 @@ JLD2.writeas(::Type{T}) where {T<:OpenMMSimulation} = OpenMMSimulationSerialized
 Base.convert(::Type{OpenMMSimulationSerialized}, sim::OpenMMSimulation) =
     OpenMMSimulationSerialized(sim.constructor)
 
-Base.convert(::Type{OpenMMSimulation}, s::OpenMMSimulationSerialized) =
+Base.convert(::Type{OpenMMSimulation{T}}, s::OpenMMSimulationSerialized) where {T<:Any} =
     OpenMMSimulation(; s.constructor...)
 
-function Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation)#
-    #featstr = if sim.features isa Vector{Tuple{Int,Int}}
-    #    "{$(length(sim.features)) pairwise distances}"
-    #else
-    #    sim.features
-    #end
-    # features=$featstr)
-    #ligand="$(sim.ligand)",
-    #        forcefields=$(sim.forcefields),
-    println(
-        io, """
-        OpenMMSimulation(;
-            temp=$(temp(sim)),
-            friction=$(friction(sim)),
-            step=$(stepsize(sim)),
-            steps=$(steps(sim)),
-            bias=$(sim.bias),
-            $(string(sim.constructor)[2:end-1]))
-        with $(natoms(sim)) atoms"""
-    )
-
-end
+Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation) =
+    print(io, "OpenMMSimulation(; $(string(sim.constructor)[2:end-1]))")
 
 
 ### CUSTOM INTEGRATORS
