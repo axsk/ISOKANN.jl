@@ -160,3 +160,22 @@ function test_fixperm(n=3)
     @show new
     norm(new - old) < 1e-9
 end
+
+struct TransformGramSchmidt end
+
+function isotarget(model, xs::T, ys, t::TransformGramSchmidt) where {T}
+    chi = model(xs)
+    dim = size(chi, 1)
+
+    if dim == 1
+        chi .-= sum(chi) ./ length(chi)
+    end
+
+    for i in 1:dim
+        for j in 1:i-1
+            chi[i, :] .-= (chi[i, :], chi[j, :]') .* chi[j, :]
+        end
+        chi[i, :] ./= norm(chi[i, :])
+    end
+    return chi
+end
