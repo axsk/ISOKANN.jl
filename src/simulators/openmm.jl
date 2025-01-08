@@ -24,10 +24,12 @@ FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber/tip3p_standard.xml"]
 
+global OPENMM
+
 function __init__()
     # install / load OpenMM
     try
-        pyimport_conda("openmm", "openmm", "conda-forge")
+        OPENMM = pyimport_conda("openmm", "openmm", "conda-forge")
         pyimport_conda("openmmforcefields", "openmmforcefields", "conda-forge")
         pyimport_conda("joblib", "joblib")
 
@@ -152,7 +154,14 @@ end
 
 featurizer(sim::OpenMMSimulation) = featurizer(sim, get(sim.constructor, :features, nothing))
 
-featurizer(sim, ::Nothing) = natoms(sim) < 100 ? FeaturesAll() : error("No default featurizer specified. Specify any of FeaturesAll, FeaturesAtoms, FeaturesCoords, FeaturesPairs")
+featurizer(sim, ::Nothing) =
+    if natoms(sim) < 100
+        FeaturesAll()
+    else
+        maxfeatures = 100
+        @warn("No default featurizer specified. Falling back to $maxfeatures random pairs")
+        FeaturesPairs(sim; maxdist=0, maxfeatures)
+    end
 featurizer(sim, atoms::Vector{Int}) = FeaturesAtoms(atoms)
 featurizer(sim, pairs::Vector{Tuple{Int,Int}}) = FeaturesPairs(pairs)
 featurizer(sim, features::Function) = features
@@ -186,6 +195,31 @@ function FeaturesPairs(sim::OpenMMSimulation; maxdist::Number, atomfilter::Funct
 
     return FeaturesPairs(pairs)
 end
+
+import BioStructures
+struct FeaturesAngles
+    struc
+end
+
+function FeaturesAngles(sim::OpenMMSimulation)
+    return FeaturesAngles(read(sim.constructor.pdb, BioStructures.PDBFormat))
+end
+
+function (f::FeaturesAngles)(coords::AbstractVector)
+    coords = reshape(coords, 3, :)
+    atoms = collectatoms(f.struc)
+    for (a, c) in zip(atoms, eachcol(coords))
+        coords!(a, c)
+    end
+    filter(!isnan, vcat(phiangles(f.struc), psiangles(f.struc)))
+end
+
+function (f::FeaturesAngles)(coords)
+    mapslices(f, coords, dims=1)
+end
+
+         
+
 
 """ generate `n` random inintial points for the simulation `mm` """
 randx0(sim::OpenMMSimulation, n) = ISOKANN.laggedtrajectory(sim, n)
@@ -225,7 +259,7 @@ E.g. x0--x--x--x  for `lags=3` and `steps=2`
 - `sim::OpenMMSimulation`: The simulation object.
 - `lags`: The number of steps.
 - `steps`: The lagtime, i.e. number of steps to take in the simulation.
-- `resample_velocities`: Whether to resample velocities according to Maxwell-Boltzman at each step.
+- `resample_velocities`: Whether to resample velocities according to Maxwell-Boltzman for each lag.
 - `kwargs...`: Additional keyword arguments to pass to the `trajectory` function.
 
 # Returns
@@ -245,7 +279,8 @@ Simulates the trajectory of an OpenMM simulation.
 - `steps`: The number of steps to simulate. Defaults to the number of steps defined in the simulation object.
 - `saveevery`: Interval at which to save the trajectory. Defaults to 1.
 - `x0`: Initial coordinates for the simulation. Defaults to the current coordinates of the simulation object.
-- `resample_velocities`: Whether to resample velocities at the start of the simulation. Defaults to `false`.
+- `sample_velocities`: Whether to sample velocities at the start of the simulation.
+- `resample_velocities`: Whether to resample velocities after each `saveevery` steps. Defaults to `false`.
 - `throw`: Whether to throw an error if the simulation fails. If false it returns the trajectory computed so far. Defaults to `false`.
 - `showprogress`: Whether to display a progress bar during the simulation. Defaults to `true`.
 - `reclaim`: Whether to reclaim CUDA memory before the simulation. Defaults to `true`.
@@ -253,7 +288,7 @@ Simulates the trajectory of an OpenMM simulation.
 # Returns
 - The trajectory of the simulation as a matrix of coordinates.
 """
-function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true, reclaim=true)
+function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), sample_velocities=true, resample_velocities=false, throw=false, showprogress=true, reclaim=true)
     reclaim && claim_memory(sim)
     n = div(steps, saveevery)
     xs = similar(x0, length(x0), n)
@@ -266,7 +301,7 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
     tottime = stepsize(sim) * steps / 1000
 
     setcoords(sim, x0)
-    set_random_velocities!(sim)
+    sample_velocities && set_random_velocities!(sim)
 
     try
         for i in 1:n
@@ -320,7 +355,9 @@ function force(sim::OpenMMSimulation, x; reclaim=true)
     return pyarray
 end
 
-function potential(sim::OpenMMSimulation, x; reclaim=true)
+potential(sim::OpenMMSimulation, x; kwargs...) = mapslices(x, dims=1) do x potential(sim, x; kwargs...) end
+
+function potential(sim::OpenMMSimulation, x::AbstractVector; reclaim=true)
     reclaim && claim_memory(sim)
     setcoords(sim, x)
     v = sim.pysim.context.getState(getEnergy=true).getPotentialEnergy()

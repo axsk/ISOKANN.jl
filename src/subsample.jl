@@ -118,7 +118,7 @@ function kde_needles(xs, n=10; bandwidth, target=Distributions.Uniform())
     return needles
 end
 
-function resample_kde_ash(xs, ys, n=10; m=50, target=Distributions.Uniform())
+function resample_kde_ash(xs, ys, n=10; m=20, target=Distributions.Uniform())
     iys = zeros(Int, n)
     rng = 0:0.001:1
     kde = AverageShiftedHistograms.ash(xs; rng, m)

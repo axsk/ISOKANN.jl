@@ -31,7 +31,7 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=getcoords(iso.data)
     source=pdbfile(iso.data),
     kwargs...)
 
-    chi = chis(iso) |> vec |> cpu
+    chi = chicoords(iso, coords) |> vec |> cpu
     ids = reactive_path(chi, coords; sigma, maxjump, kwargs...)
     if length(ids) == 0
         @warn "The computed reactive path is empty. Try adjusting the `sigma` parameter."
@@ -102,7 +102,8 @@ fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma, maxjump)
-    dxs = pairdist(xs)
+    #dxs = pairdist(xs)
+    dxs = cuda_pairwise_kabsch_dists(xs |> cu) |> cpu
     logp = finite_dimensional_distribution(dxs, xi, sigma, size(xs, 1), maxjump)
     ids = shortestpath(-logp, from, to)
     return ids

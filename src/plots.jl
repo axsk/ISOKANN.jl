@@ -235,7 +235,7 @@ function autoplot(secs=10)
         function plotcallback(; iso, subdata, kwargs...)
             p = plot_training(iso; subdata)
             try
-                display(p)
+                display("image/png", p)
             catch e
                 e isa InterruptException && rethrow(e)
                 @warn "could not print ($e)"

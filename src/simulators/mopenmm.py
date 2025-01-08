@@ -48,7 +48,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
 # from the OpenMM documentation
 def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, 
 addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, 
-flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedCutoff=1):
+flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedCutoff=1, constraints= None):
     pdb = PDBFile(pdb)
 
     if mmthreads == 'gpu':
@@ -103,6 +103,7 @@ flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedC
                 removeCMMotion=False,
                 flexibleConstraints=flexibleConstraints,
                 rigidWater=rigidWater,
+                constraints=parse_constraints(constraints),
                 **forcefield_kwargs)
 
     integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
@@ -176,3 +177,13 @@ def parse_nonbondedMethod(method: str, pdb, addwater):
         return method_map[method]
     except KeyError:
         raise ValueError(f"Invalid method name: {method}. Must be one of {', '.join(method_map.keys())}.")
+
+def parse_constraints(constraints: str):
+    constraint_map = {
+        None: None,
+        "None": None,
+        "HBonds": HBonds,
+        "AllBonds": AllBonds,
+        "HAngles": HAngles,
+    }
+    return constraint_map[constraints]

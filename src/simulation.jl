@@ -244,3 +244,13 @@ function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=getcoords(sim),
     ys = propagate(sim, xs, nk)
     SimulationData(sim, (xs, ys); kwargs...)
 end
+
+function lucadata(; path="/scratch/htc/ldonati/vilin/final/output/", nk=10, frame=1)
+    xs = readchemfile(path * "trajectory_solute.dcd")
+    dim, nx = size(xs)
+    ys = similar(xs, dim, nk, nx)
+    @showprogress for i in 1:nx, k in 1:nk
+        ys[:, k, i] = readchemfile(path * "final_states/xt_$(i-1)_r$(k-1).dcd", frame)
+    end
+    return xs, ys
+end

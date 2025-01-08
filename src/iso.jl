@@ -96,12 +96,16 @@ function validationloss(iso, data)
     kx = iso.model(xs) |> vec
     ky = StatsBase.mean(iso.model(ys), dims=2) |> vec
 
+    kx = shiftscale(kx)
+
     unit = fill!(copy(kx), 1)
     kx = hcat(kx, unit)
     ky = hcat(ky, unit)
 
+
+
     #  kx = ky * A
-    return mean(abs2, ky * (kx \ ky) - kx)
+    return mean(abs2, (ky*(ky\kx)-kx)[:, 1])
 end
 
 
@@ -126,6 +130,7 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
 end
 
 chis(iso::Iso) = iso.model(getxs(iso.data))
+chi(iso::Iso) = vec(cpu(chis(iso)))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
@@ -232,6 +237,11 @@ koopman(iso::Iso) = koopman(iso.model, getys(iso.data))
 
 exit_rates(iso::Iso) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso.data.sim))
 
+function koopman_variance(iso, ys=iso.data.coords[2])
+    chi = chicoords(iso, ys)
+    i, k, n = size(chi)
+    sum(abs2, chi .- (sum(chi, dims=2) ./ k)) ./ i ./ n
+end
 
 """
     simulationtime(iso::Iso)

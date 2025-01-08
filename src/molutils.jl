@@ -99,6 +99,42 @@ function kabsch_rmsd(p::AbstractMatrix, q::AbstractMatrix)
     norm(r * p .- q) / sqrt(size(p, 2))
 end
 
+using NNlib: batched_mul, batched_transpose
+
+function cuda_pairwise_kabsch_dists(xs)
+    d3, n = size(xs)
+    xs = reshape(xs, 3, :, n)
+    dists = similar(xs, n, n)
+    for i in 1:n
+        x = xs[:, :, i]
+        h = batched_mul(x, NNlib.batched_transpose(xs))
+        s = svd(h)
+        r = batched_mul(s.V, batched_transpose(s.U))
+        d = sqrt.(sum(abs2, batched_mul(r, x) .- xs, dims=(1, 2)) / div(d3, 3))
+        dists[:, i] .= vec(d)
+    end
+    return dists
+end
+
+function pairwise_kabsch_dists(xs)
+    d3, n = size(xs)
+    d = div(d3, 3)
+    xs = reshape(xs, 3, d, n)
+    dists = similar(xs, n, n)
+    for i in 1:n
+        for j in 1:n
+            x = @view xs[:, :, i]
+            y = @view xs[:, :, j]
+            s = svd(x * y')
+            r = s.V * s.U'
+            dists[i, j] = dists[j, i] = sqrt(sum(abs2, r * x - y) / d)
+        end
+    end
+    return dists
+end
+
+
+
 ### switch between flattened an blown up representation of 3d vectors
 function as3dmatrix(f, x...)
     flattenfirst(f(split_first_dimension.(x, 3)...))
