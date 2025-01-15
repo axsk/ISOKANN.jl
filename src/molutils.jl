@@ -79,8 +79,10 @@ centermean(x::AbstractMatrix) = x .- mean(x, dims=2)
 centermean(x::AbstractVector) = as3dmatrix(centermean, x)
 
 function align(x::AbstractMatrix, target::AbstractMatrix)
-    r = kabsch(x, target)
-    y = r * x
+    m = mean(target, dims=2)
+    x = centermean(x)
+    r = kabsch(x, target .- m)
+    y = r * x .+ m
     return y
 end
 align(x::T, target::T) where {T<:AbstractVector} = as3dmatrix(align, x, target)
@@ -94,9 +96,10 @@ function kabsch(p::AbstractMatrix, q::AbstractMatrix)
     return R
 end
 
-function kabsch_rmsd(p::AbstractMatrix, q::AbstractMatrix)
-    r = kabsch(p, q)
-    norm(r * p .- q) / sqrt(size(p, 2))
+function aligned_rmsd(p::AbstractMatrix, q::AbstractMatrix)
+    p = align(p, q)
+    n = size(p, 2)
+    norm(p - q) / sqrt(n)
 end
 
 using NNlib: batched_mul, batched_transpose
@@ -139,6 +142,8 @@ end
 function as3dmatrix(f, x...)
     flattenfirst(f(split_first_dimension.(x, 3)...))
 end
+
+as3dmatrix(x) = split_first_dimension(x, 3)
 
 function split_first_dimension(A, d)
     s1, s2... = size(A)

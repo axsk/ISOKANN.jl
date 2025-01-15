@@ -180,7 +180,7 @@ function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, 
             iso.data = iso.data[end-cutoff+1:end]
         end
 
-        t_train += @elapsed run!(iso, iter, showprogress=false)
+        t_train += @elapsed run!(iso, iter, showprogress=generations==1)
 
         ProgressMeter.next!(p;
             showvalues=() -> [
