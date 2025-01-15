@@ -79,8 +79,9 @@ function plot_chi(iso; target=true)
     elseif size(xs, 1) == 66  # TODO: dispatch on simulation
         scatter_ramachandran(xs, chi)
     else
-        scatter(chi'; ylims=autolims(chi), xlabel="#")
-        target && scatter!(isotarget(iso)' |> cpu)
+        plot()
+        target && scatter!(isotarget(iso)' |> cpu, label="SK\\chi", markerstrokewidth=0.1, markersize=2)
+        scatter!(chi'; ylims=autolims(chi), xlabel="#", label="\\chi", markerstrokewidth=0.1, markersize=2)
     end
 
 
