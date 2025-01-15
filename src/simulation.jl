@@ -180,8 +180,20 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=fal
         (:)
     end
 
+    
+
+
+
     chix = data.features[1] |> model |> vec |> cpu
     chiy = data.features[2] |> flattenlast |> x -> getindex(x, :, selinds) |> model |> vec |> cpu
+
+
+    m1 = min(minimum(chix), minimum(chiy))
+    m2 = max(maximum(chix), maximum(chiy))
+    
+    chix = (chix .- m1) ./ (m2-m1)
+    chiy = (chiy .- m1) ./ (m2 - m1)
+    
 
     iy = resample_kde_ash(chix, chiy, n)
 
