@@ -103,7 +103,7 @@ fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma, maxjump)
     #dxs = pairdist(xs)
-    dxs = cuda_pairwise_kabsch_dists(xs |> cu) |> cpu
+    dxs = pairwise_aligned_rmsd(xs |> cu) |> cpu
     logp = finite_dimensional_distribution(dxs, xi, sigma, size(xs, 1), maxjump)
     ids = shortestpath(-logp, from, to)
     return ids
