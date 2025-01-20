@@ -32,6 +32,13 @@ laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 #laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim))
 #    trajectory(sim, n_lags * steps_per_lag; saveevery=steps_per_lag, x0)
 
+Base.@kwdef mutable struct ExternalSimulation <: IsoSimulation
+    pdb = nothing
+end
+
+Base.show(io::IO, mime::MIME"text/plain", sim::ExternalSimulation) = print(io, "$(typeof(sim)) of $(sim.pdb)")
+pdbfile(sim::ExternalSimulation) = sim.pdb
+
 
 #TODO:
 
@@ -95,7 +102,7 @@ function features(d::SimulationData, x)
     return d.featurizer(x)
 end
 
-defaultmodel(d::SimulationData; kwargs...) = defaultmodel(d.sim; n=featuredim(d), kwargs...)
+defaultmodel(d::SimulationData; kwargs...) = pairnet(n=featuredim(d), kwargs...)
 featuredim(d::SimulationData) = size(d.features[1], 1)
 nk(d::SimulationData) = size(d.features[2], 2)
 

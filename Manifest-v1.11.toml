@@ -2343,9 +2343,9 @@ version = "1.1.1"
 
 [[deps.PCCAPlus]]
 deps = ["Arpack", "LinearAlgebra", "Optim", "SparseArrays"]
-path = "../PCCAPlus.jl"
+git-tree-sha1 = "7ac6cc942d16d0776fa45385aa967d264dba9f10"
 uuid = "f48fc343-7e38-490c-be15-e66d68689cd5"
-version = "1.1.2"
+version = "1.1.1"
 
     [deps.PCCAPlus.extensions]
     ArnoldiExt = "ArnoldiMethod"
