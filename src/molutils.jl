@@ -69,7 +69,7 @@ standardform(x::AbstractArray, sim::IsoSimulation) = standardform(x, rotationhan
 function aligntrajectory(traj::AbstractVector)
     aligned = [centermean(traj[1])]
     for x in traj[2:end]
-        push!(aligned, align(centermean(x), aligned[end]))
+        push!(aligned, align(x, aligned[end]))
     end
     return aligned
 end
@@ -85,7 +85,7 @@ function align(x::AbstractMatrix, target::AbstractMatrix)
     y = r * x .+ m
     return y
 end
-align(x::T, target::T) where {T<:AbstractVector} = as3dmatrix(align, x, target)
+align(x::S, target::T) where {S<:AbstractVector, T<:AbstractVector} = as3dmatrix(align, x, target)
 
 
 " compute R such that R*p is closest to q"

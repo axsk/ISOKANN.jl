@@ -38,7 +38,7 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=getcoords(iso.data)
         return ids
     end
     plot_reactive_path(ids, chi) |> display
-    path = centercoords(aligntrajectory(coords[:, ids]))
+    path = aligntrajectory(coords[:, ids])
     println("saving reactive path of length $(length(ids)) to $out")
     mkpath(dirname(out))
     save_trajectory(out, path, top=source)
@@ -102,8 +102,8 @@ fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma, maxjump)
-    #dxs = pairdist(xs)
-    dxs = pairwise_aligned_rmsd(xs |> cu) |> cpu
+    CUDA.has_cuda_gpu() && (xs = cu(xs))
+    dxs = pairwise_aligned_rmsd(xs) |> cpu
     logp = finite_dimensional_distribution(dxs, xi, sigma, size(xs, 1), maxjump)
     ids = shortestpath(-logp, from, to)
     return ids
