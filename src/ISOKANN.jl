@@ -10,7 +10,7 @@ import StochasticDiffEq, Flux, CUDA, PCCAPlus, Plots
 using ProgressMeter
 using Plots
 
-using LinearAlgebra: norm, dot, cross, diag, svd, pinv, I, schur
+using LinearAlgebra: norm, dot, cross, diag, svd, pinv, I, schur, qr
 using StatsBase: mean, sample, mean_and_std
 using StaticArrays: SVector
 using StatsBase: sample, quantile

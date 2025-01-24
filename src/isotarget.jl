@@ -7,6 +7,54 @@ Computes the expectation value of `f` over `xs`.
 expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
 
 """
+    TransformGramSchmidt()
+
+Compute the target through a Gram-Schmidt orthonormalisation.
+"""
+@kwdef struct TransformGramSchmidt
+
+end
+
+global rs = []
+
+function isotarget(model, xs, ys, t::TransformGramSchmidt)
+
+    renormalize = true
+    firstconst = true
+
+    chi = model(xs)
+    c = sqrt(size(chi, 2))
+
+    if firstconst
+        z = similar(chi, 1, size(chi, 2))
+        z .= 1
+        chi = vcat(z, chi)
+    end
+
+    renormalize && (chi ./= c)
+
+
+    q,r = qr(chi')
+    q = typeof(q).types[1](q) # convert from compact to full representation
+    #q = Matrix(q)  # orthogonal basis
+    rand() < 0.01 && display(r)
+
+    push!(rs, diag(r))
+
+    if firstconst
+        t = q'[2:end,:] .* diag(sign.(r))[2:end]
+    else
+        t = q' .* diag(sign.(r))
+    end
+
+    renormalize && (t .*= c)
+    return t
+end
+
+
+
+
+"""
     TransformPseudoInv(normalize, direct, eigenvecs, permute)
 
 Compute the target by approximately inverting the action of K with the Moore-Penrose pseudoinverse.
@@ -161,9 +209,9 @@ function test_fixperm(n=3)
     norm(new - old) < 1e-9
 end
 
-struct TransformGramSchmidt end
+struct TransformGramSchmidt1 end
 
-function isotarget(model, xs::T, ys, t::TransformGramSchmidt) where {T}
+function isotarget(model, xs::T, ys, t::TransformGramSchmidt1) where {T}
     chi = model(xs)
     dim = size(chi, 1)
 
