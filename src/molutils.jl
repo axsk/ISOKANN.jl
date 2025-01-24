@@ -104,24 +104,43 @@ end
 
 using NNlib: batched_mul, batched_transpose
 
-function pairwise_aligned_rmsd(xs::CuArray)
-    d3, n = size(xs)
-    p = div(d3, 3)
-    xs = reshape(xs, 3, p, n)
+function pairwise_aligned_rmsd(xs)
+    n = size(xs, 2)
+    xs = reshape(xs, 3, :, n)
     xs = xs .- mean(xs, dims=2)
     dists = similar(xs, n, n)
     for i in 1:n
-        x = xs[:, :, i]
-        h = batched_mul(x, batched_transpose(xs))
-        s = svd(h)
-        r = batched_mul(s.V, batched_transpose(s.U))
-        d = sqrt.(sum(abs2, batched_mul(r, x) .- xs, dims=(1, 2)) ./ p)
-        dists[:, i] .= vec(d)
+        dists[:,i] = batched_kabsch_rmsd(xs[:,:,i], xs)
     end
     return dists
 end
 
-function pairwise_aligned_rmsd(xs)
+
+function batched_kabsch_rmsd(x::AbstractMatrix, xs::AbstractArray{<:Any, 3})
+    h = batched_mul(x, batched_transpose(xs))
+    s = batched_svd(h)
+    r = batched_mul(s.V, batched_transpose(s.U))
+    d = sqrt.(sum(abs2, batched_mul(r, x) .- xs, dims=(1, 2)) ./ size(x, 2))
+    return vec(d)
+end
+
+
+batched_kabsch_rmsd(x::AbstractVector, xs::AbstractMatrix) = batched_kabsch_rmsd(reshape(x, 3, :), reshape(xs, 3, :, size(xs, 2)))
+
+
+batched_svd(x::CuArray) = svd(x)
+
+function batched_svd(x)
+    u = similar(x)
+    v = similar(x)
+    s = similar(x, size(x,2), size(x,3))
+    for i in 1:size(x, 3)
+        u[:, :, i], s[:, i], v[:, :, i] = svd(x[:, :, i])
+    end
+    return (; U=u, S=s, V=v)
+end
+
+function _pairwise_aligned_rmsd(xs)
     d3, n = size(xs)
     p = div(d3, 3)
     xs = reshape(xs, 3, p, n)

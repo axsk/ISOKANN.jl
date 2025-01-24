@@ -173,6 +173,7 @@ struct FeaturesCoords end
 struct FeaturesAll end
 (f::FeaturesAll)(coords) = ISOKANN.flatpairdists(coords)
 
+""" Pairwise distances between all provided atoms """
 struct FeaturesAtoms
     atominds::Vector{Int}
 end
