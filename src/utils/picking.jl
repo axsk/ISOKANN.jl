@@ -5,7 +5,14 @@ using ProgressMeter
 using LinearAlgebra: svd
 using ISOKANN: ISOKANN
 
+""" 
+    picking(X, n; dists = pairwise_one_to_many)
 
+The picking algorithm, i.e. greedy farthest point sampling, for `n` points on the columns of `X`.
+A custom distance function (::Vector, ::Matrix)->(::Vector) may be passed through `dists`.
+
+Returns `X[:,qs]`, i.e. the picked samples, their former indices `qs` and their distances `d` to all other points.
+"""
 function picking(X, n; dists = pairwise_one_to_many)
     @assert size(X, 2) >= n
 
@@ -25,6 +32,11 @@ function picking(X, n; dists = pairwise_one_to_many)
     return X[:, qs], qs, d
 end
 
+""" 
+    picking_aligned(x::AbstractMatrix, m::Integer)
+
+The picking algorithm using pairwise aligned distances, e.g. for molecular coordinates 
+"""
 function picking_aligned(x::AbstractMatrix, m::Integer)
     n = size(x, 2)
     x = copy(x)

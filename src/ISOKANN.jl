@@ -125,4 +125,5 @@ include("reactionpath.jl")
 include("makie.jl")
 include("bonito.jl")
 
+include("utils/picking.jl")
 end
