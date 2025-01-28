@@ -397,14 +397,14 @@ end
 atoms(sim::OpenMMSimulation) = collect(sim.pysim.topology.atoms())
 
 function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
-    coords = reshape(coords(pysim), 3, :)
+    xs = reshape(coords(pysim), 3, :)
     atoms = filter(atomfilter, pysim.topology.atoms() |> collect)
     inds = map(atom -> atom.index + 1, atoms)
 
     pairs = Tuple{Int,Int}[]
     for i in 1:length(inds)
         for j in i+1:length(inds)
-            if norm(coords[:, i] - coords[:, j]) <= radius
+            if norm(xs[:, i] - xs[:, j]) <= radius
                 push!(pairs, (inds[i], inds[j]))
             end
         end

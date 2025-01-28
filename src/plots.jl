@@ -245,11 +245,11 @@ function autoplot(secs=10)
 end
 
 function plot_reactioncoords(iso)
-    coords = coords(iso.data)
-    dim = size(coords, 1)
+    xs = coords(iso.data)
+    dim = size(xs, 1)
     if dim == 66  # alanine dipeptide
         chi = chis(iso)
-        scatter_ramachandran(coords, chi)
+        scatter_ramachandran(xs, chi)
     elseif dim == 219
         inds = (41, 49)
         inds = (20, 62)
