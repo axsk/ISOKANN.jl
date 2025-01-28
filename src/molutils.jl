@@ -327,3 +327,49 @@ function Base.getindex(l::LazyMultiTrajectory, V::Vararg)
     end
     return res
 end
+
+"""
+    struct ReactionCoordsRMSD
+
+Instances of this object allow to compute the Root Mean Square Deviation (RMSD) to a part of a reference molecule.
+See also CA_RMSD.
+"""
+struct ReactionCoordsRMSD
+    inds
+    refcoords
+end
+
+function (r::ReactionCoordsRMSD)(x::AbstractVector)
+    x = reshape(x, 3, :)[:, r.inds]
+    return ISOKANN.aligned_rmsd(x, r.refcoords)
+end
+
+(r::ReactionCoordsRMSD)(xs::AbstractMatrix) = map(r, eachcol(xs))
+(rs::Vector{ReactionCoordsRMSD})(xs::AbstractMatrix) = [r(col) for r in rs, col in eachcol(xs)] # allows to call vectors of RSMDs, returning their values as rows
+
+"""
+    ca_rmsd(cainds, pdb="data/villin nowater.pdb", pdbref="data/villin/1yrf.pdb")
+
+Returns a `ReactionCoordsRMSD` object which is used to calculate the Root Mean Square Deviation (RMSD) of the provided C-alpha atoms.
+
+Inputs:
+    - cainds: Indices of the C-alpha atoms to consider for the RMSD
+    - target: PDB File containing the target structure to which the RMSD is computed
+    - source: Alternative PDB File for the source coordinates in the case that the indices differ (i.e. when matching different topologies)
+
+Example:
+    rsmd = ca_rmsd(3:10, "data/villin/1yrf.pdb", "data/villin nowater.pdb")
+    rmsd(rand(300,10))
+"""
+function ca_rmsd(cainds::AbstractVector, target::String, source::String=target, )
+
+    ca = OpenMM.calpha_inds(OpenMMSimulation(pdb=source))
+    inds = ca[cainds]
+
+    refstruct = OpenMMSimulation(pdb=target)
+    car = OpenMM.calpha_inds(refstruct)
+    xr = getcoords(refstruct)
+    refcoords = reshape(xr, 3, :)[:, car[cainds]]
+
+    ReactionCoordsRMSD(inds, refcoords)
+end
