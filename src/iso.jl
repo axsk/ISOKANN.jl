@@ -164,7 +164,7 @@ end
 Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 """
-function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, extrapolation=0.01, kde=1)
+function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, extrapolation=0.01, kde=1, unique=true)
     p = ProgressMeter.Progress(generations)
     t_kde = 0.0
     t_train = 0.
@@ -172,7 +172,7 @@ function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, 
     for g in 1:generations
         GC.gc()
 
-        t_kde += @elapsed ISOKANN.resample_kde!(iso, kde)
+        t_kde += @elapsed ISOKANN.resample_kde!(iso, kde; unique)
 
         t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
 
