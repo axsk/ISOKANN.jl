@@ -1,4 +1,3 @@
-export getcoords
 ## Interface for simulations
 
 ## This is supposed to contain the (Molecular) system + integrator
@@ -7,7 +6,7 @@ export getcoords
     abstract type IsoSimulation
 
 Abstract type representing an IsoSimulation.
-Should implement the methods `getcoords`, `propagate`, `dim`
+Should implement the methods `coords`, `propagate`, `dim`
 
 """
 abstract type IsoSimulation end
@@ -21,16 +20,13 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::IsoSimulation)#
 end
 
 function randx0(sim::IsoSimulation, nx)
-    x0 = reshape(getcoords(sim), :, 1)
+    x0 = reshape(coords(sim), :, 1)
     xs = reshape(propagate(sim, x0, nx), :, nx)
     return xs
 end
 
 trajectory(sim::IsoSimulation, steps) = error("not implemented")
 laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
-
-#laggedtrajectory(sim::OpenMMSimulation, n_lags, steps_per_lag=steps(sim); x0=getcoords(sim))
-#    trajectory(sim, n_lags * steps_per_lag; saveevery=steps_per_lag, x0)
 
 Base.@kwdef mutable struct ExternalSimulation <: IsoSimulation
     pdb = nothing
@@ -112,18 +108,15 @@ Base.lastindex(d::SimulationData) = length(d)
 # facilitates easy indexing into the data, returning a new data object
 Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
 
-MLUtils.getobs(d::SimulationData) = d.features
-
-getcoords(d::SimulationData) = d.coords[1]
-
-#getcoords(d::SimulationData) = d.coords[1]
-#getkoopcoords(d::SimulationData) = d.coords[2]
-#getfeatures(d::SimulationData) = d.features[1]
-#getkoopfeatures(d::SimulationData) = d.features[2]
-
+@deprecate getcoords coords
+coords(d::SimulationData) = d.coords[1]
+features(d::SimulationData) = d.features[1]
+propcoords(d::SimulationData) = d.coords[2]
+propfeatures(d::SimulationData) = d.features[2]
 
 flattenlast(x) = reshape(x, size(x, 1), :)
 
+MLUtils.getobs(d::SimulationData) = d.features
 getxs(d::SimulationData) = getxs(d.features)
 getys(d::SimulationData) = getys(d.features)
 
@@ -258,7 +251,7 @@ x0---x----x---
     / |  / |
     y y  y y
 """
-function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=getcoords(sim), kwargs...)
+function trajectorydata_bursts(sim::IsoSimulation, steps, nk; x0=coords(sim), kwargs...)
     xs = laggedtrajectory(sim, steps; x0)
     ys = propagate(sim, xs, nk)
     SimulationData(sim, (xs, ys); kwargs...)

@@ -368,7 +368,7 @@ function ca_rmsd(cainds::AbstractVector, target::String, source::String=target, 
 
     refstruct = OpenMMSimulation(pdb=target)
     car = OpenMM.calpha_inds(refstruct)
-    xr = getcoords(refstruct)
+    xr = coords(refstruct)
     refcoords = reshape(xr, 3, :)[:, car[cainds]]
 
     ReactionCoordsRMSD(inds, refcoords)

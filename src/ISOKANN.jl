@@ -85,6 +85,7 @@ export trajectorydata_bursts, trajectorydata_linear
 export reactionpath_minimum, reactionpath_ode
 export chicoords
 export ca_rmsd
+export coords, features, propcoords, propfeatures
 
 
 include("subsample.jl")  # adaptive sampling

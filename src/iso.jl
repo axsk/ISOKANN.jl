@@ -258,12 +258,12 @@ end
 simulationtime(iso::Iso) = simulationtime(iso.data)
 
 """
-    savecoords(path::String, iso::Iso, coords::AbstractMatrix=getcoords(iso.data); sorted=true, aligned=true)
+    savecoords(path::String, iso::Iso, coords::AbstractMatrix=coords(iso.data); sorted=true, aligned=true)
 
 Save the coordinates of the specified matrix of coordinates to a file, using the molecule in `iso` as a template.
 If `sorted` the sort the coordinates by their increasing χ value. If `align` then align each frame to the previous one.
 """
-function savecoords(path::String, iso::Iso, coords::AbstractMatrix=getcoords(iso.data); sorted=true, aligned=true)
+function savecoords(path::String, iso::Iso, coords::AbstractMatrix=coords(iso.data); sorted=true, aligned=true)
     if sorted
         coords = coords[:, cpu(sortperm(dropdims(chicoords(iso, coords), dims=1)))]
     end

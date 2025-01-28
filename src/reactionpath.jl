@@ -1,6 +1,6 @@
 """
     save_reactive_path(iso::Iso,
-        coords::AbstractMatrix=getcoords(iso.data) |> cpu;
+        coords::AbstractMatrix=coords(iso.data) |> cpu;
         sigma=1,
         maxjump=1,
         out="out/reactive_path.pdb",
@@ -24,7 +24,7 @@ See also `reactive_path`.
 - `ids`: The IDs of the reactive path.
 
 """
-function save_reactive_path(iso::Iso, coords::AbstractMatrix=getcoords(iso.data) |> cpu;
+function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |> cpu;
     sigma=1,
     maxjump=1,
     out="out/reactive_path.pdb",
@@ -67,7 +67,7 @@ function reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, maxjum
     return ids
 end
 
-reactive_path(iso::Iso; kwargs...) = reactive_path(chis(iso) |> vec |> cpu, getcoords(iso.data); kwargs...)
+reactive_path(iso::Iso; kwargs...) = reactive_path(chis(iso) |> vec |> cpu, coords(iso.data); kwargs...)
 
 # heuristic whether a sequence is increasing
 isincreasing(x) = sum(diff(x) .> 0) > length(x) / 2

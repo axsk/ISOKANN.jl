@@ -111,7 +111,7 @@ function reactionpath_ode(iso, x0; steps=101, minimize=false, extrapolate=0, ort
 end
 
 function randomcoords(iso)
-    c = getcoords(iso.data)
+    c = coords(iso.data)
     n = size(c, 2)
     c[:, rand(1:n)]
 end

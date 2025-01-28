@@ -148,7 +148,7 @@ uniqueidx(v) = unique(i -> v[i], eachindex(v))
 function exportsorted(iso, path="out/sorted.pdb")
     xs = ISOKANN.getxs(iso.data)
     p = iso.model(xs) |> vec |> sortperm
-    xs = ISOKANN.getcoords(iso.data)
+    xs = ISOKANN.coords(iso.data)
     println("saving sorted data to $path")
     traj = ISOKANN.aligntrajectory(xs[:, p] |> cpu)
     save_trajectory(path, traj, top=pdbfile(iso.data))

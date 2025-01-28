@@ -25,7 +25,7 @@ onlychanges(x) = x
 
 observe(x) = x isa Observable ? x : Observable(x)
 
-function visgradients(iso::Iso, x=getcoords(iso.data))
+function visgradients(iso::Iso, x=coords(iso.data))
     dx = mapreduce(hcat, eachcol(x)) do c
         ISOKANN.dchidx(iso, c)
     end
@@ -37,9 +37,9 @@ plotmol(iso::Iso; kwargs...) = plotmol(Observable(iso); kwargs...)
 
 function plotmol(o::Observable{<:Iso}; kwargs...)
     iso = o[]
-    c = Observable(getcoords(iso.data))
+    c = Observable(coords(iso.data))
     on(o) do val
-        c[] = getcoords(iso.data)
+        c[] = coords(iso.data)
     end
     plotmol(c, iso.data.sim.pysim; kwargs...)
 end
