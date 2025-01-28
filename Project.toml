@@ -1,7 +1,7 @@
 name = "ISOKANN"
 uuid = "512544ac-929d-4ba3-aa9d-55e9313a4b47"
 authors = ["Sikorski <sikorski@zib.de> and contributors"]
-version = "1.0.0"
+version = "1.1.0"
 
 [deps]
 AverageShiftedHistograms = "77b51b56-6f8f-5c3a-9cb4-d71f9594ea6e"
