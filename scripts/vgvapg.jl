@@ -48,7 +48,7 @@ end
 ISOKANN.exportsorted(iso, "out/sorted.pdb")
 
 # plot the learned reaction coordinate against the distance between the outer carbons
-scatter(chis(iso) |> vec |> cpu, ISOKANN.getxs(iso.data)[2416, :] |> vec |> cpu)
+scatter(chis(iso) |> vec |> cpu, coords(iso.data)[2416, :] |> vec |> cpu)
 
 # extract the reactive path from the sampling data
 save_reactive_path(iso, out="out/reactivepath.pdb", sigma=0.5)
@@ -59,11 +59,11 @@ function scatter_rc(iso, a, b)
   natoms = div(ISOKANN.dim(iso.data.sim), 3)
   hi = ISOKANN.halfinds(natoms)
   i = findfirst(i -> i == CartesianIndex(a, b), hi)
-  scatter(ISOKANN.getxs(iso.data)[i, :] |> vec |> cpu, chis(iso) |> vec |> cpu, xlabel="distance $((a,b))", ylabel="χ")
+  scatter(features(iso.data)[i, :] |> vec |> cpu, chis(iso) |> vec |> cpu, xlabel="distance $((a,b))", ylabel="χ")
 end
 
 function cor_rc(iso)
-  c = cor(ISOKANN.getxs(iso.data) |> cpu, ISOKANN.chis(iso) |> cpu, dims=2) |> vec
+  c = cor(features(iso.data) |> cpu, ISOKANN.chis(iso) |> cpu, dims=2) |> vec
   inds = sortperm(c, rev=true)
   natoms = div(ISOKANN.dim(iso.data.sim), 3)
   hi = ISOKANN.halfinds(natoms)

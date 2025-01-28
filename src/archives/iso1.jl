@@ -90,7 +90,7 @@ function Optimisers.setup(iso::IsoRun)
 end
 
 Base.extrema(iso::IsoRun) = extrema(chis(iso))
-chis(iso::IsoRun) = iso.model(getxs(iso.data))
+chis(iso::IsoRun) = iso.model(features(iso.data))
 
 """ run the given `IsoRun` object """
 function run!(iso::IsoRun; showprogress=true)

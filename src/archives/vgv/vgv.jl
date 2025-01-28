@@ -40,7 +40,7 @@ end
 MLUtils.getobs(v::VGVData) = v.data
 
 pdbfile(v::VGVData) = joinpath(v.dir, "input/initial_states/x0_1.pdb")
-getcoords(v::VGVData) = v.coords :: AbstractMatrix
+coords(v::VGVData) = v.coords :: AbstractMatrix
 
 function reactioncoord(v::VGVData)
   i = findfirst(CartesianIndex(1,71).==halfinds(73))
@@ -118,7 +118,7 @@ end
 function save_sorted_path(iso, v::VGVData, path="out/vgv/chisorted.pdb")
   source = pdbfile(v)
   i = sortperm(chis(iso) |> cpu |> vec)
-  xs = aligntrajectory(getcoords(v)[:,  i])
+  xs = aligntrajectory(coords(v)[:,  i])
   println("saved sorted trajectory to $path")
   writechemfile(path, xs; source)
 end
@@ -138,7 +138,7 @@ function vgv_examplerun(v=VGV5000(nk=1), outdir="out/vgv_examplerun")
   savefig("$outdir/longtraj.png")
 
   save_sorted_path(iso, v, "$outdir/chisorted.pdb")
-  save_reactive_path(iso, getcoords(v),
+  save_reactive_path(iso, coords(v),
     sigma=1,
     out="$outdir/reactionpath.pdb",
     source=pdbfile(v))

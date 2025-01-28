@@ -37,7 +37,7 @@ function Base.show(io::IO, mime::MIME"text/plain", sim::MollyLangevin)
 end
 
 """ sample a single trajectory for the given system """
-solve(ml::MollyLangevin; kwargs...) = reduce(hcat, getcoords.(_solve(ml; kwargs...)))
+solve(ml::MollyLangevin; kwargs...) = reduce(hcat, coords.(_solve(ml; kwargs...)))
 
 function _solve(ml::MollyLangevin;
   u0=ml.sys.coords,
@@ -63,7 +63,7 @@ end
 
 function solve_end(ml::MollyLangevin; u0)
   n_steps = round(Int, ml.T / ml.dt)
-  getcoords(_solve(ml; u0, logevery=n_steps)[end])
+  coords(_solve(ml; u0, logevery=n_steps)[end])
 end
 
 
@@ -110,8 +110,8 @@ function rotationhandles(sys::Molly.System)
 end
 
 """ extract the unitful SVector coords from `sys` and return as a normal vector """
-getcoords(sys::Molly.System) = getcoords(sys.coords)
-function getcoords(coords::AbstractArray)
+coords(sys::Molly.System) = coords(sys.coords)
+function coords(coords::AbstractArray)
   x0 = Molly.ustrip_vec(coords)
   x0 = reduce(vcat, x0)
   return x0::AbstractVector
@@ -369,7 +369,7 @@ function SDEProblem(sys::System, T=1e-3; dt, alg=SROCK2(),
     end
 
     noise(x,p,t) = sigma
-    x0 = getcoords(sys)
+    x0 = coords(sys)
     neighborlist = find_neighbors(sys)  # TODO: is 1 setting enough?
 
     SDEProblem(driftf, noise, x0, T, (;neighborlist), alg=alg, dt=dt, kwargs...)

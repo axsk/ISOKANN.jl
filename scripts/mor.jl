@@ -72,7 +72,7 @@ function test()
 end
 
 function centermor!(sim, i=7518)
-    c = reshape(getcoords(sim), 3, :)
+    c = reshape(coords(sim), 3, :)
     unitcell = collect(sim.pysim.topology.getUnitCellDimensions()._value)
     c = c .- sum(c[:, 1:i], dims=2) ./ i .+ unitcell ./ 2
     OpenMM.setcoords(sim, vec(c))

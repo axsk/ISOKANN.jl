@@ -1,5 +1,5 @@
 using ISOKANN
-using ISOKANN: getcoords
+using ISOKANN: coords
 
 function sims(;
   temp=300.0,
@@ -35,7 +35,7 @@ end
 
 function test(n=1; kwargs...)
   oom, mol = sims(; kwargs...)
-  x0 = reshape(getcoords(mol), :, 1)
+  x0 = reshape(coords(mol), :, 1)
 
   # it seems openmm is by factor 100 slower
   x1 = @time propagate(mol, x0, n)

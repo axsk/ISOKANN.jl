@@ -10,7 +10,7 @@ trainsteps = 100
 
 sim = OpenMMSimulation(; pdb, minimize=true, gpu=true)
 
-x0 = getcoords(sim)
+x0 = coords(sim)
 cainds = atom_indices(pdb, "name==CA")
 featinds = restricted_localpdistinds(x0, radius, cainds)
 featurizer(x) = pdists(x, featinds)

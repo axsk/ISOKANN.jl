@@ -9,14 +9,14 @@ import ProgressMeter
 import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
-    savecoords, getcoords, force, pdbfile,
+    savecoords, coords, force, pdbfile,
     force, potential, lagtime, trajectory, laggedtrajectory, WeightedSamples
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
 export FeaturesAll, FeaturesAll, FeaturesPairs, FeaturesRandomPairs
 
-export trajectory, propagate, setcoords, getcoords, savecoords
+export trajectory, propagate, setcoords, coords, savecoords
 export atoms
 
 DEFAULT_PDB = normpath("$(@__DIR__)/../../data/systems/alanine dipeptide.pdb")
@@ -128,17 +128,17 @@ stepsize(sim) = stepsize(sim.pysim)
 
 
 lagtime(sim::OpenMMSimulation) = steps(sim) * stepsize(sim) # in ps
-dim(sim::OpenMMSimulation) = length(getcoords(sim))
+dim(sim::OpenMMSimulation) = length(coords(sim))
 defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
 
-getcoords(sim::OpenMMSimulation) = getcoords(sim.pysim)::Vector{Float64}
+coords(sim::OpenMMSimulation) = coords(sim.pysim)::Vector{Float64}
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
 natoms(sim::OpenMMSimulation) = div(dim(sim), 3)
 
 friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
 temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
 stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
-getcoords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true).flatten()
+coords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true).flatten()
 
 iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
 iscuda(pysim::PyObject) = pysim.context.getPlatform().getName() == "CUDA"
@@ -148,7 +148,7 @@ function createpdb(sim)
     pysim = sim.pysim
     file = tempname() * ".pdb"
     pdb = py"app.PDBFile"
-    pdb.writeFile(pysim.topology, PyReverseDims(reshape(getcoords(sim), 3, :)), file)  # TODO: fix this
+    pdb.writeFile(pysim.topology, PyReverseDims(reshape(coords(sim), 3, :)), file)  # TODO: fix this
     return file
 end
 
@@ -271,7 +271,7 @@ laggedtrajectory(sim::OpenMMSimulation, lags; steps=steps(sim), resample_velocit
 
 
 """
-    trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), resample_velocities=false, throw=false, showprogress=true, reclaim=true)
+    trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=coords(sim), resample_velocities=false, throw=false, showprogress=true, reclaim=true)
 
 Simulates the trajectory of an OpenMM simulation.
 
@@ -289,7 +289,7 @@ Simulates the trajectory of an OpenMM simulation.
 # Returns
 - The trajectory of the simulation as a matrix of coordinates.
 """
-function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=getcoords(sim), sample_velocities=true, resample_velocities=false, throw=false, showprogress=true, reclaim=true)
+function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=1, x0=coords(sim), sample_velocities=true, resample_velocities=false, throw=false, showprogress=true, reclaim=true)
     reclaim && claim_memory(sim)
     n = div(steps, saveevery)
     xs = similar(x0, length(x0), n)
@@ -308,7 +308,7 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
         for i in 1:n
             resample_velocities && set_random_velocities!(sim)
             runtime += @elapsed int.step(saveevery)
-            xs[:, i] = getcoords(sim)
+            xs[:, i] = coords(sim)
             @assert norm(xs[:, i]) <= 1e5
             done = i
 
@@ -327,7 +327,7 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
     return xs
 end
 
-function minimize!(sim::OpenMMSimulation, coords=getcoords(sim); iter=0)
+function minimize!(sim::OpenMMSimulation, coords=coords(sim); iter=0)
     setcoords(sim, coords)
     return sim.pysim.minimizeEnergy(maxIterations=iter)
     return nothing
@@ -371,7 +371,7 @@ end
 
 Save the given `coordinates` in a .pdb file using OpenMM
 """
-function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}=getcoords(sim)) where {T}
+function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}=coords(sim)) where {T}
     coords = ISOKANN.cpu(coords)
     s = sim.pysim
     p = py"pdbfile.PDBFile"
@@ -397,7 +397,7 @@ end
 atoms(sim::OpenMMSimulation) = collect(sim.pysim.topology.atoms())
 
 function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
-    coords = reshape(getcoords(pysim), 3, :)
+    coords = reshape(coords(pysim), 3, :)
     atoms = filter(atomfilter, pysim.topology.atoms() |> collect)
     inds = map(atom -> atom.index + 1, atoms)
 
@@ -445,14 +445,14 @@ Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation) =
 ### CUSTOM INTEGRATORS
 
 """
-    integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
+    integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
 
 Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for external forces.
 
 - bias: An additional force perturbation. It is expected to have the form bias(F, x) and mutating the provided force F.
 - saveevery: If `nothing`, returns just the last point, otherwise returns an array saving every `saveevery` frame.
 """
-function integrate_langevin(sim::OpenMMSimulation, x0=getcoords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing, reclaim=true)
+function integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing, reclaim=true)
     reclaim && claim_memory(sim)
     # we use the default openmm units, i.e. nm, ps
     x = copy(x0)
@@ -478,7 +478,7 @@ function langevin_step!(x, v, F, m, gamma, kBT, dt)
     @. x += v * dt
 end
 
-function integrate_girsanov(sim::OpenMMSimulation; x0=getcoords(sim), steps=steps(sim), bias, reclaim=true)
+function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
     reclaim && claim_memory(sim)
     # TODO: check units on the following three lines
     kB = 0.008314463
@@ -514,7 +514,7 @@ end
 
 trajectory(sim::OpenMMSimulation, steps=steps(sim); kwargs...) = langevin_girsanov!(sim, steps; kwargs...)
 
-function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=getcoords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true)
+function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true)
     reclaim && claim_memory(sim)
     prog = ProgressMeter.Progress(steps)
     nout = div(steps, saveevery)

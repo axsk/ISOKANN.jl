@@ -128,7 +128,7 @@ loop()
 
 
             pdblen = ISOKANN.readchemfile(iso.data.sim.pdb) |> length
-            save_reactive_path(iso, ISOKANN.getcoords(iso.data)[1:pdblen, :] |> cpu;
+            save_reactive_path(iso, ISOKANN.coords(iso.data)[1:pdblen, :] |> cpu;
                 out="$path/snapshot/villin_fold_$(simtime)ps.pdb", sigma, maxjump)
             #ISOKANN.savecoords("$path/data.pdb", iso)
             ISOKANN.Plots.savefig(plot_training(iso), "$path/snapshot/villin_fold_$(simtime)ps.png")

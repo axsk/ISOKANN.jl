@@ -13,7 +13,7 @@ sim = OpenMMSimulation(; simargs...);
 
 chainid = [a.residue.chain.index for a in sim.pysim.topology.atoms()]
 m = OpenMM.masses(sim)
-x = getcoords(sim) |> x -> reshape(x, 3, :)
+x = coords(sim) |> x -> reshape(x, 3, :)
 forcemask = chainid .== 1
 
 centerofmass = sum(x .* m', dims=2) ./ sum(m)

@@ -64,14 +64,14 @@ function train!(mu::IMu, iter=nothing)
     ISOKANN.run!(mu.iso, iter)
 end
 
-getxs(mu::IMu) = mu.iso.data[1] |> collect
-getys(mu::IMu) = mu.iso.data[2] |> collect
+features(mu::IMu) = mu.iso.data[1] |> collect
+propfeatures(mu::IMu) = mu.iso.data[2] |> collect
 model(mu::IMu) = mu.iso.model
 model(mu::IMu, xs) = mu.iso.model(xs) |> collect
 chi(mu::IMu) = model(mu, mu.iso.data[1]) |> vec |> collect
 coords(mu::IMu) = coords(mu.data)
 pdbfile(mu::IMu) = pdbfile(mu.data)
-MLUtils.numobs(mu::IMu) = size(getxs(mu), 2)
+MLUtils.numobs(mu::IMu) = size(features(mu), 2)
 
 
 """
@@ -102,7 +102,7 @@ Compute the shortest Onsager-Machlup path through the data with the χ value as 
     kwargs...
 )
 
-    xi = model(mu, getxs(mu)[:, window]) |> vec
+    xi = model(mu, features(mu)[:, window]) |> vec
     co = flatten3d(coords(mu))[:, window]
 
     ids, _ = reactive_path(xi, co ./ norm(co, Inf), sigma; kwargs...)
@@ -148,7 +148,7 @@ function save_reactive_path(mu::IMu;
     mkpath(dirname(out))
     ids, path = reactive_path(mu; kwargs...)
     println("Found reactive path of length $(length(ids))")
-    xi = model(mu, getxs(mu)) |> vec
+    xi = model(mu, features(mu)) |> vec
     plot_reactive_path(ids, xi) |> display
     writechemfile(out, path, source=pdbfile(mu))
     println("saved to $out")
@@ -179,7 +179,7 @@ function benchmark()
 end
 
 function meanvelocity(mu::IMu)
-    mean(abs2, diff(getxs(mu), dims=2), dims=1)' |> plot
+    mean(abs2, diff(features(mu), dims=2), dims=1)' |> plot
     title!(mu.data.dir)
 end
 
