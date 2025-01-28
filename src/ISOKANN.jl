@@ -87,8 +87,8 @@ export ca_rmsd
 export coords, features, propcoords, propfeatures
 
 
-include("subsample.jl")  # adaptive sampling
-include("pairdists.jl")       # pair distances
+include("utils/subsample.jl")  # adaptive sampling
+include("utils/pairdists.jl")       # pair distances
 include("simulation.jl")      # Interface for simulations
 include("models.jl")          # the neural network models/architectures
 #include("simulators/molly.jl")           # interface to work with Molly Systems
@@ -122,8 +122,8 @@ include("reactionpath.jl")
 #include("IsoMu/IsoMu.jl")
 #include("vgv/vgv.jl")
 
-include("makie.jl")
-include("bonito.jl")
+include("utils/makie.jl")
+include("utils/bonito.jl")
 
 include("utils/picking.jl")
 end
