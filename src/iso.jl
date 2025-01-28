@@ -129,7 +129,7 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
     return ls / numobs(xs)
 end
 
-chis(iso::Iso) = iso.model(getxs(iso.data))
+chis(iso::Iso) = iso.model(features(iso.data))
 chi(iso::Iso) = vec(cpu(chis(iso)))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
@@ -187,7 +187,7 @@ function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, 
                 (:generation, g),
                 (:loss, iso.losses[end]),
                 (:iterations, length(iso.losses)),
-                (:data, size(getys(iso.data))),
+                (:data, size(propfeatures(iso.data))),
                 ("t_train, t_extra, t_kde", (t_train, t_extra, t_kde)),
                 ("simulated time", "$(simulationtime(iso))"), #TODO: doesnt work with cutoff
                 (:macrorates, exit_rates(iso))],
@@ -222,7 +222,7 @@ function chi_exit_rate(x, Kx, tau)
     return α + β
 end
 
-chi_exit_rate(iso::Iso) = chi_exit_rate(iso.model(getxs(iso.data)), koopman(iso.model, getys(iso.data)), OpenMM.stepsize(iso.data.sim) * OpenMM.steps(iso.data.sim))
+chi_exit_rate(iso::Iso) = chi_exit_rate(iso.model(features(iso.data)), koopman(iso.model, propfeatures(iso.data)), OpenMM.stepsize(iso.data.sim) * OpenMM.steps(iso.data.sim))
 
 
 function exit_rates(x, kx, tau)
@@ -233,7 +233,7 @@ function exit_rates(x, kx, tau)
     return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
 end
 
-koopman(iso::Iso) = koopman(iso.model, getys(iso.data))
+koopman(iso::Iso) = koopman(iso.model, propfeatures(iso.data))
 
 exit_rates(iso::Iso) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso.data.sim))
 
@@ -303,6 +303,3 @@ function load(path::String)
     iso = JLD2.load(path, "iso")
     return iso
 end
-
-getxs(iso::Iso) = iso.data.coords[1]
-getys(iso::Iso) = iso.data.coords[2]

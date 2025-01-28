@@ -11,11 +11,7 @@ ys is a tensor of size (d, k, n) where k is the number of koopman samples.
 """
 DataTuple = Tuple{<:AbstractArray{T},<:AbstractArray{T,3}} where {T<:Number}
 
-getxs(x) = getxs(getobs(x))
-getys(x) = getys(getobs(x))
 
-getxs(d::Tuple) = d[1]
-getys(d::Tuple) = d[2]
 
 """ collapse the first and second dimension of the array `A` into the first dimension """
 function flattenfirst(A)
@@ -146,7 +142,7 @@ end
 uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
 function exportsorted(iso, path="out/sorted.pdb")
-    xs = ISOKANN.getxs(iso.data)
+    xs = features(iso.data)
     p = iso.model(xs) |> vec |> sortperm
     xs = ISOKANN.coords(iso.data)
     println("saving sorted data to $path")

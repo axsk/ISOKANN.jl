@@ -68,7 +68,7 @@ function plot_training(iso; subdata=nothing)
 end
 
 function plot_chi(iso; target=true)
-    xs = getxs(iso.data)
+    xs = features(iso.data)
     chi = iso.model(xs) |> cpu
     xs = xs |> cpu
 
@@ -121,7 +121,7 @@ end
 # good colors
 # berlin, delta, roma, tofino, tokyo
 
-scatter_ramachandran(iso::Iso) = scatter_ramachandran(coords(iso.data) |> cpu, iso.model(getxs(iso.data)) |> cpu |> vec)
+scatter_ramachandran(iso::Iso) = scatter_ramachandran(coords(iso.data) |> cpu, iso.model(features(iso.data)) |> cpu |> vec)
 
 scatter_ramachandran(x, model; kwargs...) = scatter_ramachandran(x, vec(model(x)))
 scatter_ramachandran(x, mat::AbstractMatrix; kwargs...) = plot(map(eachrow(mat)) do row

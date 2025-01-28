@@ -109,6 +109,8 @@ Base.lastindex(d::SimulationData) = length(d)
 Base.getindex(d::SimulationData, i) = SimulationData(d.sim, getobs(d.features, i), getobs(d.coords, i), d.featurizer)
 
 @deprecate getcoords coords
+@deprecate getxs features
+@deprecate getys propfeatures
 coords(d::SimulationData) = d.coords[1]
 features(d::SimulationData) = d.features[1]
 propcoords(d::SimulationData) = d.coords[2]
@@ -117,8 +119,6 @@ propfeatures(d::SimulationData) = d.features[2]
 flattenlast(x) = reshape(x, size(x, 1), :)
 
 MLUtils.getobs(d::SimulationData) = d.features
-getxs(d::SimulationData) = getxs(d.features)
-getys(d::SimulationData) = getys(d.features)
 
 pdbfile(s::SimulationData) = pdbfile(s.sim)
 
