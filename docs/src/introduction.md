@@ -79,3 +79,23 @@ Experimental:
 - `bonito.jl` and `makie.jl`: live visualizations via Makie.jl/WebGL and the dashboard using the Bonito.jl webserver
 - `reactionpath.jl`: reaction paths by integration on the neural network
 - `reactionpath2.jl`: reactive path extraction from sampled data by solving shortest paths problems
+
+# On the representation of the data
+
+In order to estimate the chi functions ISOKANN requires two kinds of samples, starting points `xs` and propagated points `ys`.
+These are used to estimate the action of the Koopman operator through a Monte-Carlo approximation, i.e.
+`` [K\chi](x) = \mathbb{E}_{X_0 = x} [\chi(X_t)] \approx \frac{1}{N} \sum_{i=1}^N \chi(y_i).``
+
+The starting points can be sampled without any restriction. In particular they do not need to be sampled from the stationary distribution.
+Note however, that the learned chi function can only represent the part of the dynamics covered by `xs`. Furthermore, regions with more samples have higher contribution to the loss, i.e. will be resolved more precisely.
+
+The `ys` samples however have to be propagated from their respective `xs` according to the processes dynamics and with a common lagtime amongst all samples.
+
+Internally ISOKANN.jl handles the `xs` and `ys` as 2-dimensional resp. 3-dimensional Arrays.
+In particular `xs` has the size `(ndim, nsamples)` and `ys` has size `(ndim, nkoop, nsamples)`, where `ndim` is the size of the state- or feature-space, `nkoop` the number of Koopman-/Batch-samples per starting point and `nsamples` is the number of total samples.
+
+You can create an `Iso` object directly from raw data of this type, by passing in a tuple of `(xs, ys)` as data.
+
+Alternatively, you can use the `SimulationData` object, whose main task is to keep together the original samples' coordinates as well as their corresponding features which are passed as arguments to the neural network representing `chi`.
+You can access its coordinates or features (i.e. the above `xs`) through the methods `coords` or `features`, and the corresponding Koopman samples (the `ys`) through `propcoords` and `propfeatures`.
+`SimulationData` futhermore allows to link the data to a `IsoSimulation` and provides futher methods to conveniently augment the data with new samples, merge data sets, sample adaptively etc.
