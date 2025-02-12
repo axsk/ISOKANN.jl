@@ -98,6 +98,12 @@ function data_from_trajectory(xs::AbstractMatrix; reverse=false)
     return xs, ys
 end
 
+function data_from_trajectories(xss::AbstractVector{<:AbstractMatrix}, reverse=false)
+    mapreduce(mergedata, xss) do xs
+        data_from_trajectory(xs; reverse)
+    end
+end
+
 """
     subsample(data, nx)
 

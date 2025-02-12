@@ -5,6 +5,7 @@ module ISOKANN
 #using Startup           # precompiles most used packages
 #include("forced/IsoForce.jl")
 
+import cuDNN
 import StochasticDiffEq, Flux, CUDA, PCCAPlus, Plots
 
 using ProgressMeter

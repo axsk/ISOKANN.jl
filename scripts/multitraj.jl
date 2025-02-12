@@ -11,19 +11,14 @@ pdbfile = "$DATADIR/struct.pdb"
 
 molecule = load_trajectory(pdbfile)
 pdist_inds = restricted_localpdistinds(molecule, MAXRADIUS, atom_indices(pdbfile, "not water and name==CA"))
+featurizer = ISOKANN.OpenMM.FeaturesPairs(pdist_inds)
 
-
-
-datas = map(trajfiles) do trajfile
+trajs = map(trajfiles) do trajfile
     traj = load_trajectory(trajfile, top=pdbfile, stride=STRIDE)  # for large datasets you may use the memory-mapped LazyTrajectory
-    xs, ys = data_from_trajectory(traj, reverse=true)
 end
 
-xs, ys = reduce(mergedata, datas)
-datas = nothing # free the memory
-
-data = pdists(xs, pdist_inds), pdists(ys, pdist_inds)
-ys = nothing # free the memory
+sim = ISOKANN.ExternalSimulation(pdbfile)
+data = SimulationData(sim, ISOKANN.data_from_trajectories(trajs); featurizer)
 
 iso = Iso(data, opt=NesterovRegularized(), gpu=GPU)
 run!(iso, 10000)
@@ -32,4 +27,4 @@ run!(iso, 10000)
 # note that the above data is probably too big for this to terminate in sufficient time
 
 # coords = ISOKANN.LazyMultiTrajectory(ISOKANN.LazyTrajectory.(trajfiles))
-save_reactive_path(iso, xs, sigma=1, source=pdbfile)
+save_reactive_path(iso, sigma=1)
