@@ -21,10 +21,17 @@ function Iso(data;
     autoplot=0,
     validation=nothing,
     loggers=[],
+    transform = nothing,
     kwargs...)
 
     opt = Flux.setup(opt, model)
-    transform = outputdim(model) == 1 ? TransformShiftscale() : TransformISA()
+    if isnothing(transform)
+        if outputdim(model) == 1
+            transform = TransformShiftscale()
+        else
+            transform = TransformISA()
+        end
+    end
 
     autoplot > 0 && push!(loggers, ISOKANN.autoplot(autoplot))
     isnothing(validation) || push!(loggers, ValidationLossLogger(data=validation))
@@ -133,6 +140,9 @@ chis(iso::Iso) = iso.model(features(iso.data))
 chi(iso::Iso) = vec(cpu(chis(iso)))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
+
+coords(iso::Iso) = coords(iso.data)
+
 
 # add new datapoints to iso, starting at positions `coords`
 addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)

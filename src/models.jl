@@ -70,6 +70,14 @@ function pairnet(; n::Int, layers=3, features=identity, activation=Flux.sigmoid,
     return nn
 end
 
+function densenet(; layers::Vector{Int}, activation=Flux.sigmoid, lastactivation=identity, layernorm=true)
+    L = [Flux.Dense(layers[i], layers[i+1], activation) for i in 1:length(layers)-2]
+    L = [L; Flux.Dense(layers[end-1], layers[end], lastactivation)]
+    layernorm && (L = [Flux.LayerNorm(layers[1]); L])
+    Flux.Chain(L...)
+end
+
+
 # TODO: take over previous activation function.
 """ Given a model and return a copy with its last layer replaced with given output dimension `n` """
 function growmodel(m, n)

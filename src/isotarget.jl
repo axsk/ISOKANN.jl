@@ -6,50 +6,6 @@ Computes the expectation value of `f` over `xs`.
 """
 expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
 
-"""
-    TransformGramSchmidt()
-
-Compute the target through a Gram-Schmidt orthonormalisation.
-"""
-@kwdef struct TransformGramSchmidt
-
-end
-
-global rs = []
-
-function isotarget(model, xs, ys, t::TransformGramSchmidt)
-
-    renormalize = true
-    firstconst = true
-
-    chi = model(xs)
-    c = sqrt(size(chi, 2))
-
-    if firstconst
-        z = similar(chi, 1, size(chi, 2))
-        z .= 1
-        chi = vcat(z, chi)
-    end
-
-    renormalize && (chi ./= c)
-
-
-    q,r = qr(chi')
-    q = typeof(q).types[1](q) # convert from compact to full representation
-    #q = Matrix(q)  # orthogonal basis
-    rand() < 0.01 && display(r)
-
-    push!(rs, diag(r))
-
-    if firstconst
-        t = q'[2:end,:] .* diag(sign.(r))[2:end]
-    else
-        t = q' .* diag(sign.(r))
-    end
-
-    renormalize && (t .*= c)
-    return t
-end
 
 
 
@@ -226,4 +182,130 @@ function isotarget(model, xs::T, ys, t::TransformGramSchmidt1) where {T}
         chi[i, :] ./= norm(chi[i, :])
     end
     return chi
+end
+
+"""
+    TransformGramSchmidt()
+
+Compute the target through a Gram-Schmidt orthonormalisation.
+"""
+@kwdef struct TransformGramSchmidt2
+
+end
+
+global rs = []
+
+function isotarget(model, xs, ys, t::TransformGramSchmidt2)
+
+    renormalize = true
+    firstconst = true
+
+    chi = model(xs)  #  TODO: we dont use ys anywhere! this cant be right!
+    c = sqrt(size(chi, 2))
+
+    if firstconst
+        z = similar(chi, 1, size(chi, 2))
+        z .= 1
+        chi = vcat(z, chi)
+    end
+
+    renormalize && (chi ./= c)
+
+
+    q, r = qr(chi')
+    q = typeof(q).types[1](q) # convert from compact to full representation
+    #q = Matrix(q)  # orthogonal basis
+    rand() < 0.01 && display(r)
+
+    push!(rs, diag(r))
+
+    if firstconst
+        t = q'[2:end, :] .* diag(sign.(r))[2:end]
+    else
+        t = q' .* diag(sign.(r))
+    end
+
+    renormalize && (t .*= c)
+    return t
+end
+
+
+@kwdef struct TransformLeftRight
+
+end
+
+function isotarget(model, xs, ys, t::TransformLeftRight)
+    scale = 0
+
+    addones(x) = hcat(fill!(similar(x, size(x, 1)), 1 ./ sqrt(size(x, 1))), x)
+    
+    L = model(xs)'
+    R = expectation(model, ys)'
+    
+    n, d = size(L)
+
+    L = addones(L)
+    R = addones(R)
+
+
+   
+
+#    LR = similar(L, n, 2*d + 1)
+ #   LR[:, 1] .= 1
+ #   LR[:, 2:d+1] .= L
+ #   LR[:, d+2:end] .= R
+
+    # we have A*L = R
+    # and want to find the eigenfcts of A.
+    # to that end we construct a basis from <L..., R...>
+    # and compute the eigenfunctions of the projection of A onto that subspace 
+
+    LR = hcat(L, R)  # TODO: some pivoting here?
+
+    q, r = qr(LR)
+    #println("r:")
+    #display(r)
+    q = typeof(q).types[1](q)  # convert from compact to dense representation
+    
+    # we can project L and R onto the basis of the "Krylov" space
+    qL = q' * L
+    qR = q' * R
+
+    # equivalently
+    #qL = r[:, 1:d+1]
+    #qR = r[:, d+2:end]
+
+    # and look for the map that is mapping qL to qR
+    A = qR / qL
+    res = A * qL - qR
+    #@show norm(res) # the residuum should be zero
+
+    # given A in the Krylov basis, we can now compute its eigenfunctions
+    vals, vecs = LinearAlgebra.eigen(cpu(A), sortby=x->-real(x))
+
+    eigenvalues = vals[1:d] .|> real .|> x -> round(x, digits=3)
+    @show eigenvalues
+    #println("evecs:")
+    #display(vecs)
+
+    # projecting the dom. eigenvecs. from Krylov basis back to data space we obtain our new target
+    vecs = cu(vecs)
+    target = q * real.(vecs[:, 1:d])
+
+    # lets compare the orientation of previous and resulting vectors, as to flip then for stable training
+    s = sum(L[:, 1:d] .* target, dims=1)
+    #@show s
+
+    target .*= sign.(s)
+    
+    # scale targets with their eigenvalue for stable training
+    scaling = real.(vals[1:d]' .^ scale)
+    #@show scaling
+    target = target .* cu(scaling)
+    #@show norm.(eachcol(target))
+    #@show norm.(eachcol(L))
+
+    target .*= sqrt(size(target, 1))
+
+    return target[:, 1:d]'
 end
