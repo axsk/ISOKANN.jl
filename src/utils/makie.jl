@@ -51,6 +51,7 @@ function plotmol(c, pysim, color=1; grad=nothing, kwargs...)
     color = observe(color)
 
     fig = Figure()
+    
     frameselector = SliderGrid(fig[1, 1],
         (label="Frame", range=@lift(1:size($c, 2)), startvalue=1))
 
@@ -384,10 +385,12 @@ function voxelize(data, n)
     return x ./ maximum(x)
 end
 
-function scatter_rc(rc, chi; markersize=5, kwargs...)
+function scatter_rc(rc, chi; markersize=10, msselect=30, kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
-    ms = Observable(ones(size(rc, 2)) .* markersize)
+    ms = lift(rc) do rc
+        ones(size(rc, 2)) .* markersize
+    end
     fig, ax, plt =
     #plt= 
         WGLMakie.scatter(rc, color=chi;
@@ -396,32 +399,42 @@ function scatter_rc(rc, chi; markersize=5, kwargs...)
             strokewidth=0, 
             kwargs...
         )
-    #d=DataInspector(ax.scene)
+   
 
-    i = Observable(0)
+    i = Observable(1)
 
     function hover(inspector, plt, index)
-        #@show plt, index
         i[] = index
         return true
     end
+    d = DataInspector(ax.scene)
+    plt.inspector_hover = hover
 
-    #plt.inspector_hover = hover
-
-    on(events(fig).mousebutton, priority=2) do event
-        if event.button == Mouse.left && event.action == Mouse.press
-            plt, ind = pick(fig)
+    #=
+    on(events(fig).mouseposition) do event
+        mb = events(fig).mousebutton[]
+        #if mb.button == Mouse.left# && event.action == Mouse.press
+            plt, ind = pick(fig,100)
+            @show ind
             if ind > 0
-                i[] > 0 && (ms[][i[]] = markersize)
-                ms[][ind] = 20
-                notify(ms)
                 i[] = ind
             end
+        #end
+    end
+    =#
+
+    on(i) do ind
+        if i[] in eachindex(ms[]) 
+            ms[] .= markersize
+        end
+        if ind in eachindex(ms[])
+            ms[][ind] = msselect
+            notify(ms)
         end
     end
 
 
-    Makie.Camera3D(ax.scene, projectiontype=Makie.Orthographic)
+    #Makie.Camera3D(ax.scene, projectiontype=Makie.Orthographic)
     fig, ax, plt, i
 end
 
@@ -444,4 +457,83 @@ function visualize(iso, reactioncoords, chi)
     App() do s
         DOM.div([fig, fig2])
     end
+end
+
+
+function visualize(iso::Observable, rcmap)
+
+    #WGLMakie.activate!(resize_to=:parent)
+    xs = lift(coords, iso) |> onlychanges
+    reactioncoords = lift(rcmap, xs) |> onlychanges
+    chi = lift(iso) do iso
+        chis(iso) |> vec |> cpu
+    end |> onlychanges
+
+    pysim = iso[].data.sim.pysim
+
+    fig, ax, plt, i = scatter_rc(reactioncoords, chi)
+
+    on(xs) do xs
+        i[] = size(xs,2)
+    end
+
+    selcoords = lift(i) do i
+        if i > 0
+            #ISOKANN.centercoords(xs[][:, i])
+            ISOKANN.align(xs[][:,i], xs[][:,1])
+        else
+            zeros(size(xs[], 1))
+        end
+    end
+
+    #fig2 = ISOKANN.plotmol(selcoords, pysim, showbonds=false)
+    fig2 = Figure()
+    ax = LScene(fig2[1,1], show_axis=false)
+    plotmol!(ax, selcoords, pysim, observe(1),showatoms=false)
+
+    App() do session
+        #fig
+        DOM.div([fig, fig2])
+    end
+end
+
+struct IsoVis
+    iso
+    obs
+    fig
+end
+
+function IsoVis(iso, rcmap=autorcmap(iso)) 
+    obs = observe(iso)
+    app = visualize(obs, rcmap)
+    @show server = Bonito.get_server()
+    route!(server, "/" => app)
+    #display(app)
+    IsoVis(iso, obs, app)
+end
+
+function autorcmap(iso)
+    dim = OpenMM.dim(iso.data.sim)
+    
+    if dim == 66
+        rc(x)=vcat(ISOKANN.phi(x)', ISOKANN.psi(x)')
+    elseif dim == 1773
+        rc = map([3:10, 14:17, 22:31]) do inds
+            ISOKANN.ca_rmsd(inds, "data/villin/1yrf.pdb", "data/villin nowater.pdb")
+        end
+    end
+    return rc
+end
+
+function run!(v::IsoVis; generations=1, iter=1, kde=0, update=0.1)
+    t = 0.
+    for i in 1:generations
+        t += @elapsed runadaptive!(v.iso, generations=1; kde, iter)
+        if t > update
+            @show t
+            t = 0.
+            @time notify(v.obs)
+        end
+    end
+    notify(v.obs)
 end
