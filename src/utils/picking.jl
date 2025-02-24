@@ -35,7 +35,10 @@ end
 """ 
     picking_aligned(x::AbstractMatrix, m::Integer)
 
-The picking algorithm using pairwise aligned distances, e.g. for molecular coordinates 
+The picking algorithm using pairwise aligned distances, e.g. for molecular coordinates.
+Assumes the columnes of `x` to be vectors of size 3xN holding the cartesian coordinates.
+
+see also `picking()`
 """
 function picking_aligned(x::AbstractMatrix, m::Integer)
     n = size(x, 2)

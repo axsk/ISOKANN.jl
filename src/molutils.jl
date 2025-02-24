@@ -65,7 +65,13 @@ standardform(x::AbstractArray, rotationhandles=(2, 11, 19)) =
 
 standardform(x::AbstractArray, sim::IsoSimulation) = standardform(x, rotationhandles(sim))
 
-### alignment of pointclouds / trajectories using procrustes alignment
+"""
+    aligntrajectory(traj::AbstractVector)
+    aligntrajectory(traj::AbstractMatrix)
+
+Align the framse in `traj` successively to each other.
+`traj` can be passed either as Vector of vectors or matrix of flattened conformations.
+"""
 function aligntrajectory(traj::AbstractVector)
     aligned = [centermean(traj[1])]
     for x in traj[2:end]
@@ -78,6 +84,12 @@ aligntrajectory(traj::AbstractMatrix) = reduce(hcat, aligntrajectory(eachcol(tra
 centermean(x::AbstractMatrix) = x .- mean(x, dims=2)
 centermean(x::AbstractVector) = as3dmatrix(centermean, x)
 
+"""
+    align(x::AbstractMatrix, target::AbstractMatrix)
+    align(x::AbstractVector, target::AbstractVector)
+
+Return `x` aligned to `target`
+"""
 function align(x::AbstractMatrix, target::AbstractMatrix)
     m = mean(target, dims=2)
     x = centermean(x)
@@ -96,15 +108,30 @@ function kabschrotation(p::AbstractMatrix, q::AbstractMatrix)
     return R
 end
 
+"""
+    aligned_rmsd(p::AbstractMatrix, q::AbstractMatrix)
+    aligned_rmsd(p::AbstractVector, q::AbstractVector)
+
+Return the aligned root mean squared distance between conformations `p` and `q`, passed either flattened or as (3,d) matrix 
+"""
 function aligned_rmsd(p::AbstractMatrix, q::AbstractMatrix)
     p = align(p, q)
     n = size(p, 2)
     norm(p - q) / sqrt(n)
 end
+aligned_rmsd(p::AbstractVector, q::AbstractVector) = aligned_rmsd(reshape(p, 3, :), reshape(q, 3, :))
 
 using NNlib: batched_mul, batched_transpose
 
-function pairwise_aligned_rmsd(xs)
+""" 
+    pairwise_aligned_rmsd(xs::AbstractMatrix)
+
+Compute the respectively aligned pairwise distances between all conformations.
+
+Each column of `xs` represents a flattened conformation.
+Returns the (n, n) matrix with the pairwise distances.
+"""
+function pairwise_aligned_rmsd(xs::AbstractMatrix)
     n = size(xs, 2)
     xs = reshape(xs, 3, :, n)
     xs = xs .- mean(xs, dims=2)
@@ -115,17 +142,20 @@ function pairwise_aligned_rmsd(xs)
     return dists
 end
 
+""" 
+    batched_kabsch_rmsd(x::AbstractMatrix, ys::AbstractArray{<:Any, 3})
+    batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix)
 
-function batched_kabsch_rmsd(x::AbstractMatrix, xs::AbstractArray{<:Any, 3})
-    h = batched_mul(x, batched_transpose(xs))
+Returns the vector of aligned Root mean square distances of conformation `x` to all conformations in `ys`
+"""
+function batched_kabsch_rmsd(x::AbstractMatrix, ys::AbstractArray{<:Any, 3})
+    h = batched_mul(x, batched_transpose(ys))
     s = batched_svd(h)
     r = batched_mul(s.V, batched_transpose(s.U))
-    d = sqrt.(sum(abs2, batched_mul(r, x) .- xs, dims=(1, 2)) ./ size(x, 2))
+    d = sqrt.(sum(abs2, batched_mul(r, x) .- ys, dims=(1, 2)) ./ size(x, 2))
     return vec(d)
 end
-
-
-batched_kabsch_rmsd(x::AbstractVector, xs::AbstractMatrix) = batched_kabsch_rmsd(reshape(x, 3, :), reshape(xs, 3, :, size(xs, 2)))
+batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix) = batched_kabsch_rmsd(reshape(x, 3, :), reshape(ys, 3, :, size(ys, 2)))
 
 
 batched_svd(x::CuArray) = svd(x)
@@ -288,6 +318,11 @@ mutable struct LazyTrajectory <: AbstractMatrix{Float32}
     size::Tuple{Int,Int}
 end
 
+"""
+    LazyTrajectory(path::String)
+
+Represents the trajectory `path` as matrix whose columns are lazily loaded from disk.
+"""
 function LazyTrajectory(path::String)
     traj = Chemfiles.Trajectory(path, 'r')
     frame = read(traj)
@@ -332,7 +367,7 @@ end
     struct ReactionCoordsRMSD
 
 Instances of this object allow to compute the Root Mean Square Deviation (RMSD) to a part of a reference molecule.
-See also CA_RMSD.
+See also `ca_rmsd`.
 """
 struct ReactionCoordsRMSD
     inds
