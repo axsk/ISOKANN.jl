@@ -44,7 +44,7 @@ function isotarget(model, xs::S, ys, t::TransformPseudoInv) where {S}
         Kinv = chi * kchi_inv
         T = eigenvecs ? schur(Kinv).vectors : I
         target = T * Kinv * kchi
-    else
+    else # this does not work at all!
         K = kchi * kchi_inv
         T = eigenvecs ? schur(K).vectors : I
         target = T * inv(K) * kchi
@@ -197,10 +197,11 @@ global rs = []
 
 function isotarget(model, xs, ys, t::TransformGramSchmidt2)
 
-    renormalize = true
-    firstconst = true
+    renormalize = false
+    firstconst = false
 
-    chi = model(xs)  #  TODO: we dont use ys anywhere! this cant be right!
+    #chi = model(xs)  #  TODO: we dont use ys anywhere! this cant be right!
+    chi = expectation(model, ys)
     c = sqrt(size(chi, 2))
 
     if firstconst
@@ -234,13 +235,16 @@ end
 
 end
 
-function isotarget(model, xs, ys, t::TransformLeftRight)
+function isotarget(model, xs, ys, t)
+    L = model(xs)'
+    R = expectation(model, ys)'
+    _isotarget(L, R, t)
+end
+
+function _isotarget(L, R, t::TransformLeftRight)
     scale = 0
 
     addones(x) = hcat(fill!(similar(x, size(x, 1)), 1 ./ sqrt(size(x, 1))), x)
-    
-    L = model(xs)'
-    R = expectation(model, ys)'
     
     n, d = size(L)
 
@@ -289,7 +293,7 @@ function isotarget(model, xs, ys, t::TransformLeftRight)
     #display(vecs)
 
     # projecting the dom. eigenvecs. from Krylov basis back to data space we obtain our new target
-    vecs = cu(vecs)
+    #vecs = cu(vecs)
     target = q * real.(vecs[:, 1:d])
 
     # lets compare the orientation of previous and resulting vectors, as to flip then for stable training
@@ -299,13 +303,50 @@ function isotarget(model, xs, ys, t::TransformLeftRight)
     target .*= sign.(s)
     
     # scale targets with their eigenvalue for stable training
-    scaling = real.(vals[1:d]' .^ scale)
+    #scaling = real.(vals[1:d]' .^ scale)
     #@show scaling
-    target = target .* cu(scaling)
+    #target = target .* cu(scaling)
+
     #@show norm.(eachcol(target))
     #@show norm.(eachcol(L))
 
     target .*= sqrt(size(target, 1))
 
     return target[:, 1:d]'
+end
+
+struct TransformSVD
+end
+
+function isotarget(model, xs, ys, t::TransformSVD)
+    # similar to DMD
+    L = model(xs)'
+    R = expectation(model, ys)'
+
+    n, d = size(L)
+
+    U,S,V = svd(L)
+    H = U' * R * V * LinearAlgebra.Diagonal(inv.(S))
+    vl, vc = LinearAlgebra.eigen(H, sortby=-)
+    target = U*vc[:, 1:d]
+
+    return target'
+end
+
+struct TransformSVDRev
+end
+
+function isotarget(model, xs, ys, t::TransformSVDRev)
+    # similar to DMD
+    L = model(xs)'
+    R = expectation(model, ys)'
+
+    n, d = size(L)
+
+    U, S, V = svd(R)
+    H = U' * R * V * LinearAlgebra.Diagonal(inv.(S))
+    vl, vc = LinearAlgebra.eigen(H)
+    target = U * vc[:, 1:d]
+
+    return target'
 end
