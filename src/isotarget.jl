@@ -415,7 +415,7 @@ function transformpinv(L, R)
 
     debug && display(Q)
     # S T' R = T kinv R 
-    target = Q * kinv * R
+    target = Q' * kinv * R
     #target = T * R
 
     
