@@ -57,6 +57,7 @@ function isotarget(model, xs::S, ys, t::TransformPseudoInv) where {S}
 end
 
 
+
 """ TransformISA(permute)
 
 Compute the target via the inner simplex algorithm (without feasiblization routine).
@@ -216,7 +217,7 @@ function isotarget(model, xs, ys, t::TransformGramSchmidt2)
     q, r = qr(chi')
     q = typeof(q).types[1](q) # convert from compact to full representation
     #q = Matrix(q)  # orthogonal basis
-    rand() < 0.01 && display(r)
+    rand() < 0.05 && display(r)
 
     push!(rs, diag(r))
 
@@ -232,87 +233,105 @@ end
 
 
 @kwdef struct TransformLeftRight
-
 end
 
-function isotarget(model, xs, ys, t)
+function isotarget(model, xs, ys, t::TransformLeftRight)
     L = model(xs)'
     R = expectation(model, ys)'
-    _isotarget(L, R, t)
-end
-
-function _isotarget(L, R, t::TransformLeftRight)
-    scale = 0
+    n, d = size(L)
 
     addones(x) = hcat(fill!(similar(x, size(x, 1)), 1 ./ sqrt(size(x, 1))), x)
-    
-    n, d = size(L)
 
     L = addones(L)
     R = addones(R)
 
+    transformleftright(L, R)[:, 1:d]'
+end
 
-   
+@kwdef mutable struct TransformLeftRightHistory5
+    L::AbstractMatrix
+    R::AbstractMatrix
+end
 
-#    LR = similar(L, n, 2*d + 1)
- #   LR[:, 1] .= 1
- #   LR[:, 2:d+1] .= L
- #   LR[:, d+2:end] .= R
+@functor TransformLeftRightHistory5
+
+function Base.show(io::IO,  t::TransformLeftRightHistory5)#
+    print(io, "TransformLeftRightHistory($(size(t.L)))")
+end
+
+TransformLeftRightHistory(hist::Int) = TransformLeftRightHistory5(ones(0,hist), ones(0,hist))
+
+function isotarget(model, xs, ys, t::TransformLeftRightHistory5)
+    L = t.L
+    R = t.R
+    
+    l = model(xs)'
+    r = expectation(model, ys)'
+    n, d = size(l)
+
+    @assert size(L,2) == size(R, 2) >= d + 1
+
+    t.L = updatehistory(t.L, l)
+    t.R = updatehistory(t.R, r)
+
+    return transformleftright(t.L, t.R)[:, 2:d+1]' # dont return constant vector
+end
+
+function transformleftright(L::T, R) where {T}
+
+    CUDA.@allowscalar @assert all(L[1,1] .== L[:,1] .== R[:,1]) "first columns are not constant"
 
     # we have A*L = R
     # and want to find the eigenfcts of A.
     # to that end we construct a basis from <L..., R...>
     # and compute the eigenfunctions of the projection of A onto that subspace 
 
-    LR = hcat(L, R)  # TODO: some pivoting here?
-
+    D = size(L, 2)
+    LR = hcat(R, L)
     q, r = qr(LR)
-    #println("r:")
-    #display(r)
-    q = typeof(q).types[1](q)  # convert from compact to dense representation
     
     # we can project L and R onto the basis of the "Krylov" space
-    qL = q' * L
-    qR = q' * R
-
-    # equivalently
-    #qL = r[:, 1:d+1]
-    #qR = r[:, d+2:end]
+    #qL = q' * L
+    #qR = q' * R
+    # which is the same as 
+    qR = r[:, 1:D]
+    qL = r[:, D+1:end]
 
     # and look for the map that is mapping qL to qR
     A = qR / qL
-    res = A * qL - qR
+    
+    #res = A * qL - qR
     #@show norm(res) # the residuum should be zero
-
     # given A in the Krylov basis, we can now compute its eigenfunctions
-    vals, vecs = LinearAlgebra.eigen(cpu(A), sortby=x->-real(x))
-
-    eigenvalues = vals[1:d] .|> real .|> x -> round(x, digits=3)
-    @show eigenvalues
-    #println("evecs:")
-    #display(vecs)
+    vecs, vals = domsubspaceeigen(A)
+    #vals, vecs = LinearAlgebra.eigen(A, sortby=x->-abs(x))
+    #vecs = T(vecs)
+    #vecs, vals = domsubspaceschur(A)
+    @show vals
+    vals = vals[1:D]
+    vecs = vecs[:, 1:D]
+    
 
     # projecting the dom. eigenvecs. from Krylov basis back to data space we obtain our new target
     #vecs = cu(vecs)
-    target = q * real.(vecs[:, 1:d])
+    target = q * vecs
 
     # lets compare the orientation of previous and resulting vectors, as to flip then for stable training
-    s = sum(L[:, 1:d] .* target, dims=1)
-    #@show s
-
+    s = sum(L .* target, dims=1)
     target .*= sign.(s)
     
     # scale targets with their eigenvalue for stable training
-    #scaling = real.(vals[1:d]' .^ scale)
-    #@show scaling
-    #target = target .* cu(scaling)
-
-    #@show norm.(eachcol(target))
-    #@show norm.(eachcol(L))
-
+    scale = 1
+    scaling = real.(vals') .^ scale
+    scaling = L isa CuArray ? cu(scaling) : scaling
+    target = target .* scaling
+    
     target .*= sqrt(size(target, 1))
+    if !all(isfinite.(target)) || any(real.(vals) .< 1e-8)
+        #Main.@infiltrate()
+    end
 
-    return target[:, 1:d]'
+    return target
 end
 
 struct TransformSVD
@@ -349,4 +368,120 @@ function isotarget(model, xs, ys, t::TransformSVDRev)
     target = U * vc[:, 1:d]
 
     return target'
+end
+
+
+@kwdef mutable struct TransformPinvHist2{T<:AbstractMatrix}
+    L::T
+    R::T
+end
+
+function Base.show(io::IO, t::TransformPinvHist2)#
+    print(io, "TransformPinvHist2($(size(t.L,2)))")
+end
+
+TransformPinvHist(n::Int, hist::Int) = TransformPinvHist2(ones(n, hist), ones(n, hist))
+
+function isotarget(model, xs, ys, t::TransformPinvHist2)
+    l = model(xs)'
+    r = expectation(model, ys)'
+    n, d = size(l)
+
+    t.L = updatehistory(t.L, l)
+    t.R = updatehistory(t.R, r)
+
+    target = transformpinv(l, r)'
+
+    #target = fixperm(target, l')
+    target[1:d, :]
+end
+
+using ArnoldiMethod: partialschur
+function transformpinv(L, R)
+    debug = true
+    # we transpose as we work in rowspace
+    L=L'
+    R=R'
+
+    # map from R->L in the row basis of R
+    kinv = L * pinv(R)
+
+    debug && display(kinv)
+
+    s, = partialschur(cpu(kinv), which=:SR)
+    debug && @show s.eigenvalues
+    # schur vectors wrt to the row basis of R
+    Q = s.Q |> cu
+
+    debug && display(Q)
+    # S T' R = T kinv R 
+    target = Q * kinv * R
+    #target = T * R
+
+    
+
+    n = norm.(eachrow(target), 1) |> cu
+    target = target ./ n .* size(target, 2)
+    debug && display(target)
+    return target'
+end
+
+function domsubspaceeigen(A::T) where {T}
+    A = cpu(A)
+    vals, vecs = LinearAlgebra.eigen(A, sortby=x->-abs(real(x)))
+    vecs = T(realsubspace(vecs))
+    return vecs, vals
+end
+
+function domsubspaceschur(A::T) where {T}
+    s, = partialschur(A, which=:SR)
+    vecs = T(s.Q)
+    return vecs, s.eigenvalues
+end
+
+
+""" computation of the real invariant subspace from complex eigenvectors """
+function realsubspace(V)
+    V = copy(V)
+    i = 1
+    while i + 1 < size(V, 2)
+        if V[:, i] ≈ conj(V[:, i+1])
+            V[:, i] = real(V[:, i])
+            V[:, i+1] = imag(V[:, i+1])
+            i += 2
+        else
+            i += 1
+        end
+    end
+    real(V)
+end
+
+
+"""     
+    updatehistory(L, l)
+
+Insert the newest observations `l` of size `(n,d)` into columns 2:d+1 of the history matrix `L` of size `(n,h)`.
+Automatically grow the `n` dimension of `L` if `l` is bigger.
+"""
+function updatehistory(L::T, l) where {T}
+    n, d = size(l)
+    m, h = size(L)
+    # grow up for more data
+    if n > m
+        Lnew = T(zeros(n, h))
+        Lnew[1:m, :] .= L
+        L = Lnew
+    end
+
+    if n < m
+        error("automated shrinking is not supported")
+    end
+
+    # we could add some history decay here
+    L[:, 1] .= 1 / sqrt(size(L, 1))
+    L[:, 2+d:end] = L[:, 2:end-d]
+    L[:, 2:d+1] = l
+
+    return L
+
 end
