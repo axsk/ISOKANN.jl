@@ -29,9 +29,9 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |>
     maxjump=1,
     out="out/reactive_path.pdb",
     source=pdbfile(iso.data),
+    chi = chicoords(iso, coords) |> vec |> cpu,
     kwargs...)
 
-    chi = chicoords(iso, coords) |> vec |> cpu
     ids = reactive_path(chi, coords; sigma, maxjump, kwargs...)
     if length(ids) == 0
         @warn "The computed reactive path is empty. Try adjusting the `sigma` parameter."
