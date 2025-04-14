@@ -3,9 +3,20 @@
 
 Regularized(opt, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), opt)
 
-""" Adam with L2 regularization. Note that this is different from AdamW (Adam+WeightDecay) (c.f. Decay vs L2 Reg.) """
+"""    
+    AdamRegularized(adam=1e-3, reg=1e-4)
+
+Constructs an optimizer that combines weight decay regularization with ADAM. 
+Uses `reg` for the weight decay parameter and `lr` as the learning rate for ADAM.
+Note that this is different from AdamW (Adam+WeightDecay) (c.f. Decay vs L2 Reg.). """
 AdamRegularized(adam=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Adam(adam))
 
+"""    
+    NesterovRegularized(; lr=1e-3, reg=1e-4)
+
+Constructs an optimizer that combines weight decay regularization with Nesterov momentum.
+Uses `reg` for the weight decay parameter and `lr` as the learning rate for Nesterov acceleration. 
+This worked well as alternative where ADAM had problems."""
 NesterovRegularized(lr=1e-3, reg=1e-4) = Optimisers.OptimiserChain(Optimisers.WeightDecay(reg), Optimisers.Nesterov(lr))
 
 optimizerstring(opt) = typeof(opt)
