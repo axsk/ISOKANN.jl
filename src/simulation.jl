@@ -116,6 +116,10 @@ features(d::SimulationData) = d.features[1]
 propcoords(d::SimulationData) = d.coords[2]
 propfeatures(d::SimulationData) = d.features[2]
 
+"""
+    flattenlast(x)
+
+Concatenate all but the first dimension of `x`. Usefull to convert a tensor of samples into a matrix """
 flattenlast(x) = reshape(x, size(x, 1), :)
 
 MLUtils.getobs(d::SimulationData) = d.features
