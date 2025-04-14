@@ -137,11 +137,13 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
 end
 
 chis(iso::Iso) = iso.model(features(iso.data))
-chi(iso::Iso) = vec(cpu(chis(iso)))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
 coords(iso::Iso) = coords(iso.data)
+features(iso::Iso) = features(iso.data)
+propcoords(iso::Iso) = propcoords(iso.data)
+propfeatures(iso::Iso) = propfeatures(iso.data)
 
 
 # add new datapoints to iso, starting at positions `coords`
@@ -154,13 +156,14 @@ resample_strat!(iso, ny; kwargs...) = (iso.data = resample_strat(iso.data, iso.m
 #Optimisers.adjust!(iso::Iso; kwargs...) = Optimisers.adjust!(iso.opt; kwargs...)
 #Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
-gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), iso.transform, iso.losses, gpu.(iso.loggers), iso.minibatch)
-cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), iso.transform, iso.losses, iso.loggers, iso.minibatch)
+# TODO: should this handled via @functor?
+gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), Flux.gpu(iso.transform), iso.losses, gpu.(iso.loggers), iso.minibatch)
+cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), Flux.cpu(iso.transform), iso.losses, iso.loggers, iso.minibatch)
 
 function Base.show(io::IO, mime::MIME"text/plain", iso::Iso)
-    println(io, typeof(iso), ":")
+    println(io, "Iso: ")
     println(io, " model: $(iso.model.layers)")
-    println(io, " transform: $(iso.transform)")
+    println(io, first(" transform: $(iso.transform)", 160))
     println(io, " opt: $(optimizerstring(iso.opt))")
     println(io, " minibatch: $(iso.minibatch)")
     println(io, " loggers: $(length(iso.loggers))")
