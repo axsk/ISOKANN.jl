@@ -59,10 +59,10 @@ Supports either CPU or GPU arrays.
 - `normalize`: whether to normalize all `coords` first
 - `sortincreasing`: return the path from lower to higher `xi` values
 """
-function reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
+function reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, minjump=0, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
     from, to = fromto(method, xi)
     nco = normalize ? coords ./ norm(coords, Inf) : coords
-    ids = shortestchain(nco, xi, from, to; sigma, maxjump)
+    ids = shortestchain(nco, xi, from, to; sigma, minjump, maxjump)
     sortincreasing && !isincreasing(ids) && reverse!(ids)
     return ids
 end
@@ -101,11 +101,13 @@ fromto(::FullPath, xi) = (1, length(xi))
 fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
-function shortestchain(xs, xi, from, to; sigma, maxjump)
+function shortestchain(xs, xi, from, to; sigma, minjump, maxjump)
     CUDA.has_cuda_gpu() && (xs = cu(xs))
     println("Computing pairwise distances")
-    @time dxs = pairwise_aligned_rmsd(xs) |> cpu
-    logp = finite_dimensional_distribution(dxs, xi, sigma, size(xs, 1), maxjump)
+    dt = xi' .- xi
+    mask = minjump .<= dt .<= maxjump
+    @time dxs = pairwise_aligned_rmsd(xs, mask) |> cpu
+    logp = finite_dimensional_distribution(dxs, dt, sigma, size(xs, 1), minjump, maxjump)
     println("Computing shortest path")
     @time ids = shortestpath(-logp, from, to)
     return ids
@@ -113,10 +115,9 @@ end
 
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
 # this is the dense "vectorized" implementation which is slightly faster on cpu but works and is much faster on gpu
-function finite_dimensional_distribution(dxs, xi, sigma, dim, maxjump)
-    dt = xi' .- xi
+function finite_dimensional_distribution(dxs, dt, sigma, dim, minjump, maxjump)
     map(dxs, dt) do dx, dt
-        0 < dt < maxjump || return -Inf
+        minjump <= dt <= maxjump || return -Inf
         v = dx / dt
         L = 1 / 2 * (v / sigma)^2
         s = (-dim / 2) * Base.log(2 * pi * sigma^2 * dt)
