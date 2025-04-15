@@ -142,6 +142,27 @@ function pairwise_aligned_rmsd(xs::AbstractMatrix)
     return dists
 end
 
+function pairwise_aligned_rmsd(xs::AbstractMatrix, mask::AbstractMatrix{Bool})
+    n = size(xs, 2)
+    @assert size(mask) == (n,n)
+    mask = LinearAlgebra.triu(mask .|| mask', 1) .> 0 # compute each pairwise dist only once
+    dists = fill!(similar(xs, n, n), 0)
+
+    xs = reshape(xs, 3, :, n)
+    xs = xs .- mean(xs, dims=2)
+    for i in 1:n
+        m = findall(mask[:,i])
+        x = xs[:,:,i]
+        y = xs[:,:,m]
+        size(y, 3) == 0 && continue
+        @inbounds dists[m, i] = batched_kabsch_rmsd(x, y)
+    end
+
+    dists.+=dists'
+    dists[(mask+mask').==0] .= NaN
+    return dists
+end
+
 """ 
     batched_kabsch_rmsd(x::AbstractMatrix, ys::AbstractArray{<:Any, 3})
     batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix)
