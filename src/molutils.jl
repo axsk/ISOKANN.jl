@@ -72,17 +72,20 @@ standardform(x::AbstractArray, sim::IsoSimulation) = standardform(x, rotationhan
 Align the framse in `traj` successively to each other.
 `traj` can be passed either as Vector of vectors or matrix of flattened conformations.
 """
-function aligntrajectory(traj::AbstractVector)
+function aligntrajectory(traj::AbstractVector; kwargs...)
     aligned = [centermean(traj[1])]
     for x in traj[2:end]
-        push!(aligned, align(x, aligned[end]))
+        push!(aligned, align(x, aligned[end]; kwargs...))
     end
     return aligned
 end
-aligntrajectory(traj::AbstractMatrix) = reduce(hcat, aligntrajectory(eachcol(traj)))
+aligntrajectory(traj::AbstractMatrix; kwargs...) = reduce(hcat, aligntrajectory(eachcol(traj); kwargs...))
 
 centermean(x::AbstractMatrix) = x .- mean(x, dims=2)
 centermean(x::AbstractVector) = as3dmatrix(centermean, x)
+
+using StatsBase: Weights, uweights
+
 
 """
     align(x::AbstractMatrix, target::AbstractMatrix)
@@ -90,14 +93,34 @@ centermean(x::AbstractVector) = as3dmatrix(centermean, x)
 
 Return `x` aligned to `target`
 """
-function align(x::AbstractMatrix, target::AbstractMatrix)
-    m = mean(target, dims=2)
-    x = centermean(x)
-    r = kabschrotation(x, target .- m)
-    y = r * x .+ m
-    return y
+function align(x::AbstractMatrix, y::AbstractMatrix; weights::Weights=uweights(size(x, 2))::Vector)
+    my = mean(y, weights, dims=2)
+    mx = mean(x, weights, dims=2)
+    wx = (x .- mx) .* weights'
+    wy = (y .- my) .* weights'
+    z = kabschrotation(wx, wy) * (x .- mx) .+ my
 end
-align(x::S, target::T) where {S<:AbstractVector, T<:AbstractVector} = as3dmatrix(align, x, target)
+align(x::S, target::T; kwargs...) where {S<:AbstractVector, T<:AbstractVector} = as3dmatrix((x,y)->align(x,y;kwargs...), x, target)
+
+function alignalong(x::AbstractMatrix, atoms::AbstractVector)
+    n = size(x, 2)
+    x = reshape(x, 3, :, n)
+    y = alignalong(x, atoms)
+    reshape(y, :, n)
+end
+
+
+
+
+function alignalong(x::AbstractArray, atoms::AbstractVector)
+    x = x .- mean(x[:, atoms, :], dims=2)
+    for i in 1:size(x,3)
+        r = kabschrotation(x[:, atoms, i], x[:, atoms, 1])
+        x[:, :, i] = r * x[:, :, i] 
+    end
+    return x
+
+end
 
 
 " compute R such that R*p is closest to q"
@@ -173,7 +196,11 @@ function batched_kabsch_rmsd(x::AbstractMatrix, ys::AbstractArray{<:Any, 3})
     h = batched_mul(x, batched_transpose(ys))
     s = batched_svd(h)
     r = batched_mul(s.V, batched_transpose(s.U))
-    d = sqrt.(sum(abs2, batched_mul(r, x) .- ys, dims=(1, 2)) ./ size(x, 2))
+
+    rx = batched_mul(r, x)
+    rx .= rx .- ys
+
+    d = sqrt.(sum(abs2, rx, dims=(1, 2)) ./ size(x, 2))
     return vec(d)
 end
 batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix) = batched_kabsch_rmsd(reshape(x, 3, :), reshape(ys, 3, :, size(ys, 2)))
@@ -428,4 +455,24 @@ function ca_rmsd(cainds::AbstractVector, target::String, source::String=target, 
     refcoords = reshape(xr, 3, :)[:, car[cainds]]
 
     ReactionCoordsRMSD(inds, refcoords)
+end
+
+function batch_orientation(points::Array{Float64,3})
+    @assert size(points, 1) == 3 "First dimension must be 3 (x, y, z coordinates)"
+    @assert size(points, 2) == 4 "Second dimension must be 4 (four points per tetrahedron)"
+
+    # Extract point coordinates for each batch
+    A, B, C, D = eachslice(points, dims=2)
+
+    # Compute edge vectors
+    v1 = B .- A  # B - A
+    v2 = C .- A  # C - A
+    v3 = D .- A  # D - A
+
+    # Compute the determinant (signed volume)
+    signed_volumes = map(1:size(points, 3)) do i
+        LinearAlgebra.det(hcat(v1[:, i], v2[:, i], v3[:, i]))
+    end
+
+    return signed_volumes  # Returns an array of length N
 end

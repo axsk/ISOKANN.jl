@@ -30,6 +30,7 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |>
     out="out/reactive_path.pdb",
     source=pdbfile(iso.data),
     chi = chicoords(iso, coords) |> vec |> cpu,
+    weights = Weights(OpenMM.masses(iso.data.sim)) * 8,
     kwargs...)
 
     ids = reactive_path(chi, coords; sigma, maxjump, kwargs...)
@@ -38,14 +39,14 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |>
         return ids
     end
     plot_reactive_path(ids, chi) |> display
-    path = aligntrajectory(coords[:, ids])
+    path = aligntrajectory(coords[:, ids]; weights)
     println("saving reactive path of length $(length(ids)) to $out")
     mkpath(dirname(out))
     save_trajectory(out, path, top=source)
     return ids
 end
 
-""" reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
+""" reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, minjump=0, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
 
 Find the maximum likelihood path (under the model of brownion motion with noise `sigma`) through `coords` with times `xi`.
 Supports either CPU or GPU arrays.
@@ -54,7 +55,7 @@ Supports either CPU or GPU arrays.
 - `coords`:  (ndim x npoints) matrix of coordinates.
 - `xi`: time coordinate of the npoints points
 - `sigma`: spatial noise strength of the model.
-- `maxjump`: upper bound to the jump in time `xi` along the path.
+- `minjump`, `maxjump`: lower and upper bound to the jump in time `xi` along the path. Tighter bounds reduce the computational cost.
 - `method`: either `FromToPath`,  `QuantilePath`, `FullPath` or `MaxPath`, specifying the end points of the path
 - `normalize`: whether to normalize all `coords` first
 - `sortincreasing`: return the path from lower to higher `xi` values
