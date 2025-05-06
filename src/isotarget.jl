@@ -370,19 +370,24 @@ function isotarget(model, xs, ys, t::TransformSVDRev)
     return target'
 end
 
+abstract type TransformPinv end
 
-@kwdef mutable struct TransformPinvHist2{T<:AbstractMatrix}
+
+
+@kwdef mutable struct TransformPinv1{T<:AbstractMatrix} <: TransformPinv
     L::T
     R::T
 end
 
-function Base.show(io::IO, t::TransformPinvHist2)#
-    print(io, "TransformPinvHist2($(size(t.L,2)))")
+
+
+function Base.show(io::IO, t::TransformPinv)#
+    print(io, "$(typeof(t))($(size(t.L,2)))")
 end
 
-TransformPinvHist(n::Int, hist::Int) = TransformPinvHist2(ones(n, hist), ones(n, hist))
+TransformPinv(n::Int, hist::Int) = TransformPinv1(ones(n, hist), ones(n, hist))
 
-function isotarget(model, xs, ys, t::TransformPinvHist2)
+function isotarget(model, xs, ys, t::TransformPinv)
     l = model(xs)'
     r = expectation(model, ys)'
     n, d = size(l)
@@ -390,18 +395,23 @@ function isotarget(model, xs, ys, t::TransformPinvHist2)
     t.L = updatehistory(t.L, l)
     t.R = updatehistory(t.R, r)
 
-    target = transformpinv(l, r)'
+    #target = transformpinv(t.L[:, 2:end], t.R[:, 2:end], t)'
+    target = transformpinv(l,r, t)'
 
     #target = fixperm(target, l')
     target[1:d, :]
 end
 
 using ArnoldiMethod: partialschur
-function transformpinv(L, R)
+
+matchcuda(typed, value) = typed isa CUDA.CuArray ? gpu(value) : cpu(value)
+function transformpinv(L, R, ::TransformPinv1)
     debug = true
     # we transpose as we work in rowspace
     L=L'
     R=R'
+
+    @assert size(L, 1) < size(L,2)
 
     # map from R->L in the row basis of R
     kinv = L * pinv(R)
@@ -411,20 +421,57 @@ function transformpinv(L, R)
     s, = partialschur(cpu(kinv), which=:SR)
     debug && @show s.eigenvalues
     # schur vectors wrt to the row basis of R
-    Q = s.Q |> cu
+    Q = matchcuda(L, s.Q)
 
     debug && display(Q)
     # S T' R = T kinv R 
-    target = Q' * kinv * R
+    target = Q * kinv * R
     #target = T * R
 
     
 
-    n = norm.(eachrow(target), 1) |> cu
-    target = target ./ n .* size(target, 2)
+    target = rownormalize(target) .* size(target, 2)
     debug && display(target)
     return target'
 end
+
+@kwdef mutable struct TransformPinv2{T<:AbstractMatrix} <: TransformPinv
+    L::T
+    R::T
+    direct::Bool
+end
+
+function transformpinv(L, R, t::TransformPinv2)
+    # we transpose as we work in rowspace
+    x = L'
+    y = R'
+
+    @show size(x)
+    @show size(y)
+
+
+    @assert size(x, 1) < size(x, 2)
+
+    if t.direct
+        kinv = x * pinv(y)
+        @show size(kinv)
+        Q = LinearAlgebra.eigen(kinv).vectors |> realsubspace
+        inv(Q)
+    else
+        k = y * pinv(x)
+        Q = LinearAlgebra.eigen(k).vectors[:, end:-1:1] |> realsubspace
+        inv(Q)
+    end
+    
+
+    #@show Q
+    #display(Q)
+
+    target = rownormalize(inv(Q) * y)
+    return target'
+end
+
+rownormalize(x;p=2) = (x ./ norm.(eachrow(x), p))
 
 function domsubspaceeigen(A::T) where {T}
     A = cpu(A)
@@ -444,7 +491,7 @@ end
 function realsubspace(V)
     V = copy(V)
     i = 1
-    while i + 1 < size(V, 2)
+    while i + 1 <= size(V, 2)
         if V[:, i] ≈ conj(V[:, i+1])
             V[:, i] = real(V[:, i])
             V[:, i+1] = imag(V[:, i+1])
@@ -484,4 +531,80 @@ function updatehistory(L::T, l) where {T}
 
     return L
 
+end
+
+
+mutable struct TransformPinv3{T<:AbstractArray} 
+    L::T
+    R::T
+    fixedone::Bool
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", T::TransformPinv3)
+    println(io, "TransformPinv3, size $(size(T.L)), fixedone $(T.fixedone)")
+end
+
+function TransformPinv3(d::Int, h::Int, fixedone::Bool)
+    @assert h >= d
+    fixedone && (d += 1)
+    x = ones(d, h)
+    y = ones(d, h)
+    TransformPinv3(x,y,fixedone)
+end
+    
+
+function updatehistory!(x, y, t::TransformPinv3)
+    d = size(x, 1)
+    if t.fixedone
+        t.L[d+2:end, :] = t.L[2:end-d, :]
+        t.R[d+2:end, :] = t.L[2:end-d, :]
+        t.L[2:d+1, :] = x
+        t.R[2:d+1, :] = y
+    else
+        t.L[d+1:end, :] = t.L[1:end-d, :]
+        t.R[d+1:end, :] = t.L[1:end-d, :]
+        t.L[1:d, :] = x
+        t.R[1:d, :] = y
+    end
+end
+
+isotarget(model, xs, ys, t::TransformPinv3) = isotarget(model(xs), expectation(model,ys), t)
+
+function isotarget(x::AbstractArray, y::AbstractArray, t::TransformPinv3)
+    d, n = size(x)
+    updatehistory!(x,y,t)
+    #@show t.fixedone
+    target = target_pseudoinverse(t.L, t.R)
+    #return target[1:d,:]
+    target = t.fixedone ? target[2:d+1,:] : target[1:d, :]
+    
+    return target
+end
+
+function target_pseudoinverse(x,y)
+    @assert size(x, 1) < size(x, 2)
+    DEBUG = true
+    kinv = x * pinv(y)
+    
+    e = LinearAlgebra.eigen(cpu(kinv), sortby=mysort)
+   
+    DEBUG && @show e.values
+    #DEBUG && @show 1 ./ e.values
+    Q = realsubspace(e.vectors)
+    Q = typeof(kinv)(Q)
+    target = inv(Q) * y
+    #return target
+    #i = findfirst(x -> real(x) > (1e-3), e.values) # filter out vanishing subspace
+    #i = sortperm(abs.(e.values .- 1))
+    #@show i, size(target)
+    #target = target[i, :]
+    target = target ./ sqrt.(sum(abs2, target, dims=2)) * 50# normalize
+    #DEBUG && @show sqrt.(sum(abs2, target, dims=2))
+    target = target .* sign.(sum(x .* target, dims=2)) # adjust signs
+    return target
+end
+mysort(c::Complex) = mysort(real(c))
+function mysort(a::Real)
+    a < 0.9 && return Inf
+    a
 end

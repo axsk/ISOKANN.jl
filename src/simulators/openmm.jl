@@ -240,7 +240,7 @@ function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
     claim_memory(sim)
     dim, nx = size(x0)
     ys = isnothing(sim.bias) ? similar(x0, dim, nk, nx) : WeightedSamples(similar(x0, dim, nk, nx), zeros(1, nk, nx))
-    p = ProgressMeter.Progress(nk * nx)
+    p = ProgressMeter.Progress(nk * nx, desc="Propagating")
     for i in 1:nx
         for j in 1:nk
             ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=false, reclaim=false)
@@ -295,7 +295,7 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
     xs = similar(x0, length(x0), n)
     int = sim.pysim.context.getIntegrator()
 
-    p = ProgressMeter.Progress(n)
+    p = ProgressMeter.Progress(n, "Computing trajectory")
     done = 0
     runtime = 0.0
     lagtime = stepsize(sim) * saveevery / 1000
@@ -309,7 +309,7 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
             resample_velocities && set_random_velocities!(sim)
             runtime += @elapsed int.step(saveevery)
             xs[:, i] = coords(sim)
-            @assert norm(xs[:, i]) <= 1e5
+           # @assert norm(xs[:, i]) <= 1e5
             done = i
 
             simtime = round(lagtime * i, sigdigits=3)
@@ -436,7 +436,12 @@ Base.convert(::Type{OpenMMSimulationSerialized}, sim::OpenMMSimulation) =
     OpenMMSimulationSerialized(sim.constructor)
 
 Base.convert(::Type{OpenMMSimulation{T}}, s::OpenMMSimulationSerialized) where {T<:Any} =
+try
     OpenMMSimulation(; s.constructor...)
+catch
+    @warn "Could not reconstruct OpenMMSimulation(; $(s.constructor))"
+    OpenMMSimulation()
+end
 
 Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation) =
     print(io, "OpenMMSimulation(; $(string(sim.constructor)[2:end-1]))")

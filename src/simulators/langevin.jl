@@ -38,7 +38,7 @@ function trajectory(l::AbstractLangevin; T=lagtime(l), x0=randx0(l), save_start=
     return xs::Matrix
 end
 
-laggedtrajectory(l::AbstractLangevin, steps) = trajectory(l, T=lagtime(l) * steps, saveat=lagtime(l))
+laggedtrajectory(l::AbstractLangevin, steps; kwargs...) = trajectory(l, T=lagtime(l) * steps, saveat=lagtime(l); kwargs...)
 
 # helper functions to generate random initial data
 
