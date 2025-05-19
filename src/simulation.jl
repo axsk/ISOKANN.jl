@@ -34,6 +34,7 @@ end
 
 Base.show(io::IO, mime::MIME"text/plain", sim::ExternalSimulation) = print(io, "$(typeof(sim)) of $(sim.pdb)")
 pdbfile(sim::ExternalSimulation) = sim.pdb
+masses(sim::ExternalSimulation) = nothing
 
 
 #TODO:

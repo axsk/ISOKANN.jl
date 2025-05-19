@@ -93,7 +93,13 @@ using StatsBase: Weights, uweights
 
 Return `x` aligned to `target`
 """
-function align(x::AbstractMatrix, y::AbstractMatrix; weights::Weights=uweights(size(x, 2))::Vector)
+function align(x::AbstractMatrix, y::AbstractMatrix; weights=nothing)
+
+    if isnothing(weights)
+        weights = uweights(size(x, 2))
+    end
+
+
     my = mean(y, weights, dims=2)
     mx = mean(x, weights, dims=2)
     wx = (x .- mx) .* weights'
