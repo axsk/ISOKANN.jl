@@ -12,7 +12,7 @@ using ProgressMeter
 using Plots
 
 using LinearAlgebra: norm, dot, cross, diag, svd, pinv, I, schur, qr
-using StatsBase: mean, sample, mean_and_std
+using StatsBase: mean, sample, mean_and_std, Histogram, fit
 using StaticArrays: SVector
 using StatsBase: sample, quantile
 using CUDA: CuArray, CuMatrix, cu, CUDA
@@ -119,6 +119,7 @@ include("extrapolate.jl")
 
 include("minimumpath.jl")
 include("reactionpath.jl")
+include("freeenergy.jl")
 
 #include("IsoMu/IsoMu.jl")
 #include("vgv/vgv.jl")
