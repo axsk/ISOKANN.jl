@@ -142,12 +142,11 @@ end
 
 Local energy minimization on the current levelset of the chi function
 """
-function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=false, algorithm=Optim.GradientDescent, xtol=nothing)
+function energyminimization_chilevel(iso, x0; skipwater=false, kwargs...)
     sim = iso.data.sim
     x = copy(x0) .|> Float64
 
     chi(x) = chicoords(iso, reshape(x, :, 1)) |> myonly
-    manifold = Levelset(chi, chi(x0))
 
     U(x) = OpenMM.potential(sim, x)
 
@@ -157,12 +156,16 @@ function energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, itera
         f
     end
 
+    return minimize_levelset(x, chi, U, dU; kwargs...)
+end
 
+function minimize_levelset(x0, f, U, dU; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, algorithm=Optim.GradientDescent, xtol=nothing)
+    manifold = Levelset(f, f(x0))
     linesearch = Optim.LineSearches.HagerZhang(alphamax=alphaguess)
     alg = algorithm(; linesearch, alphaguess, manifold)
 
 
-    o = Optim.optimize(U, dU, x, alg, Optim.Options(; iterations, f_tol, show_trace,); inplace=false)
+    o = Optim.optimize(U, dU, x0, alg, Optim.Options(; iterations, f_tol, show_trace,); inplace=false)
     return o.minimizer
 end
 

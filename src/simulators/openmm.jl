@@ -10,7 +10,8 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, coords, force, pdbfile,
-    force, potential, lagtime, trajectory, laggedtrajectory, WeightedSamples
+    force, potential, lagtime, trajectory, laggedtrajectory, 
+    WeightedSamples, masses
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
