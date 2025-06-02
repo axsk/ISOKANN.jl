@@ -30,7 +30,7 @@ pkg> build Conda
 Then instruct PyCall to use the Conda.jl environment by calling
 ```julia
 julia> ENV["PYTHON"] = ""
-pkg> build PyCall.` to rebuild PyCall
+pkg> build PyCall
 ```
 
 See also the [PyCall docs](https://github.com/JuliaPy/PyCall.jl?tab=readme-ov-file#specifying-the-python-version).
