@@ -123,8 +123,7 @@ include("reactionpath.jl")
 #include("IsoMu/IsoMu.jl")
 #include("vgv/vgv.jl")
 
-include("utils/makie.jl")
-include("utils/bonito.jl")
+
 
 include("utils/picking.jl")
 end
