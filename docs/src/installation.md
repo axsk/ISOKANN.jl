@@ -19,10 +19,19 @@ If you want the newest features you can instead install the newest version using
 
 Note that this can take a while on the first run as Julia downloads and precompiles all dependencies.
 
-We plan on installing OpenMM automatically with ISOKANN. Right now, if you want to use openmm with ISOKANN you will need to make it available to PyCall.jl.
-This should work automatically, when Julia is using its own Conda.jl Conda environment. In order to set this up (once) run: 
-- `shell> PYTHON="" julia` to start julia with the environment variable indicating to use its own Python environment
-- `pkg> build PyCall.` to rebuild PyCall
+ISOKANN is using OpenMM for sampling, which is being called through PyCall.jl - a library facilitating python calls from withing julia.
+PyCall can install OpenMM automatically if it is using a conda environment managed by Julia through Conda.jl.
+
+To use a shared Conda environment, e.g. because of quota limitations, you can configure it using:
+```julia
+julia> ENV["CONDA_JL_HOME"] = "/data/[...]/conda/envs/conda_jl"  # change this to your path, which contains bin/conda etc.
+pkg> build Conda
+```
+Then instruct PyCall to use the Conda.jl environment by calling
+```julia
+julia> ENV["PYTHON"] = ""
+pkg> build PyCall.` to rebuild PyCall
+```
 
 See also the [PyCall docs](https://github.com/JuliaPy/PyCall.jl?tab=readme-ov-file#specifying-the-python-version).
 
