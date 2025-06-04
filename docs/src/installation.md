@@ -1,6 +1,6 @@
 # Installation
 
-Install Julia (>=v1.10) using https://github.com/JuliaLang/juliaup
+Install Julia (v1.11 or newer) using https://github.com/JuliaLang/juliaup
 
 ```
 curl -fsSL https://install.julialang.org | sh
@@ -21,16 +21,19 @@ Note that this can take a while on the first run as Julia downloads and precompi
 
 ISOKANN is using OpenMM for sampling, which is being called through PyCall.jl - a library facilitating python calls from withing julia.
 PyCall can install OpenMM automatically if it is using a conda environment managed by Julia through Conda.jl.
+This is the default on Windows on Mac systems, on Linux however you would need to install OpenMM via pip yourself or instruct Julia to use the Conda.jl environment by running
 
-To use a shared Conda environment, e.g. because of quota limitations, you can configure it using:
-```julia
-julia> ENV["CONDA_JL_HOME"] = "/data/[...]/conda/envs/conda_jl"  # change this to your path, which contains bin/conda etc.
-pkg> build Conda
-```
+
 Then instruct PyCall to use the Conda.jl environment by calling
 ```julia
 julia> ENV["PYTHON"] = ""
 pkg> build PyCall
+```
+
+To use a shared Conda environment, e.g. because of quota limitations, you can configure it using prior to building PyCall:
+```julia
+julia> ENV["CONDA_JL_HOME"] = "/data/[...]/conda/envs/conda_jl"  # change this to your path, which contains bin/conda etc.
+pkg> build Conda
 ```
 
 See also the [PyCall docs](https://github.com/JuliaPy/PyCall.jl?tab=readme-ov-file#specifying-the-python-version).
