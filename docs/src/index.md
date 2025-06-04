@@ -9,11 +9,23 @@ CurrentModule = ISOKANN
 ## Main entry points
 
 ```@docs
-SimulationData
 OpenMMSimulation
-propagate
+SimulationData
 Iso
+propagate
+isodata
 run!
+plot_training
+```
+
+## Models and Optimizers
+```@docs
+defaultmodel
+pairnet
+densenet
+smallnet
+AdamRegularized
+NesterovRegularized
 ```
 
 ## Public API
