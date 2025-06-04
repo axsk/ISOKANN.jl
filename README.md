@@ -27,7 +27,7 @@ using ISOKANN
 sim = OpenMMSimulation()
 
 # Sample the initial data for training of ISOKANN with 100 initial points and 5 koopman samples per point.
-data = isodata(sim, 100, 5)
+data = SimulationData(sim, 100, 5)
 
 # create the ISOKANN training object
 iso = Iso(data)
@@ -48,8 +48,13 @@ exit_rates(iso)
 save_reactive_path(iso, out="path.pdb")
 ```
 
-A more comprehensive example simulating the folding of the chicken villin can be found in [`scripts/villin.jl`](scripts/villin.jl).
-For further information consult the docstrings (e.g. `?Iso`).
+More comprehensive usecase examples can be found in 
+- [`scripts/villin.jl`](scripts/villin.jl): simulating the folding of the chicken villin
+- [`scripts/vgvapg.jl`](scripts/vgvapg.jl)
+- [`scripts/trpcaeg.jl](scripts/trpcage.jl)
+- [`scripts/multitraj.jl](scripts/multitraj.jl): Extraction of reaction paths from multiple long trajectories.
+
+For further information on specific functions use Julias built-in help/docstring functionality, e.g. `?Iso`.
 
 ## References
 
