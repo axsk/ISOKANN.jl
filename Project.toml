@@ -1,7 +1,7 @@
 name = "ISOKANN"
 uuid = "512544ac-929d-4ba3-aa9d-55e9313a4b47"
 authors = ["Sikorski <sikorski@zib.de> and contributors"]
-version = "1.1.0"
+version = "1.2.0"
 
 [deps]
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
