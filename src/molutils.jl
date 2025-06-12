@@ -93,8 +93,10 @@ using StatsBase: Weights, uweights
 
 Return `x` aligned to `target`
 """
-function align(x::AbstractMatrix, y::AbstractMatrix; weights=nothing)
+align(x::AbstractMatrix, y::AbstractMatrix; kwargs...) = batched_kabsch_align(reshape(y, 3, :), reshape(x, 3, :, 1); kwargs...)[:, :, 1]
+align(x::AbstractVector, y::AbstractVector; kwargs...) = batched_kabsch_align(reshape(y, 3, :), reshape(x, 3, :, 1); kwargs...) |> vec
 
+function s_align(x::AbstractMatrix, y::AbstractMatrix; weights=nothing)
     if isnothing(weights)
         weights = uweights(size(x, 2))
     end
@@ -102,11 +104,11 @@ function align(x::AbstractMatrix, y::AbstractMatrix; weights=nothing)
 
     my = mean(y, weights, dims=2)
     mx = mean(x, weights, dims=2)
-    wx = (x .- mx) .* weights'
-    wy = (y .- my) .* weights'
+    wx = (x .- mx) .* sqrt.(weights')
+    wy = (y .- my) .* sqrt.(weights')
     z = kabschrotation(wx, wy) * (x .- mx) .+ my
 end
-align(x::S, target::T; kwargs...) where {S<:AbstractVector, T<:AbstractVector} = as3dmatrix((x,y)->align(x,y;kwargs...), x, target)
+s_align(x::S, target::T; kwargs...) where {S<:AbstractVector,T<:AbstractVector} = as3dmatrix((x, y) -> align(x, y; kwargs...), x, target)
 
 function alignalong(x::AbstractMatrix, atoms::AbstractVector)
     n = size(x, 2)
@@ -117,12 +119,12 @@ end
 
 
 
-
+""" align all frames to first frame along given atoms """
 function alignalong(x::AbstractArray, atoms::AbstractVector)
     x = x .- mean(x[:, atoms, :], dims=2)
-    for i in 1:size(x,3)
+    for i in 1:size(x, 3)
         r = kabschrotation(x[:, atoms, i], x[:, atoms, 1])
-        x[:, :, i] = r * x[:, :, i] 
+        x[:, :, i] = r * x[:, :, i]
     end
     return x
 
@@ -141,7 +143,7 @@ end
     aligned_rmsd(p::AbstractMatrix, q::AbstractMatrix)
     aligned_rmsd(p::AbstractVector, q::AbstractVector)
 
-Return the aligned root mean squared distance between conformations `p` and `q`, passed either flattened or as (3,d) matrix 
+Return the aligned root mean squared distance between conformations `p` and `q`, passed either flattened or as (3,d) matrix
 """
 function aligned_rmsd(p::AbstractMatrix, q::AbstractMatrix)
     p = align(p, q)
@@ -152,64 +154,74 @@ aligned_rmsd(p::AbstractVector, q::AbstractVector) = aligned_rmsd(reshape(p, 3, 
 
 using NNlib: batched_mul, batched_transpose
 
-""" 
-    pairwise_aligned_rmsd(xs::AbstractMatrix)
+"""
+    pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}, weights::Weights)
 
-Compute the respectively aligned pairwise distances between all conformations.
+Compute the respectively aligned pairwise root mean squared distances between all conformations.
+
+- `mask`: Allows to restrict the computation of the pairwise distances to only those pairs where the `mask` is `true`
+- `weights`: Weights for the individual atoms in the alignement and distance calculations
 
 Each column of `xs` represents a flattened conformation.
 Returns the (n, n) matrix with the pairwise distances.
 """
-function pairwise_aligned_rmsd(xs::AbstractMatrix)
+function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fill(True, size(xs, 2), size(xs, 2)), weights::Weights=uweights(div(size(xs, 1), 3)))
     n = size(xs, 2)
-    xs = reshape(xs, 3, :, n)
-    xs = xs .- mean(xs, dims=2)
-    dists = similar(xs, n, n)
-    for i in 1:n
-        dists[:,i] = batched_kabsch_rmsd(xs[:,:,i], xs)
-    end
-    return dists
-end
-
-function pairwise_aligned_rmsd(xs::AbstractMatrix, mask::AbstractMatrix{Bool})
-    n = size(xs, 2)
-    @assert size(mask) == (n,n)
+    @assert size(mask) == (n, n)
+    @assert length(weights) == div(size(xs, 1), 3)
     mask = LinearAlgebra.triu(mask .|| mask', 1) .> 0 # compute each pairwise dist only once
     dists = fill!(similar(xs, n, n), 0)
 
     xs = reshape(xs, 3, :, n)
-    xs = xs .- mean(xs, dims=2)
     for i in 1:n
-        m = findall(mask[:,i])
-        x = xs[:,:,i]
-        y = xs[:,:,m]
+        m = findall(mask[:, i])
+        x = xs[:, :, i]
+        y = xs[:, :, m]
         size(y, 3) == 0 && continue
-        @inbounds dists[m, i] = batched_kabsch_rmsd(x, y)
+        @inbounds dists[m, i] = batched_kabsch_rmsd(x, y, weights)
     end
 
-    dists.+=dists'
+    dists .+= dists'
     dists[(mask+mask').==0] .= NaN
     return dists
 end
 
-""" 
+"""
     batched_kabsch_rmsd(x::AbstractMatrix, ys::AbstractArray{<:Any, 3})
     batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix)
 
 Returns the vector of aligned Root mean square distances of conformation `x` to all conformations in `ys`
 """
-function batched_kabsch_rmsd(x::AbstractMatrix, ys::AbstractArray{<:Any, 3})
-    h = batched_mul(x, batched_transpose(ys))
-    s = batched_svd(h)
-    r = batched_mul(s.V, batched_transpose(s.U))
+batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix, weights=uweights(div(size(x, 2), 3))) = batched_kabsch_rmsd(reshape(x, 3, :), reshape(ys, 3, :, size(ys, 2)))
 
-    rx = batched_mul(r, x)
-    rx .= rx .- ys
-
-    d = sqrt.(sum(abs2, rx, dims=(1, 2)) ./ size(x, 2))
+function batched_kabsch_rmsd(x, ys; weights=uweights(size(x, 2)))
+    ys = batched_kabsch_align(x, ys; weights)
+    delta = ys .- x
+    d = sqrt.(sum(abs2, delta .* weights', dims=(1, 2)) ./ sum(weights))
     return vec(d)
 end
-batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix) = batched_kabsch_rmsd(reshape(x, 3, :), reshape(ys, 3, :, size(ys, 2)))
+
+"""
+    batched_kabsch_align(x::AbstractMatrix, ys::AbstractArray{<:Any, 3}, weights = uweights(size(x,2)))
+
+Align all structures in `ys` to the one in `x`, where `weights` specifies the weight of individual atoms for the alignment.
+
+`size(x) = (d, n), size(y) = (d, n, m)` where d is the systems dimension (usually 3), n number of particles and m number of structures to align`
+"""
+function batched_kabsch_align(x::AbstractMatrix, ys::AbstractArray{<:Any,3}; weights=uweights(size(x, 2)))
+    m = sum(x .* weights.values', dims=2) / sum(weights)
+    x = x .- m
+    ys = ys .- sum(ys .* weights.values', dims=2) / sum(weights)
+
+    h = batched_mul(x .* weights.values', batched_transpose(ys))
+    s = batched_svd(h)
+    r = batched_mul(s.U, batched_transpose(s.V))
+
+    ys = batched_mul(r, ys) .+ m
+    return ys
+end
+
+
 
 
 batched_svd(x::CuArray) = svd(x)
@@ -217,7 +229,7 @@ batched_svd(x::CuArray) = svd(x)
 function batched_svd(x)
     u = similar(x)
     v = similar(x)
-    s = similar(x, size(x,2), size(x,3))
+    s = similar(x, size(x, 2), size(x, 3))
     for i in 1:size(x, 3)
         u[:, :, i], s[:, i], v[:, :, i] = svd(x[:, :, i])
     end
@@ -450,7 +462,7 @@ Example:
     rsmd = ca_rmsd(3:10, "data/villin/1yrf.pdb", "data/villin nowater.pdb")
     rmsd(rand(300,10))
 """
-function ca_rmsd(cainds::AbstractVector, target::String, source::String=target, )
+function ca_rmsd(cainds::AbstractVector, target::String, source::String=target,)
 
     ca = OpenMM.calpha_inds(OpenMMSimulation(pdb=source))
     inds = ca[cainds]
