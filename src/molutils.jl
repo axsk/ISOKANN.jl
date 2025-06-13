@@ -174,7 +174,7 @@ function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fi
 
     xs = reshape(xs, 3, :, n)
     for i in 1:n
-        m = findall(mask[:, i])
+        m = mask[:, i]
         x = xs[:, :, i]
         y = xs[:, :, m]
         size(y, 3) == 0 && continue

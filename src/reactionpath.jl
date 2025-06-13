@@ -102,9 +102,9 @@ fromto(::FullPath, xi) = (1, length(xi))
 fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
-function shortestchain(xs, xi, from, to; sigma, minjump, maxjump, weights)
+function shortestchain(xs, xi, from, to; sigma, minjump, maxjump, weights, gpu=CUDA.has_cuda_gpu())
     @assert size(xs, 2) == length(xi)
-    #CUDA.has_cuda_gpu() && (xs = cu(xs); weights=cu(weights))
+    gpu && (xs = cu(xs); xi = cu(xi); weights = Weights(cu(weights)))
     println("Computing pairwise distances")
     dt = xi' .- xi
     mask = minjump .<= dt .<= maxjump
@@ -112,13 +112,13 @@ function shortestchain(xs, xi, from, to; sigma, minjump, maxjump, weights)
     dim = size(xs, 1)
     logp = fin_dim_loglikelihood.(dxs, dt, sigma, dim, minjump, maxjump)
     println("Computing shortest path")
-    @time ids = shortestpath(-cpu(logp), from, to)
+    @time ids = shortestpath(-logp, from, to)
     return ids
 end
 
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
 function fin_dim_loglikelihood(dx, dt, sigma, dim, minjump, maxjump)
-    minjump <= dt <= maxjump || return -Inf
+    minjump <= dt <= maxjump && dt > 0 || return -Inf
     v = dx / dt
     L = 1 / 2 * (v / sigma)^2
     s = (-dim / 2) * Base.log(2 * pi * sigma^2 * dt)
@@ -126,26 +126,22 @@ function fin_dim_loglikelihood(dx, dt, sigma, dim, minjump, maxjump)
 end
 
 
+shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1], [s2])
+
 # compute the shortest through the matrix A from ind s1 to s2
 function shortestpath(A::AbstractMatrix, s1::AbstractVector{<:Integer}, s2::AbstractVector{<:Integer})
-    A = sparse(replace(A, Inf => 0))
+    A = sparse(replace(A, Inf => 0)) |> SparseArrays.dropzeros
     g = SimpleWeightedDiGraph(A)
     bf = Graphs.bellman_ford_shortest_paths(g, s1, A)
     j = s2[bf.dists[s2]|>argmin]
     return Graphs.enumerate_paths(bf, j)
 end
 
-shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1], [s2])
-
-function shortestpath(A::CuArray, s1::Integer, s2::Integer)
-    # TODO: currently GPU is broken / returning wrong results, dispatch to CPU
-    return shortestpath(cpu(A), s1, s2)
-    #_, par = bellmanford(A, s1)
-    #enumerate_path(par, s2)
+function shortestpath(A::Union{CuArray,CUDA.CUSPARSE.CuSparseMatrixCSC}, s1::AbstractVector{<:Integer}, s2::AbstractVector{<:Integer})
+    d, par = bellmanford(A, s1)
+    j = s2[d[s2]|>argmin]
+    enumerate_path(par, j)
 end
-
-shortestpath(A::CuArray, s1::AbstractVector, s2::AbstractVector) = throw(DomainError("GPU shortest path does not support multi source search yet."))
-
 
 ### VISUALIZATION
 
@@ -184,11 +180,13 @@ function enumerate_path(par, s2)
     return reverse(path)
 end
 
-function bellmanford(A::DenseMatrix, source)
+bellmanford(s, source::Int) = bellmanford(s, [source])
+
+function bellmanford(A::DenseMatrix, source::AbstractVector)
     n = size(A, 1)
-    A = A + I * Inf
+    #A[diagind(A)] .= Inf
     d = similar(A, n) .= typemax(eltype(A))
-    CUDA.@allowscalar d[source] = 0
+    d[source] .= 0
     par = similar(d, Int) .= 0
     new = similar(d, Bool) .= false
     next = similar(A)
@@ -204,13 +202,11 @@ function bellmanford(A::DenseMatrix, source)
 end
 
 using CUDA
-
-
 import SparseArrays
 
 # CUDA implementation of Bellman Ford for sparse matrices
 # each thread corresponds to one column
-function bellmanford(s::CUDA.CUSPARSE.AbstractCuSparseMatrix, source=1)
+function bellmanford(s::CUDA.CUSPARSE.AbstractCuSparseMatrix, source::AbstractVector)
     colptr = s.colPtr
     rowval = s.rowVal
     val = s.nzVal
@@ -218,7 +214,7 @@ function bellmanford(s::CUDA.CUSPARSE.AbstractCuSparseMatrix, source=1)
     p = similar(rowval, d) .= 0
     dists = similar(val, d) .= Inf
     changed = cu([false])
-    CUDA.@allowscalar dists[source] = 0
+    dists[source] .= 0
 
     kernel = @cuda name = "bellman ford iteration" launch = false bf_cuda_sparse(dists, p, colptr, rowval, val, changed)
     config = launch_configuration(kernel.fun)
