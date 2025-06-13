@@ -165,7 +165,7 @@ Compute the respectively aligned pairwise root mean squared distances between al
 Each column of `xs` represents a flattened conformation.
 Returns the (n, n) matrix with the pairwise distances.
 """
-function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fill(True, size(xs, 2), size(xs, 2)), weights::Weights=uweights(div(size(xs, 1), 3)))
+function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fill(True, size(xs, 2), size(xs, 2)), weights=uweights(div(size(xs, 1), 3)))
     n = size(xs, 2)
     @assert size(mask) == (n, n)
     @assert length(weights) == div(size(xs, 1), 3)
@@ -178,7 +178,7 @@ function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fi
         x = xs[:, :, i]
         y = xs[:, :, m]
         size(y, 3) == 0 && continue
-        @inbounds dists[m, i] = batched_kabsch_rmsd(x, y, weights)
+        @inbounds dists[m, i] = batched_kabsch_rmsd(x, y; weights)
     end
 
     dists .+= dists'
@@ -192,12 +192,13 @@ end
 
 Returns the vector of aligned Root mean square distances of conformation `x` to all conformations in `ys`
 """
-batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix, weights=uweights(div(size(x, 2), 3))) = batched_kabsch_rmsd(reshape(x, 3, :), reshape(ys, 3, :, size(ys, 2)))
+batched_kabsch_rmsd(x::AbstractVector, ys::AbstractMatrix; kwargs...) =
+    batched_kabsch_rmsd(reshape(x, 3, :), reshape(ys, 3, :, size(ys, 2)); kwargs...)
 
 function batched_kabsch_rmsd(x, ys; weights=uweights(size(x, 2)))
     ys = batched_kabsch_align(x, ys; weights)
     delta = ys .- x
-    d = sqrt.(sum(abs2, delta .* weights', dims=(1, 2)) ./ sum(weights))
+    d = sqrt.(sum(abs2, delta .* weights.values', dims=(1, 2)) ./ sum(weights))
     return vec(d)
 end
 

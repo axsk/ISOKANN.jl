@@ -29,11 +29,11 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |>
     maxjump=1,
     out="out/reactive_path.pdb",
     source=pdbfile(iso.data),
-    chi = chicoords(iso, coords) |> vec |> cpu,
-    weights = Weights(OpenMM.masses(iso.data.sim)) * 8,
+    chi=chicoords(iso, coords) |> vec |> cpu,
+    weights=Weights(OpenMM.masses(iso.data.sim)),
     kwargs...)
 
-    ids = reactive_path(chi, coords; sigma, maxjump, kwargs...)
+    ids = reactive_path(chi, coords; sigma, maxjump, weights, kwargs...)
     if length(ids) == 0
         @warn "The computed reactive path is empty. Try adjusting the `sigma` parameter."
         return ids
@@ -60,10 +60,10 @@ Supports either CPU or GPU arrays.
 - `normalize`: whether to normalize all `coords` first
 - `sortincreasing`: return the path from lower to higher `xi` values
 """
-function reactive_path(xi::AbstractVector, coords::AbstractMatrix; sigma, minjump=0, maxjump=1, method=QuantilePath(0.05), normalize=false, sortincreasing=true)
+function reactive_path(xi::AbstractVector, coords::AbstractMatrix; method=QuantilePath(0.05), normalize=false, sortincreasing=true, kwargs...)
     from, to = fromto(method, xi)
     nco = normalize ? coords ./ norm(coords, Inf) : coords
-    ids = shortestchain(nco, xi, from, to; sigma, minjump, maxjump)
+    ids = shortestchain(nco, xi, from, to; kwargs...)
     sortincreasing && !isincreasing(ids) && reverse!(ids)
     return ids
 end
@@ -102,29 +102,29 @@ fromto(::FullPath, xi) = (1, length(xi))
 fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
-function shortestchain(xs, xi, from, to; sigma, minjump, maxjump)
-    CUDA.has_cuda_gpu() && (xs = cu(xs))
+function shortestchain(xs, xi, from, to; sigma, minjump, maxjump, weights)
+    @assert size(xs, 2) == length(xi)
+    #CUDA.has_cuda_gpu() && (xs = cu(xs); weights=cu(weights))
     println("Computing pairwise distances")
     dt = xi' .- xi
     mask = minjump .<= dt .<= maxjump
-    @time dxs = pairwise_aligned_rmsd(xs, mask) |> cpu
-    logp = finite_dimensional_distribution(dxs, dt, sigma, size(xs, 1), minjump, maxjump)
+    @time dxs = pairwise_aligned_rmsd(xs; mask, weights)
+    dim = size(xs, 1)
+    logp = fin_dim_loglikelihood.(dxs, dt, sigma, dim, minjump, maxjump)
     println("Computing shortest path")
-    @time ids = shortestpath(-logp, from, to)
+    @time ids = shortestpath(-cpu(logp), from, to)
     return ids
 end
 
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
-# this is the dense "vectorized" implementation which is slightly faster on cpu but works and is much faster on gpu
-function finite_dimensional_distribution(dxs, dt, sigma, dim, minjump, maxjump)
-    map(dxs, dt) do dx, dt
-        minjump <= dt <= maxjump || return -Inf
-        v = dx / dt
-        L = 1 / 2 * (v / sigma)^2
-        s = (-dim / 2) * Base.log(2 * pi * sigma^2 * dt)
-        logp = (s - L * dt)
-    end
+function fin_dim_loglikelihood(dx, dt, sigma, dim, minjump, maxjump)
+    minjump <= dt <= maxjump || return -Inf
+    v = dx / dt
+    L = 1 / 2 * (v / sigma)^2
+    s = (-dim / 2) * Base.log(2 * pi * sigma^2 * dt)
+    return logp = (s - L * dt)
 end
+
 
 # compute the shortest through the matrix A from ind s1 to s2
 function shortestpath(A::AbstractMatrix, s1::AbstractVector{<:Integer}, s2::AbstractVector{<:Integer})
@@ -138,8 +138,10 @@ end
 shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1], [s2])
 
 function shortestpath(A::CuArray, s1::Integer, s2::Integer)
-    _, par = bellmanford(A, s1)
-    enumerate_path(par, s2)
+    # TODO: currently GPU is broken / returning wrong results, dispatch to CPU
+    return shortestpath(cpu(A), s1, s2)
+    #_, par = bellmanford(A, s1)
+    #enumerate_path(par, s2)
 end
 
 shortestpath(A::CuArray, s1::AbstractVector, s2::AbstractVector) = throw(DomainError("GPU shortest path does not support multi source search yet."))
