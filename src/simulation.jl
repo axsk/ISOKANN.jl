@@ -67,11 +67,14 @@ end
     SimulationData(sim::IsoSimulation, nx::Int, nk::Int; ...)
     SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; ...)
     SimulationData(sim::IsoSimulation, (xs,ys); ...)
+    SimulationData(xs, ys; pdb="", ...)  # for external simulation data
 
 Generates SimulationData from a simulation with either
 - `nx` initial points and `nk` Koopman samples
 - `xs` as initial points and `nk` Koopman sample
 - `xs` as inintial points and `ys` as Koopman samples
+- `xs` and `ys` from external simulations of the given `pdb`
+- `xs` a trajectory of an external simulation with given `pdb`, implicitly computing the `data_from_trajectory` of succesive samples
 """
 SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, values(randx0(sim, nx)), nk; kwargs...)
@@ -79,6 +82,14 @@ SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
 function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs...)
     ys = propagate(sim, xs, nk)
     SimulationData(sim, (xs, ys); kwargs...)
+end
+
+function SimulationData(xs::AbstractMatrix, ys::AbstractArray; pdb=nothing, kwargs...)
+    SimulationData(ExternalSimulation(pdb), (xs, ys); kwargs...)
+end
+
+function SimulationData(xs::AbstractMatrix; pdb=nothing, kwargs...)
+    SimulationData(ExternalSimulation(pdb), data_from_trajectory(xs); kwargs...)
 end
 
 
@@ -185,7 +196,7 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=fal
         (:)
     end
 
-    
+
 
 
 
@@ -195,10 +206,10 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=fal
 
     m1 = min(minimum(chix), minimum(chiy))
     m2 = max(maximum(chix), maximum(chiy))
-    
-    chix = (chix .- m1) ./ (m2-m1)
+
+    chix = (chix .- m1) ./ (m2 - m1)
     chiy = (chiy .- m1) ./ (m2 - m1)
-    
+
 
     iy = resample_kde_ash(chix, chiy, n)
 
