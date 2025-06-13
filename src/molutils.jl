@@ -165,7 +165,7 @@ Compute the respectively aligned pairwise root mean squared distances between al
 Each column of `xs` represents a flattened conformation.
 Returns the (n, n) matrix with the pairwise distances.
 """
-function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fill(True, size(xs, 2), size(xs, 2)), weights=uweights(div(size(xs, 1), 3)))
+function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fill(true, size(xs, 2), size(xs, 2)), weights=uweights(div(size(xs, 1), 3)))
     n = size(xs, 2)
     @assert size(mask) == (n, n)
     @assert length(weights) == div(size(xs, 1), 3)
@@ -173,12 +173,12 @@ function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fi
     dists = fill!(similar(xs, n, n), 0)
 
     xs = reshape(xs, 3, :, n)
-    for i in 1:n
-        m = mask[:, i]
+    @views for i in 1:n
+        m = findall(mask[:, i])
+        length(m) == 0 && continue
         x = xs[:, :, i]
         y = xs[:, :, m]
-        size(y, 3) == 0 && continue
-        @inbounds dists[m, i] = batched_kabsch_rmsd(x, y; weights)
+        dists[m, i] .= batched_kabsch_rmsd(x, y; weights)
     end
 
     dists .+= dists'
