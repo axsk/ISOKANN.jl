@@ -30,7 +30,7 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |>
     out="out/reactive_path.pdb",
     source=pdbfile(iso.data),
     chi=chicoords(iso, coords) |> vec |> cpu,
-    weights=Weights(OpenMM.masses(iso.data.sim)),
+    weights=OpenMM.masses(iso.data.sim),
     kwargs...)
 
     ids = reactive_path(chi, coords; sigma, maxjump, weights, kwargs...)
@@ -104,7 +104,7 @@ fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 # compute the shortest chain through the samples xs with reaction coordinate xi
 function shortestchain(xs, xi, from, to; sigma, minjump, maxjump, weights, gpu=CUDA.has_cuda_gpu())
     @assert size(xs, 2) == length(xi)
-    gpu && (xs = cu(xs); xi = cu(xi); weights = Weights(cu(weights)))
+    gpu && (xs = cu(xs); xi = cu(xi); weights = (cu(weights)))
     println("Computing pairwise distances")
     dt = xi' .- xi
     mask = minjump .<= dt .<= maxjump
