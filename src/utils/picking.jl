@@ -47,7 +47,7 @@ function picking_aligned(x::AbstractMatrix, m::Integer)
     x .-= mean(x, dims=2)
     x = reshape(x, :, n)
 
-    _, qs, d = picking(x, m, dists=ISOKANN.batched_kabsch_rmsd)
+    _, qs, d = picking(x, m, dists=ISOKANN.aligned_rmsd)
     return x[:, qs], qs, d
 end
 
