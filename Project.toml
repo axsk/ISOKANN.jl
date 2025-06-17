@@ -7,7 +7,6 @@ version = "1.2.0"
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
 AverageShiftedHistograms = "77b51b56-6f8f-5c3a-9cb4-d71f9594ea6e"
 BioStructures = "de9282ab-8554-53be-b2d6-f6c222edabfc"
-Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Chemfiles = "46823bd8-5fb3-5f92-9aa0-96921f3dd015"
@@ -42,12 +41,13 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StochasticDiffEq = "789caeaf-c7a9-5a7d-9973-96adeb23e2a0"
 ThreadPools = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
-WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 
 [weakdeps]
 Molly = "aa0f7f06-fcc0-5ec4-a7f3-a573f33f9c4c"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
+Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
 
 [extensions]
 MakieExt = ["WGLMakie", "Bonito"]
