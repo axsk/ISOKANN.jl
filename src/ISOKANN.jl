@@ -90,6 +90,7 @@ export coords, features, propcoords, propfeatures
 
 include("utils/subsample.jl")  # adaptive sampling
 include("utils/pairdists.jl")       # pair distances
+include("utils/align.jl")
 include("simulation.jl")      # Interface for simulations
 include("models.jl")          # the neural network models/architectures
 #include("simulators/molly.jl")           # interface to work with Molly Systems
