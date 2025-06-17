@@ -165,26 +165,27 @@ Compute the respectively aligned pairwise root mean squared distances between al
 Each column of `xs` represents a flattened conformation.
 Returns the (n, n) matrix with the pairwise distances.
 """
-function pairwise_aligned_rmsd_sparse(xs::AbstractMatrix; mask::SparseMatrixCSC{Bool}=fill(true, size(xs, 2), size(xs, 2)), weights::MaybeWeights=nothing, memsize=1_000_000_000)
+function pairwise_aligned_rmsd(xs::AbstractMatrix, mask::AbstractSparseMatrix;
+    weights::MaybeWeights=nothing,
+    memsize=1_000_000_000)
+
     n = size(xs, 2)
     @assert size(mask) == (n, n)
-    mask = LinearAlgebra.triu(mask .|| mask', 1) .> 0 # compute each pairwise dist only once
     dists = similar(mask, eltype(xs))
     xs = reshape(xs, 3, :, n)
 
     i, j, _ = findnz(dists)
 
-    batchsize = floor(Int, memsize / sizeof(xs[:, :, 1]))
+    batchsize = floor(Int, memsize / sizeof(@view xs[:, :, 1]))
     @views for l in Iterators.partition(1:length(i), batchsize)
         x = xs[:, :, i[l]]
         y = xs[:, :, j[l]]
-
-        dists.nzval[l] .= batched_kabsch_rmsd(x, y; weights) |> cpu
+        nonzeros(dists)[l] = batched_kabsch_rmsd(x, y; weights) |> cpu
     end
-    return dists + dists'
+    return dists
 end
 
-function pairwise_aligned_rmsd(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fill(true, size(xs, 2), size(xs, 2)), weights::MaybeWeights=nothing)
+function pairwise_aligned_rmsd_delineated(xs::AbstractMatrix; mask::AbstractMatrix{Bool}=fill(true, size(xs, 2), size(xs, 2)), weights::MaybeWeights=nothing)
     n = size(xs, 2)
     @assert size(mask) == (n, n)
     mask = LinearAlgebra.triu(mask .|| mask', 1) .> 0 # compute each pairwise dist only once

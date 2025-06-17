@@ -102,28 +102,66 @@ fromto(::FullPath, xi) = (1, length(xi))
 fromto(::MaxPath, xi) = (argmin(xi), argmax(xi))
 
 # compute the shortest chain through the samples xs with reaction coordinate xi
-function shortestchain(xs, xi, from, to; sigma, minjump, maxjump, weights, gpu=CUDA.has_cuda_gpu())
+function shortestchain(xs, xi, from, to; sigma=1, minjump=0, maxjump=1, weights=nothing, gpu=CUDA.has_cuda_gpu())
     @assert size(xs, 2) == length(xi)
-    gpu && (xs = cu(xs); xi = cu(xi); weights = (cu(weights)))
+
+    if gpu
+        #xs = cu(xs);  weights = cu(weights)
+        xs, xi, weights = cu.((xs, xi, weights))
+    else
+        xs, xi, weights = cpu.((xs, xi, weights))
+    end
+
+    dt = dtmask(xi, minjump, maxjump)
+
     println("Computing pairwise distances")
-    dt = xi' .- xi
-    mask = minjump .<= dt .<= maxjump
-    @time dxs = pairwise_aligned_rmsd(xs; mask, weights)
+    @time dxs = pairwise_aligned_rmsd(xs, dt; weights)
+
     dim = size(xs, 1)
-    logp = fin_dim_loglikelihood.(dxs, dt, sigma, dim, minjump, maxjump)
+    logp = fin_dim_loglikelihood(dxs, dt, sigma, dim)
+
     println("Computing shortest path")
     @time ids = shortestpath(-logp, from, to)
+
     return ids
 end
 
+
+function dtmask(xi, minjump, maxjump)
+    @assert minjump >= 0
+    p = sortperm(xi)
+    xi = xi[p]
+    n = length(xi)
+    I = Int[]
+    J = Int[]
+    V = eltype(xi)[]
+    for i in 1:n
+        for j in i:n
+            dt = xi[j] - xi[i]
+            dt > maxjump && break
+            dt <= minjump && continue
+            push!(I, i)
+            push!(J, j)
+            push!(V, dt)
+        end
+    end
+    return sparse(p[I], p[J], V, n, n)
+end
+
+dtmask(xi::CuArray, minjump, maxjump) = cu(dtmask(cpu(xi), minjump, maxjump))
+
+
 # path probabilities c.f. https://en.wikipedia.org/wiki/Onsager-Machlup_function
-function fin_dim_loglikelihood(dx, dt, sigma, dim, minjump, maxjump)
-    minjump <= dt <= maxjump && dt > 0 || return -Inf
+function fin_dim_loglikelihood(dx, dt, sigma, dim)
+    dt == 0 && return zero(eltype(dx))
     v = dx / dt
-    L = 1 / 2 * (v / sigma)^2
-    s = (-dim / 2) * Base.log(2 * pi * sigma^2 * dt)
+    L = (v / sigma)^2 / 2
+    s = (-dim / 2) * Base.log(sigma^2 * dt * 2 * pi)
     return logp = (s - L * dt)
 end
+
+fin_dim_loglikelihood(dxs::AbstractArray, dt::AbstractArray, sigma, dim) =
+    fin_dim_loglikelihood.(dxs, dt, eltype(dt)(sigma), eltype(dt)(dim))
 
 
 shortestpath(A::AbstractMatrix, s1::Integer, s2::Integer) = shortestpath(A, [s1], [s2])
