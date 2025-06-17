@@ -226,12 +226,10 @@ struct ReactionCoordsRMSD
     refcoords
 end
 
-function (r::ReactionCoordsRMSD)(x::AbstractVector)
-    x = reshape(x, 3, :)[:, r.inds]
-    return ISOKANN.aligned_rmsd(x, r.refcoords)
+function (r::ReactionCoordsRMSD)(x)
+    return ISOKANN.aligned_rmsd(r.refcoords, x)
 end
 
-(r::ReactionCoordsRMSD)(xs::AbstractMatrix) = map(r, eachcol(xs))
 (rs::Vector{ReactionCoordsRMSD})(xs::AbstractMatrix) = [r(col) for r in rs, col in eachcol(xs)] # allows to call vectors of RSMDs, returning their values as rows
 
 """
@@ -256,7 +254,7 @@ function ca_rmsd(cainds::AbstractVector, target::String, source::String=target,)
     refstruct = OpenMMSimulation(pdb=target)
     car = OpenMM.calpha_inds(refstruct)
     xr = coords(refstruct)
-    refcoords = reshape(xr, 3, :)[:, car[cainds]]
+    refcoords = reshape(xr, 3, :)[:, car[cainds]] |> vec
 
     ReactionCoordsRMSD(inds, refcoords)
 end
