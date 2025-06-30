@@ -28,13 +28,15 @@ end
 trajectory(sim::IsoSimulation, steps) = error("not implemented")
 laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 
-Base.@kwdef mutable struct ExternalSimulation <: IsoSimulation
-    pdb = nothing
+mutable struct ExternalSimulation <: IsoSimulation
+    dict::Dict{Symbol, Any}
 end
 
-Base.show(io::IO, mime::MIME"text/plain", sim::ExternalSimulation) = print(io, "$(typeof(sim)) of $(sim.pdb)")
-pdbfile(sim::ExternalSimulation) = sim.pdb
-masses(sim::ExternalSimulation) = nothing
+ExternalSimulation(;kwargs...) = ExternalSimulation(Dict(kwargs))
+
+Base.show(io::IO, mime::MIME"text/plain", sim::ExternalSimulation) = print(io, "ExternalSimulation with parameters $(sim.dict)")
+masses(sim::ExternalSimulation) = get(sim.dict, :masses, nothing)
+pdbfile(sim::ExternalSimulation) = get(sim.dict, :pdbfile, nothing)
 
 
 #TODO:
@@ -234,6 +236,7 @@ function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
 end
 
 datasize((xs, ys)::Tuple) = size(xs), size(ys)
+features((xs, ys)::Tuple) = xs
 
 """
     laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
