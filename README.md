@@ -1,4 +1,4 @@
-t# ISOKANN
+# ISOKANN
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://axsk.github.io/ISOKANN.jl/dev)
 

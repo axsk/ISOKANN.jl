@@ -15,6 +15,8 @@ pkg> add ISOKANN
 pkg> test ISOKANN
 ```
 
+(Although you may skip this on the first read, make sure to get acquainted with Julias package manager (Pkg) and learn about Pkg environments at some point: https://pkgdocs.julialang.org/v1/environments/)
+
 If you want the newest features you can instead install the newest version using `pkg> add https://github.com/axsk/ISOKANN.jl` instead.
 
 Note that this can take a while on the first run as Julia downloads and precompiles all dependencies.
@@ -50,3 +52,9 @@ instantiate the dependencies with `]instantiate`.
 See also the (almost mandatory read) on the [Julia Pkg docs](https://pkgdocs.julialang.org/v1/).
 
 We strongly recommend using the Revise.jl package through `using Revise` before loading ISOKANN, so that your changes will automatically load in your current session.
+
+## Workflow
+For the IDE we recommend VS Code + julia extension. If you are using Coder, make sure to try out the VS Code Remote Coder extension.
+The package was designed around interactive use in Julias REPL.
+
+
