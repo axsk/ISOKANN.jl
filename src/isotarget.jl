@@ -6,7 +6,14 @@ Computes the expectation value of `f` over `xs`.
 """
 expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
 
+function chi_kchi()
+end
 
+isotarget(iso) = isotarget(iso, iso.transform)
+
+
+
+chi_kchi(model, data::SimulationData) = (model(features(data)), expectation(model, propfeatures(data)))
 
 
 
@@ -90,21 +97,29 @@ end
 Classical 1D shift-scale (ISOKANN 1) """
 struct TransformShiftscale end
 
-function isotarget(model, xs, ys, t::TransformShiftscale; shiftscale=false)
-    ks = expectation(model, ys)
-    @assert size(ks, 1) == 1 "TransformShiftscale only works with one dimensional chi functions"
+function isotarget(ks, t::TransformShiftscale; ret_shiftscale=false)
+    @assert (ks isa AbstractVector) || (size(ks, 1) == 1) "TransformShiftscale only works with one dimensional chi functions"
 
     min, max = extrema(ks)
     max > min || throw(DomainError("Could not compute the shift-scale. chi function is constant"))
     target = (ks .- min) ./ (max - min)
     # TODO: find another solution for this, this is not typestable
-    if (shiftscale)
+    #=
+    if (ret_shiftscale)
         shift = min / (min + 1 - max)
         lambda = max-min
         return target, shift, lambda
     end
+    =#
     return target
 end
+
+function isotarget(iso::Iso, t::TransformShiftscale)
+    iso.model
+    _, ks = chi_kchi(iso.model, iso.data)
+    isotarget(ks, t)
+end
+
 
 
 # TODO: design decision: do we want this as outer type or as part of what we have inside the other transforms?
@@ -264,7 +279,7 @@ TransformLeftRightHistory(hist::Int) = TransformLeftRightHistory5(ones(0,hist), 
 function isotarget(model, xs, ys, t::TransformLeftRightHistory5)
     L = t.L
     R = t.R
-    
+
     l = model(xs)'
     r = expectation(model, ys)'
     n, d = size(l)
@@ -284,22 +299,22 @@ function transformleftright(L::T, R) where {T}
     # we have A*L = R
     # and want to find the eigenfcts of A.
     # to that end we construct a basis from <L..., R...>
-    # and compute the eigenfunctions of the projection of A onto that subspace 
+    # and compute the eigenfunctions of the projection of A onto that subspace
 
     D = size(L, 2)
     LR = hcat(R, L)
     q, r = qr(LR)
-    
+
     # we can project L and R onto the basis of the "Krylov" space
     #qL = q' * L
     #qR = q' * R
-    # which is the same as 
+    # which is the same as
     qR = r[:, 1:D]
     qL = r[:, D+1:end]
 
     # and look for the map that is mapping qL to qR
     A = qR / qL
-    
+
     #res = A * qL - qR
     #@show norm(res) # the residuum should be zero
     # given A in the Krylov basis, we can now compute its eigenfunctions
@@ -310,7 +325,7 @@ function transformleftright(L::T, R) where {T}
     @show vals
     vals = vals[1:D]
     vecs = vecs[:, 1:D]
-    
+
 
     # projecting the dom. eigenvecs. from Krylov basis back to data space we obtain our new target
     #vecs = cu(vecs)
@@ -319,13 +334,13 @@ function transformleftright(L::T, R) where {T}
     # lets compare the orientation of previous and resulting vectors, as to flip then for stable training
     s = sum(L .* target, dims=1)
     target .*= sign.(s)
-    
+
     # scale targets with their eigenvalue for stable training
     scale = 1
     scaling = real.(vals') .^ scale
     scaling = L isa CuArray ? cu(scaling) : scaling
     target = target .* scaling
-    
+
     target .*= sqrt(size(target, 1))
     if !all(isfinite.(target)) || any(real.(vals) .< 1e-8)
         #Main.@infiltrate()
@@ -424,11 +439,11 @@ function transformpinv(L, R, ::TransformPinv1)
     Q = matchcuda(L, s.Q)
 
     debug && display(Q)
-    # S T' R = T kinv R 
+    # S T' R = T kinv R
     target = Q * kinv * R
     #target = T * R
 
-    
+
 
     target = rownormalize(target) .* size(target, 2)
     debug && display(target)
@@ -462,7 +477,7 @@ function transformpinv(L, R, t::TransformPinv2)
         Q = LinearAlgebra.eigen(k).vectors[:, end:-1:1] |> realsubspace
         inv(Q)
     end
-    
+
 
     #@show Q
     #display(Q)
@@ -504,7 +519,7 @@ function realsubspace(V)
 end
 
 
-"""     
+"""
     updatehistory(L, l)
 
 Insert the newest observations `l` of size `(n,d)` into columns 2:d+1 of the history matrix `L` of size `(n,h)`.
@@ -534,7 +549,7 @@ function updatehistory(L::T, l) where {T}
 end
 
 
-mutable struct TransformPinv3{T<:AbstractArray} 
+mutable struct TransformPinv3{T<:AbstractArray}
     L::T
     R::T
     fixedone::Bool
@@ -551,7 +566,7 @@ function TransformPinv3(d::Int, h::Int, fixedone::Bool)
     y = ones(d, h)
     TransformPinv3(x,y,fixedone)
 end
-    
+
 
 function updatehistory!(x, y, t::TransformPinv3)
     d = size(x, 1)
@@ -577,7 +592,7 @@ function isotarget(x::AbstractArray, y::AbstractArray, t::TransformPinv3)
     target = target_pseudoinverse(t.L, t.R)
     #return target[1:d,:]
     target = t.fixedone ? target[2:d+1,:] : target[1:d, :]
-    
+
     return target
 end
 
@@ -585,9 +600,9 @@ function target_pseudoinverse(x,y)
     @assert size(x, 1) < size(x, 2)
     DEBUG = true
     kinv = x * pinv(y)
-    
+
     e = LinearAlgebra.eigen(cpu(kinv), sortby=mysort)
-   
+
     DEBUG && @show e.values
     #DEBUG && @show 1 ./ e.values
     Q = realsubspace(e.vectors)

@@ -10,7 +10,7 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
     propagate, dim, randx0,
     featurizer, defaultmodel,
     savecoords, coords, force, pdbfile,
-    force, potential, lagtime, trajectory, laggedtrajectory, 
+    force, potential, lagtime, trajectory, laggedtrajectory,
     WeightedSamples, masses
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
@@ -83,8 +83,12 @@ end
 function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
     k = NamedTuple(k)
     if haskey(k, :py)
+        py"""
+        julia=True
+        """
         @pyinclude(k.py)
         pysim = py"simulation"
+
         return OpenMMSimulation{T}(pysim, steps, k, bias)
     elseif haskey(k, :pdb)
         pysim = defaultsystem(; k...)
@@ -220,7 +224,7 @@ function (f::FeaturesAngles)(coords)
     mapslices(f, coords, dims=1)
 end
 
-         
+
 
 
 """ generate `n` random inintial points for the simulation `mm` """

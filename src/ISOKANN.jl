@@ -86,6 +86,7 @@ export reactionpath_minimum, reactionpath_ode
 export chicoords
 export ca_rmsd
 export coords, features, propcoords, propfeatures
+export ExternalSimulation
 
 
 include("utils/subsample.jl")  # adaptive sampling
@@ -104,8 +105,9 @@ include("data.jl")            # tools for handling the data (sampling, slicing, 
 include("simulators/langevin.jl")  # for the simulators
 
 #include("isosimple.jl")
-include("isotarget.jl")
 include("iso.jl")
+include("isotarget.jl")
+
 include("plots.jl")           # visualizations
 
 include("simulators/openmm.jl")
@@ -120,7 +122,7 @@ export OpenMMSimulation
 include("extrapolate.jl")
 
 include("minimumpath.jl")
-include("reactionpath.jl")
+include("reactivepath.jl")
 include("freeenergy.jl")
 
 #include("IsoMu/IsoMu.jl")

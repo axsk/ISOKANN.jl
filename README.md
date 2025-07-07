@@ -1,4 +1,4 @@
-# ISOKANN
+t# ISOKANN
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://axsk.github.io/ISOKANN.jl/dev)
 
@@ -48,7 +48,7 @@ exit_rates(iso)
 save_reactive_path(iso, out="path.pdb")
 ```
 
-More comprehensive usecase examples can be found in 
+More comprehensive usecase examples can be found in
 - [`scripts/villin.jl`](scripts/villin.jl): simulating the folding of the chicken villin
 - [`scripts/vgvapg.jl`](scripts/vgvapg.jl)
 - [`scripts/trpcaeg.jl](scripts/trpcage.jl)

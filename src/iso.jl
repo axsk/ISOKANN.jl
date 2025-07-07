@@ -73,8 +73,10 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
     iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
     for _ in 1:n
-        xs, ys = getobs(iso.data)
-        target = isotarget(iso.model, xs, ys, iso.transform)
+        #xs, ys = getobs(iso.data)
+        #target = isotarget(iso.model, xs, ys, iso.transform)
+        target = isotarget(iso)
+        xs = features(iso.data)
         for i in 1:epochs
             loss = train_batch!(iso.model, xs, target, iso.opt, iso.minibatch)
             push!(iso.losses, loss)
@@ -84,7 +86,7 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
             log!(logger; iso, subdata=nothing)
         end
 
-        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(ys))])
+        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, "todo")])
     end
     return iso
 end
@@ -138,7 +140,7 @@ end
 
 chis(iso::Iso) = iso.model(features(iso.data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
-isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
+#isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
 coords(iso::Iso) = coords(iso.data)
 features(iso::Iso) = features(iso.data)
