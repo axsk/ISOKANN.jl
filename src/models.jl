@@ -32,8 +32,7 @@ outputdim(model::Flux.Dense) = size(model.weight, 1)
 
 #iscuda(m::Flux.Chain) = m[2].weight isa CuArray
 #iscuda(m::Flux.Chain) = first(Flux.trainables(m)) isa CuArray
-iscuda(m::Flux.Chain) = typeof(m).parameters[1].parameters[end].parameters[end] isa CuArray
-
+iscuda(m::Flux.Chain) = typeof(m).parameters[1].parameters[end].parameters[end] <: CuArray
 
 defaultmodel(x::Tuple) = pairnet(n=size(x[1],1))
 defaultmodel(x; n=size(features(x), 1)) = ISOKANN.pairnet(; n)
