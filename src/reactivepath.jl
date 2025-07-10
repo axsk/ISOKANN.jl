@@ -16,8 +16,12 @@ See also `reactive_path`.
 
 # Arguments
 - `iso::Iso`: The Iso for which the reactive path is computed.
+- `coords`: The coordinates amongst which the shortest path is calculated
+- `fullcoords`: The full coordinates which are used to save the computed path frames (defaults to coords).
+- `weights`: A vector of weights applied to each atom of the coordinates, determining the relative weight for the distance calculations.
 - `out="out/reactive_path.pdb"`: The output file path for saving the reactive path.
 - `source`: The source .pdb file providing the topology
+
 - `kwargs...`: additional parameters passed to `reactive_path`.
 
 # Returns
@@ -31,6 +35,7 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |>
     source=pdbfile(iso.data),
     chi=chicoords(iso, coords) |> vec |> cpu,
     weights=OpenMM.masses(iso.data.sim),
+    fullcoords = coords,
     kwargs...)
 
     ids = reactive_path(chi, coords; sigma, maxjump, weights, kwargs...)
@@ -39,7 +44,7 @@ function save_reactive_path(iso::Iso, coords::AbstractMatrix=coords(iso.data) |>
         return ids
     end
     plot_reactive_path(ids, chi) |> display
-    path = aligntrajectory(coords[:, ids]; weights)
+    path = aligntrajectory(fullcoords[:, ids]; weights)
     println("saving reactive path of length $(length(ids)) to $out")
     mkpath(dirname(out))
     save_trajectory(out, path, top=source)

@@ -192,14 +192,32 @@ Base.show(io::IO, f::FeaturesPairs) = print(io, "FeaturesPairs() with $(length(f
 
 
 import StatsBase
-function FeaturesPairs(sim::OpenMMSimulation; maxdist::Number, atomfilter::Function=a -> true, maxfeatures::Int=0)
-    pairs = local_atom_pairs(sim.pysim, maxdist; atomfilter=atomfilter)
 
-    if 0 < maxfeatures < length(pairs)
-        pairs = StatsBase.sample(pairs, maxfeatures, replace=false)
+"""
+    FeaturesPairs(pairs::Vector{Tuple{Int,Int}})
+    FeaturesPairs(system; selector="all", maxdist=Inf, maxfeatures=Inf)
+
+Creates a FeaturesPairs object from either:
+- a list of index pairs (`Vector{Tuple{Int,Int}}`) passed directly.
+- an `OpenMMSimulation` or PDB file path (`String`), selecting atom pairs using MDTraj selector syntax (`selector`),
+  optionally filtered by `maxdist` (in nm) and limited to `maxfeatures` randomly sampled pairs.
+"""
+FeaturesPairs(sim::OpenMMSimulation; kwargs...) = FeaturesPairs(pdbfile(sim), kwargs...)
+function FeaturesPairs(pdb::String; selector="all", maxdist=Inf, maxfeatures=Inf)
+    mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
+    m = mdtraj.load(pdb)
+    inds = m.top.select(selector) .+ 1
+    if maxdist < Inf
+        c = permutedims(m.xyz, (3, 2, 1))
+        c = reshape(c, :, size(c, 3))
+        inds = ISOKANN.restricted_localpdistinds(c, maxdist, inds)
+    else
+        inds = [(inds[i], inds[j]) for i in 1:length(inds) for j in i+1:length(inds)]
     end
-
-    return FeaturesPairs(pairs)
+    if length(inds) > maxfeatures
+        inds = StatsBase.sample(inds, maxfeatures, replace=false) |> sort
+    end
+    return FeaturesPairs(inds)
 end
 
 import BioStructures
