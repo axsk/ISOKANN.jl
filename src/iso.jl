@@ -176,10 +176,11 @@ end
 """
     runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf)
 
-Train iso with adaptive sampling. Sample `nx` new data points followed by `iter` isokann iterations and repeat this `generations` times.
+Train iso with adaptive sampling. Sample `kde` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
+`unique` enforces resampling from yet unsampled `ys` only.
 """
-function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, extrapolation=0.01, kde=1, unique=true)
+function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, kde=1, unique=true)
     p = ProgressMeter.Progress(generations)
     t_kde = 0.0
     t_train = 0.
@@ -188,8 +189,6 @@ function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, extrapolates=0, 
         GC.gc()
 
         t_kde += @elapsed ISOKANN.resample_kde!(iso, kde; unique)
-
-        t_extra += @elapsed ISOKANN.addextrapolates!(iso, extrapolates, stepsize=extrapolation)
 
         if length(iso.data) > cutoff
             iso.data = iso.data[end-cutoff+1:end]

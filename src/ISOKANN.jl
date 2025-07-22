@@ -119,8 +119,6 @@ export OpenMMSimulation
 
 #include("precompile.jl") # precompile for faster ttx
 
-include("extrapolate.jl")
-
 include("minimumpath.jl")
 include("reactivepath.jl")
 include("freeenergy.jl")
