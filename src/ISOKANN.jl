@@ -96,7 +96,7 @@ using .Align
 include("simulation.jl")      # Interface for simulations
 include("models.jl")          # the neural network models/architectures
 #include("simulators/molly.jl")           # interface to work with Molly Systems
-include("molutils.jl")        # molecular utilities: dihedrals, rotation
+include("utils/molutils.jl")        # molecular utilities: dihedrals, rotation
 include("data.jl")            # tools for handling the data (sampling, slicing, ...)
 #include("iso1.jl")        # ISOKANN - first implementation with adaptive sampling
 #include("loggers.jl")     # performance metric loggers
@@ -108,7 +108,7 @@ include("simulators/langevin.jl")  # for the simulators
 include("iso.jl")
 include("isotarget.jl")
 
-include("plots.jl")           # visualizations
+include("utils/plots.jl")           # visualizations
 
 include("simulators/openmm.jl")
 
@@ -119,9 +119,9 @@ export OpenMMSimulation
 
 #include("precompile.jl") # precompile for faster ttx
 
-include("minimumpath.jl")
-include("reactivepath.jl")
-include("freeenergy.jl")
+include("utils/minimumpath.jl")
+include("utils/reactivepath.jl")
+include("utils/freeenergy.jl")
 
 #include("IsoMu/IsoMu.jl")
 #include("vgv/vgv.jl")
