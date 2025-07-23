@@ -247,6 +247,13 @@ function exit_rates(x, kx, tau)
     return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
 end
 
+# generalization of above approach to higher dimensions
+function exit_rates(x::AbstractMatrix, kx::AbstractMatrix, tau)
+    P = x \ kx
+    return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
+end
+    
+
 koopman(iso::Iso) = koopman(iso.model, propfeatures(iso.data))
 
 exit_rates(iso::Iso) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso.data.sim))
