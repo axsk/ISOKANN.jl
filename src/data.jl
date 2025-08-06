@@ -78,21 +78,23 @@ end
 
 
 """
-    data_from_trajectory(xs::AbstractMatrix; reverse=false)
+    data_from_trajectory(xs::AbstractMatrix; reverse=true, stride=1, lag=1)
 
-Generate the lag-1 data from the trajectory `xs`.
-If `reverse` is true, also take the time-reversed lag-1 data.
+Generate the (x,y) data pairs for ISOKANN from the trajectory `xs`.
+
+`stride` controls the stride of the starting positions x and `lag` the lag for the end positions `y` in terms of trajectory frames.
+If `reverse` is true, construct also the time-reversed pairs (recomended for stable ISOKANN training).
 """
-function data_from_trajectory(xs::AbstractMatrix; reverse=false, stride=1)
+function data_from_trajectory(xs::AbstractMatrix; reverse=true, stride=1, lag=1)
+    n = size(xs, 2)
     if reverse
-        @views ys = stack([xs[:, 1:stride:end-2], xs[:, 3:stride:end]], dims=2) 
-        #ys = similar(xs, size(xs, 1), 2, size(xs, 2) - 2)
-        #@views ys[:, 1, :] .= xs[:, 3:end]
-        #@views ys[:, 2, :] .= xs[:, 1:end-2]
-        xs = xs[:, 2:stride:end-1]
+        rng = 1+lag:stride:n-lag
+        @views ys = stack([xs[:, rng .- lag], xs[:, rng .+ lag]], dims=2)
+        xs = xs[:, rng]
     else
-        ys = unsqueeze(xs[:, 2:stride:end], dims=2)
-        xs = xs[:, 1:stride:end-1]
+        rng = 1:stride:n-lag
+        ys = unsqueeze(xs[:, rng .+ lag], dims=2)
+        xs = xs[:, rng]
     end
     return xs, ys
 end
