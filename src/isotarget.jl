@@ -623,3 +623,120 @@ function mysort(a::Real)
     a < 0.9 && return Inf
     a
 end
+
+
+### experiments starting october 25
+
+mutable struct TransformCross1
+    X
+    Y
+    maxcols
+end
+using LinearAlgebra: eigen, Diagonal
+
+
+function rr_svd(X, Y)
+    U, S, V = svd(X)
+    Kh = U' * Y * V * inv(Diagonal(S))
+    # @show cond(Kh)
+    vals, vecs = eigen(Kh, sortby=x -> -real(x))
+    vecs = U * vecs
+    return (; vals, vecs)
+end
+
+# svd invert
+function rr_svd_i(X, Y)
+    vals, vecs = rr_svd(Y, X)
+    vals = 1 ./ vals[end:-1:1]
+    vecs = vecs[:, end:-1:1]
+    return (; vals, vecs)
+end
+
+# svd shift invert
+function rr_svd_si(X, Y)
+    vals, vecs = rr_svd(X - Y, X)
+    vals = 1 .- 1 ./ vals
+    return (; vals, vecs)
+end
+
+# generalized ev
+function rr_gev(X, Y)
+    C = X' * X
+    M = X' * Y
+    vals, vecs = eigen(M, C, sortby=x -> -real(x))
+    vecs = Y * vecs
+    return (; vals, vecs)
+end
+using LinearAlgebra: I
+function rr_cross(X, Y; alpha=0, τ=1e-3, p=2.0, wmin=1e-3, clip_s=(1e-2, 10.0))
+    Q, R = qr(Y) # orth. basis of Y, Q: d×m orthonormal, R: m×m
+    C = X' * X + alpha * I # tikh reg. with alpha
+    M = X' * Matrix(Q)
+    #@show C
+    T = R * (C \ M)  # X=C\M solves CX = M
+    vals, vecs = eigen(T, sortby=x -> -real(x))
+    V = Q * vecs # ambient Ritz vectors (d×k)
+
+    # residuals
+    Λ = Diagonal(vals)
+    Rres = X * vecs - (Y * vecs) * Λ
+    residuals = sqrt.(sum(abs2, Rres; dims=1))[:]
+
+    # relative residuals
+    Ynorms = sqrt.(sum(abs2, Y * vecs; dims=1))[:]
+    Xnorms = sqrt.(sum(abs2, X * vecs; dims=1))[:]
+    denom = abs.(vals) .* (Ynorms .+ eps()) .+ Xnorms .+ eps()
+    relres = residuals ./ denom
+
+    # weights
+    w = 1.0 ./ (1 .+ (relres ./ τ) .^ p)
+    w = clamp.(real.(w), wmin, 1.0)
+    s = sqrt.(w)
+    s = clamp.(s, clip_s[1], clip_s[2])
+    Vscaled = V .* reshape(s, 1, :)
+
+    global ret = (; vals, vecs=Vscaled, res=residuals, relres, weights=w, vecs0=V)
+    return ret
+end
+
+TransformCross = TransformCross1
+
+function TransformCross1(;npoints, maxcols)
+    X = zeros(npoints, 0)
+    Y = zeros(npoints, 0)
+
+    TransformCross1(X, Y, maxcols)
+end
+
+function isotarget(iso, t::TransformCross1) 
+    x, y = chi_kchi(iso.model, iso.data)
+    #display( stacktrace())
+    isotarget(x,y,t)
+end
+
+function isotarget(x, y, t::TransformCross1)
+    x = x'
+    y = y'
+    N, M = size(y)
+    if lastcols(t.X, M) != x
+        t.X = lastcols([t.X x], t.maxcols)
+        t.Y = lastcols([t.Y y], t.maxcols)
+    else
+        println("noupdate")
+    end
+    z = rr_cross(t.X, t.Y)
+    @show round.(z.vals, digits=3)
+    y = z.vecs[:, 1:M] |> real
+    #plot(y) |> display
+ 
+    y = y .* sqrt(N) # scale to order 1
+    y .*= sign.(sum(y .* x, dims=1))
+
+    return y'
+end
+
+function lastcols(X, i)
+    n, m = size(X)
+    m <= i && return X
+    return X[:, end-i+1:end]
+end
