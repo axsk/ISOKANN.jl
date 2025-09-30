@@ -4,16 +4,16 @@ module MakieExt
 
 using Bonito
 using WGLMakie
-using WGLMakie
 using WGLMakie.Observables: throttle
 using ThreadPools
 using CUDA
 using ISOKANN
-
+using LinearAlgebra: normalize
 
 USEGPU = CUDA.functional()
 ISO = nothing
 ISRUNNING = false
+
 
 function content(session)
     global SESSION
@@ -171,13 +171,46 @@ function plotmol(o::Observable{<:Iso}; kwargs...)
     plotmol(c, iso.data.sim.pysim; kwargs...)
 end
 
+function plot_pairs!(ax, c, pairs; kwargs...)
+    c = @lift reshape($c, 3, :)
+    inds = collect(Iterators.flatten(pairs))
+    b = @lift map(Point3, eachcol($c[:, inds]))
+    linesegments!(ax, b; kwargs...)
+end
 
+function plot_mi!(ax, c, iso, exponent=8)
+    pairs = ISOKANN.featurepairs(iso.data)
+    mi = ISOKANN.mutual_information(iso)
+    mi = (mi ./ maximum(mi)).^ exponent
+    color = [(:blue, m) for m in mi]
+    plot_pairs!(ax, c, pairs; color, transparency=true)
+    ax
+end
+
+mutable struct VisualizationObject
+    coords
+    fig
+    ax
+    plots
+    iso
+    meta
+end
+
+function VisualizationObject(iso::Iso)
+    fig, coords = plotmol(iso, showbonds=false)
+
+    VisualizationObject(coords, fig, fig.content[2], nothing, iso, Dict())
+end
+
+function plot_mi!(v::VisualizationObject)
+    plot_mi!(v.ax, v.coords, v.iso)
+end
 
 function plotmol(c, pysim, color=1; grad=nothing, kwargs...)
     c = observe(c)
     color = observe(color)
 
-    fig = Figure()
+    fig = Figure(size=(1280, 960))
     
     frameselector = SliderGrid(fig[1, 1],
         (label="Frame", range=@lift(1:size($c, 2)), startvalue=1))
@@ -200,7 +233,7 @@ function plotmol(c, pysim, color=1; grad=nothing, kwargs...)
             arrowsize=0.01, lengthscale=0.2, linecolor=:red, linewidth=0.001)
     end
 
-    return fig
+    return (;fig, coords=col)
 end
 
 function plotgrad!(ax, c::Observable{<:AbstractMatrix}, dc::Observable{<:AbstractMatrix}; kwargs...)
@@ -233,7 +266,10 @@ function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=false, showback
         z
     end
 
+    @show maxatoms = 4767 #size(c,2)
+
     cainds = ISOKANN.OpenMM.calpha_inds(pysim)
+    cainds = filter(<(maxatoms), cainds)
     p = @lift if $showbackbone
         $c[:, cainds]
     else
@@ -241,6 +277,10 @@ function plotmol!(ax, c, pysim, color; showbonds=true, showatoms=false, showback
     end
 
     ids = bondids(pysim)
+    ids = reduce(vcat, 
+        filter(x -> all(x .< maxatoms),
+            eachcol(reshape(ids, 2, :))
+        ))
 
     b = @lift if $showbonds
         $c[:, ids]
