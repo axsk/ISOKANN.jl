@@ -15,7 +15,7 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
-export FeaturesAll, FeaturesAll, FeaturesPairs, FeaturesRandomPairs
+export FeaturesAll, FeaturesAll, FeaturesPairs
 
 export trajectory, propagate, setcoords, coords, savecoords
 export atoms
@@ -202,7 +202,7 @@ Creates a FeaturesPairs object from either:
 - an `OpenMMSimulation` or PDB file path (`String`), selecting atom pairs using MDTraj selector syntax (`selector`),
   optionally filtered by `maxdist` (in nm) and limited to `maxfeatures` randomly sampled pairs.
 """
-FeaturesPairs(sim::OpenMMSimulation; kwargs...) = FeaturesPairs(pdbfile(sim), kwargs...)
+FeaturesPairs(sim::OpenMMSimulation; kwargs...) = FeaturesPairs(pdbfile(sim); kwargs...)
 function FeaturesPairs(pdb::String; selector="all", maxdist=Inf, maxfeatures=Inf)
     mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     m = mdtraj.load(pdb)
@@ -218,6 +218,22 @@ function FeaturesPairs(pdb::String; selector="all", maxdist=Inf, maxfeatures=Inf
         inds = StatsBase.sample(inds, maxfeatures, replace=false) |> sort
     end
     return FeaturesPairs(inds)
+end
+
+
+"""
+    featurepairs(d::ISOKANN.SimulationData)
+
+returns pairs of atom indices corresponding to the pairwise distance features 
+"""
+function featurepairs(d::ISOKANN.SimulationData)
+    if d.featurizer isa OpenMM.FeaturesPairs
+        return d.featurizer.pairs
+    elseif d.featurizer isa OpenMM.FeaturesAll
+        return Tuple.(halfinds(OpenMM.natoms(d.sim)))
+    else
+        @error "featurepairs not defined for this featurizer"
+    end
 end
 
 import BioStructures
