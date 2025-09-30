@@ -187,8 +187,15 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
     return cs[:, idxs]
 end
 
+""" 
+    resample_kde(data::SimulationData, model, n; bandwith, unique)
 
-function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=false)
+add new samples to data by running new simulations starting at some `ys` (i.e. the propagated points) of `data`
+where these points are iteratively selected to be closest to the minimum of a KDE of the current chi values from `xs`.
+If `unique` is true, start simulations from point only where there were no simulations before.
+`bandwith` controls the bandwidth of the KDE.
+"""
+function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=true)
     n == 0 && return data
 
     selinds = if unique
@@ -197,10 +204,6 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=fal
     else
         (:)
     end
-
-
-
-
 
     chix = data.features[1] |> model |> vec |> cpu
     chiy = data.features[2] |> flattenlast |> x -> getindex(x, :, selinds) |> model |> vec |> cpu
@@ -214,6 +217,8 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=fal
 
 
     iy = resample_kde_ash(chix, chiy, n)
+
+    #@show selinds[iy]
 
     ys = values(data.coords[2]) |> flattenlast |> x -> getindex(x, :, selinds)
     newdata = addcoords(data, ys[:, iy])

@@ -86,7 +86,7 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
             log!(logger; iso, subdata=nothing)
         end
 
-        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, "todo")])
+        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(features(iso)))])
     end
     return iso
 end
@@ -196,6 +196,8 @@ function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, kde=1, unique=tr
 
         t_train += @elapsed run!(iso, iter, showprogress=generations==1)
 
+        #plot_training(iso)|>display
+
         ProgressMeter.next!(p;
             showvalues=() -> [
                 (:generation, g),
@@ -256,7 +258,7 @@ end
 
 koopman(iso::Iso) = koopman(iso.model, propfeatures(iso.data))
 
-exit_rates(iso::Iso) = exit_rates(cpu(chis(iso)), cpu(koopman(iso)), lagtime(iso.data.sim))
+exit_rates(iso::Iso) = exit_rates(chis(iso)|>cpu|>vec, koopman(iso)|>cpu|>vec, lagtime(iso.data.sim))
 
 function koopman_variance(iso, ys=iso.data.coords[2])
     chi = chicoords(iso, ys)

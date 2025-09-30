@@ -4,10 +4,15 @@ out
 *.out
 *.so
 *.jld2
+*.dcd
+*.svg
+*.eps
 *.pdb
 *.png
+trash/*
 .*
 data/*
 LocalPreferences.toml
 *.pdf
 core
+docs/Manifest.toml
