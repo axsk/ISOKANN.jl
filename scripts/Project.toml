@@ -1,0 +1,5 @@
+[deps]
+ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+ISOKANN = "512544ac-929d-4ba3-aa9d-55e9313a4b47"
+SqraCore = "a9fe299e-2329-4adb-a199-17440bd42f02"
