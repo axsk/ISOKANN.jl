@@ -259,18 +259,36 @@ Propagates `nk` replicas of the OpenMMSimulation `sim` from the inintial states 
 - `nk`: The number of replicas to create.
 
 """
-function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
+function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk; retries=3)
     claim_memory(sim)
     dim, nx = size(x0)
     ys = isnothing(sim.bias) ? similar(x0, dim, nk, nx) : WeightedSamples(similar(x0, dim, nk, nx), zeros(1, nk, nx))
     p = ProgressMeter.Progress(nk * nx, desc="Propagating")
     for i in 1:nx
         for j in 1:nk
-            ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=false, reclaim=false)
+            with_retries(retries, PyCall.PyError) do 
+                    ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=true, reclaim=false)
+            end
             ProgressMeter.next!(p)
         end
     end
     return ys
+end
+
+function with_retries(f, retries, allowed_error=Any)
+    for trial in 1:retries
+        try
+            return f()
+        catch e 
+            if e isa allowed_error && trial < retries
+                @warn "retrying on error $e"
+                lasterr = e
+                continue
+            else
+                rethrow(e)
+            end
+        end
+    end
 end
 
 """
@@ -330,7 +348,8 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
     try
         for i in 1:n
             resample_velocities && set_random_velocities!(sim)
-            runtime += @elapsed int.step(saveevery)
+            runtime += @elapsed sim.pysim.step(saveevery)
+            #runtime += @elapsed int.step(saveevery)  # this does not trigger loggers
             xs[:, i] = coords(sim)
            # @assert norm(xs[:, i]) <= 1e5
             done = i
