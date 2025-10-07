@@ -11,6 +11,7 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Chemfiles = "46823bd8-5fb3-5f92-9aa0-96921f3dd015"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+DLPack = "53c2dc0f-f7d5-43fd-8906-6c0220547083"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
@@ -45,9 +46,9 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 
 [weakdeps]
+Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
 Molly = "aa0f7f06-fcc0-5ec4-a7f3-a573f33f9c4c"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
-Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
 
 [extensions]
 MakieExt = ["WGLMakie", "Bonito"]
@@ -62,6 +63,7 @@ CUDA = "5.2.0"
 ChainRulesCore = "1.23.0"
 Chemfiles = "0.10.41"
 Combinatorics = "1.0.2"
+DLPack = "0.3.1"
 Distances = "0.10.11"
 Distributions = "0.25"
 Flux = "0.16"
