@@ -37,6 +37,7 @@ ExternalSimulation(;kwargs...) = ExternalSimulation(Dict(kwargs))
 Base.show(io::IO, mime::MIME"text/plain", sim::ExternalSimulation) = print(io, "ExternalSimulation with parameters $(sim.dict)")
 masses(sim::ExternalSimulation) = get(sim.dict, :masses, nothing)
 pdbfile(sim::ExternalSimulation) = get(sim.dict, :pdbfile, nothing)
+lagtime(sim::ExternalSimulation) = get(sim.dict, :lagtime, nothing)
 
 
 #TODO:
@@ -86,12 +87,12 @@ function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs.
     SimulationData(sim, (xs, ys); kwargs...)
 end
 
-function SimulationData(xs::AbstractMatrix, ys::AbstractArray; pdb=nothing, kwargs...)
-    SimulationData(ExternalSimulation(pdb), (xs, ys); kwargs...)
+function SimulationData(xs::AbstractMatrix, ys::AbstractArray; kwargs...)
+    SimulationData(ExternalSimulation(), (xs, ys); kwargs...)
 end
 
-function SimulationData(xs::AbstractMatrix; pdb=nothing, kwargs...)
-    SimulationData(ExternalSimulation(pdb), data_from_trajectory(xs); kwargs...)
+function SimulationData(xs::AbstractMatrix; kwargs...)
+    SimulationData(ExternalSimulation(), data_from_trajectory(xs); kwargs...)
 end
 
 
