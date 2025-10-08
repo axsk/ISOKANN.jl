@@ -645,4 +645,26 @@ function shift_and_scale(iso::ISOKANN.Iso)
     shift_and_scale(xs, ys)
 end
 
+
+
+using DLPack: from_dlpack
+
+function add_dlpack(sim)
+    py"""import openmm.dlext as dlext
+
+    def add_dlpack(sim):
+        dlforce = dlext.Force()
+        sim.system.addForce(dlforce) # maybe use getSystem()
+        ctx_view = dlforce.view(sim.context)
+        return ctx_view
+    """
+
+    ctx = py"add_dlpack"(sim.pysim)
+    return ctx
+    pos = from_dlpack(py"dlext.positions"(ctx))
+    forces = from_dlpack(py"dlext.forces"(ctx))
+    return (; pos, forces)
+end
+
+
 end#module

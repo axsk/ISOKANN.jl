@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.6"
+julia_version = "1.11.7"
 manifest_format = "2.0"
-project_hash = "fcdb837f1a937d9a5792ef5ac288dbb0cda4f59e"
+project_hash = "633877b9f4925c3591dfa41f5df109ead77f6d92"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "be7ae030256b8ef14a441726c4c37766b90b93a3"
@@ -513,6 +513,22 @@ version = "0.3.1"
 git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
 uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 version = "4.1.1"
+
+[[deps.DLPack]]
+deps = ["BFloat16s", "Requires"]
+git-tree-sha1 = "1c8ee3f2c2d0af70128e77d94c0254b7962da6c6"
+uuid = "53c2dc0f-f7d5-43fd-8906-6c0220547083"
+version = "0.3.1"
+
+    [deps.DLPack.extensions]
+    CUDAExt = "CUDA"
+    PyCallExt = "PyCall"
+    PythonCallExt = "PythonCall"
+
+    [deps.DLPack.weakdeps]
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+    PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [[deps.DataAPI]]
 git-tree-sha1 = "abe83f3a2f1b857aac70ef8b269080af17764bbe"
