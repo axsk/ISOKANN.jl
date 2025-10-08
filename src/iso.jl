@@ -214,14 +214,7 @@ end
 log!(f::Function; kwargs...) = f(; kwargs...)
 log!(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
 
-""" evluation of koopman by shiftscale(mean(model(data))) on the data """
-function koopman(model, ys)
-    #ys = Array(ys)
-    cs = model(ys)::AbstractArray{<:Number,3}
-    #ks = vec(StatsBase.mean(cs[1, :, :], dims=2))::AbstractVector
-    ks = dropdims(StatsBase.mean(cs, dims=2), dims=2)
-    return ks
-end
+
 
 """ empirical shift-scale operation """
 shiftscale(ks) =
@@ -238,7 +231,7 @@ function chi_exit_rate(x, Kx, tau)
     return α + β
 end
 
-chi_exit_rate(iso::Iso) = chi_exit_rate(iso.model(features(iso.data)), koopman(iso.model, propfeatures(iso.data)), OpenMM.stepsize(iso.data.sim) * OpenMM.steps(iso.data.sim))
+chi_exit_rate(iso::Iso) = chi_exit_rate(vec.(cpu.(chi_kchi(iso)))..., lagtime(iso.data.sim))
 
 
 function exit_rates(x, kx, tau)
@@ -254,11 +247,8 @@ function exit_rates(x::AbstractMatrix, kx::AbstractMatrix, tau)
     P = x \ kx
     return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
 end
-    
 
-koopman(iso::Iso) = koopman(iso.model, propfeatures(iso.data))
-
-exit_rates(iso::Iso) = exit_rates(chis(iso)|>cpu|>vec, koopman(iso)|>cpu|>vec, lagtime(iso.data.sim))
+exit_rates(iso::Iso) = exit_rates(vec.(cpu.(chi_kchi(iso)))..., lagtime(iso.data.sim))
 
 function koopman_variance(iso, ys=iso.data.coords[2])
     chi = chicoords(iso, ys)

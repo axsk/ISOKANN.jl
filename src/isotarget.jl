@@ -1,18 +1,16 @@
 ### ISOKANN target transformations
 
+isotarget(iso) = isotarget(iso, iso.transform)
+
 """ expectation(f, xs)
 
-Computes the expectation value of `f` over `xs`.
+Computes the expectation value of `f` over `xs`. Supports WeightedSamples
 """
 expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
 
-function chi_kchi()
-end
+koopman(iso::Iso) = expectation(iso.model, propfeatures(iso.data))
 
-isotarget(iso) = isotarget(iso, iso.transform)
-
-
-
+chi_kchi(iso) = chi_kchi(iso.model, iso.data)
 chi_kchi(model, data::SimulationData) = (model(features(data)), expectation(model, propfeatures(data)))
 
 

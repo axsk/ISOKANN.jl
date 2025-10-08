@@ -76,8 +76,8 @@ Generates SimulationData from a simulation with either
 - `nx` initial points and `nk` Koopman samples
 - `xs` as initial points and `nk` Koopman sample
 - `xs` as inintial points and `ys` as Koopman samples
-- `xs` and `ys` from external simulations of the given `pdb`
-- `xs` a trajectory of an external simulation with given `pdb`, implicitly computing the `data_from_trajectory` of succesive samples
+- `xs` and `ys` from external simulations
+- `xs` a trajectory of an external simulation, implicitly computing ys via `data_from_trajectory` of succesive samples
 """
 SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, values(randx0(sim, nx)), nk; kwargs...)
@@ -87,7 +87,7 @@ function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs.
     SimulationData(sim, (xs, ys); kwargs...)
 end
 
-function SimulationData(xs::AbstractMatrix, ys::AbstractArray; kwargs...)
+function SimulationData(xs::AbstractMatrix, ys::AbstractArray{<:Any, 3}; kwargs...)
     SimulationData(ExternalSimulation(), (xs, ys); kwargs...)
 end
 
