@@ -6,6 +6,12 @@ function dchidx(iso, x)
     end |> only
 end
 
+function dchidfeat(iso, feat)
+    Zygote.gradient(feat) do x
+        iso.model(x) |> myonly
+    end |> only
+end
+
 
 ## works on gpu as well
 myonly(x) = only(x)

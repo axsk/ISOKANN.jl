@@ -1,0 +1,4 @@
+[deps]
+Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
+ISOKANN = "512544ac-929d-4ba3-aa9d-55e9313a4b47"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"

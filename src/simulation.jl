@@ -37,6 +37,7 @@ ExternalSimulation(;kwargs...) = ExternalSimulation(Dict(kwargs))
 Base.show(io::IO, mime::MIME"text/plain", sim::ExternalSimulation) = print(io, "ExternalSimulation with parameters $(sim.dict)")
 masses(sim::ExternalSimulation) = get(sim.dict, :masses, nothing)
 pdbfile(sim::ExternalSimulation) = get(sim.dict, :pdbfile, nothing)
+lagtime(sim::ExternalSimulation) = get(sim.dict, :lagtime, nothing)
 
 
 #TODO:
@@ -75,8 +76,8 @@ Generates SimulationData from a simulation with either
 - `nx` initial points and `nk` Koopman samples
 - `xs` as initial points and `nk` Koopman sample
 - `xs` as inintial points and `ys` as Koopman samples
-- `xs` and `ys` from external simulations of the given `pdb`
-- `xs` a trajectory of an external simulation with given `pdb`, implicitly computing the `data_from_trajectory` of succesive samples
+- `xs` and `ys` from external simulations
+- `xs` a trajectory of an external simulation, implicitly computing ys via `data_from_trajectory` of succesive samples
 """
 SimulationData(sim::IsoSimulation, nx::Int, nk::Int; kwargs...) =
     SimulationData(sim, values(randx0(sim, nx)), nk; kwargs...)
@@ -86,12 +87,12 @@ function SimulationData(sim::IsoSimulation, xs::AbstractMatrix, nk::Int; kwargs.
     SimulationData(sim, (xs, ys); kwargs...)
 end
 
-function SimulationData(xs::AbstractMatrix, ys::AbstractArray; pdb=nothing, kwargs...)
-    SimulationData(ExternalSimulation(pdb), (xs, ys); kwargs...)
+function SimulationData(xs::AbstractMatrix, ys::AbstractArray{<:Any, 3}; kwargs...)
+    SimulationData(ExternalSimulation(), (xs, ys); kwargs...)
 end
 
-function SimulationData(xs::AbstractMatrix; pdb=nothing, kwargs...)
-    SimulationData(ExternalSimulation(pdb), data_from_trajectory(xs); kwargs...)
+function SimulationData(xs::AbstractMatrix; kwargs...)
+    SimulationData(ExternalSimulation(), data_from_trajectory(xs); kwargs...)
 end
 
 
@@ -187,8 +188,15 @@ function chistratcoords(d::SimulationData, model, n; keepedges=false)
     return cs[:, idxs]
 end
 
+""" 
+    resample_kde(data::SimulationData, model, n; bandwith, unique)
 
-function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=false)
+add new samples to data by running new simulations starting at some `ys` (i.e. the propagated points) of `data`
+where these points are iteratively selected to be closest to the minimum of a KDE of the current chi values from `xs`.
+If `unique` is true, start simulations from point only where there were no simulations before.
+`bandwith` controls the bandwidth of the KDE.
+"""
+function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=true)
     n == 0 && return data
 
     selinds = if unique
@@ -197,10 +205,6 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=fal
     else
         (:)
     end
-
-
-
-
 
     chix = data.features[1] |> model |> vec |> cpu
     chiy = data.features[2] |> flattenlast |> x -> getindex(x, :, selinds) |> model |> vec |> cpu
@@ -214,6 +218,8 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=fal
 
 
     iy = resample_kde_ash(chix, chiy, n)
+
+    #@show selinds[iy]
 
     ys = values(data.coords[2]) |> flattenlast |> x -> getindex(x, :, selinds)
     newdata = addcoords(data, ys[:, iy])

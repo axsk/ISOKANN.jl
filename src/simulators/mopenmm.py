@@ -141,6 +141,48 @@ def set_numpy_state(context, x, withmomenta):
     else:
         context.setPositions(x)
         context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
+    if has_barostat(context):
+        set_box_from_positions(context, positions)
+
+def set_box_from_current_positions(context, buffer=0.01):
+    """
+    Reads positions from the context, computes tight box + buffer, 
+    and sets periodic box vectors accordingly.
+    
+    buffer: in nanometers (default 0.01 nm = 0.1 Å)
+    """
+    state = context.getState(getPositions=True)
+    positions = state.getPositions(asNumpy=True)  # Quantity array
+    
+    # Convert positions to plain nm ndarray for calculation
+    pos_nm = positions.value_in_unit(nanometer)
+    
+    mins = pos_nm.min(axis=0)
+    maxs = pos_nm.max(axis=0)
+    lengths = (maxs - mins + buffer)
+    
+    a = Vec3(lengths[0], 0, 0)
+    b = Vec3(0, lengths[1], 0)
+    c = Vec3(0, 0, lengths[2])
+    
+    context.setPeriodicBoxVectors(a * nanometer, b * nanometer, c * nanometer)
+
+def set_box_from_positions(context, x, buffer=0.01):
+    """Set the periodic box to tightly fit the positions in `x` + a small buffer (in nm)."""
+    mins = x.min(axis=0)
+    maxs = x.max(axis=0)
+    lengths = (maxs - mins + buffer)  # box lengths in nm with buffer
+    a = Vec3(lengths[0], 0, 0)
+    b = Vec3(0, lengths[1], 0)
+    c = Vec3(0, 0, lengths[2])
+    context.setPeriodicBoxVectors(a, b, c)
+
+def has_barostat(context):
+    for force in context.getSystem().getForces():
+        if isinstance(force, (openmm.MonteCarloBarostat, openmm.MonteCarloAnisotropicBarostat)):
+            return True
+    return False
+
 
 def set_random_velocities(context):
     context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())

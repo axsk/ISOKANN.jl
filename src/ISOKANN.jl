@@ -122,6 +122,7 @@ export OpenMMSimulation
 include("utils/minimumpath.jl")
 include("utils/reactivepath.jl")
 include("utils/freeenergy.jl")
+include("utils/mutualinformation.jl")
 
 #include("IsoMu/IsoMu.jl")
 #include("vgv/vgv.jl")

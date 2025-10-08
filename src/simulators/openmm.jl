@@ -15,7 +15,7 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export OpenMMScript
-export FeaturesAll, FeaturesAll, FeaturesPairs, FeaturesRandomPairs
+export FeaturesAll, FeaturesAll, FeaturesPairs
 
 export trajectory, propagate, setcoords, coords, savecoords
 export atoms
@@ -202,7 +202,7 @@ Creates a FeaturesPairs object from either:
 - an `OpenMMSimulation` or PDB file path (`String`), selecting atom pairs using MDTraj selector syntax (`selector`),
   optionally filtered by `maxdist` (in nm) and limited to `maxfeatures` randomly sampled pairs.
 """
-FeaturesPairs(sim::OpenMMSimulation; kwargs...) = FeaturesPairs(pdbfile(sim), kwargs...)
+FeaturesPairs(sim::OpenMMSimulation; kwargs...) = FeaturesPairs(pdbfile(sim); kwargs...)
 function FeaturesPairs(pdb::String; selector="all", maxdist=Inf, maxfeatures=Inf)
     mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     m = mdtraj.load(pdb)
@@ -218,6 +218,22 @@ function FeaturesPairs(pdb::String; selector="all", maxdist=Inf, maxfeatures=Inf
         inds = StatsBase.sample(inds, maxfeatures, replace=false) |> sort
     end
     return FeaturesPairs(inds)
+end
+
+
+"""
+    featurepairs(d::ISOKANN.SimulationData)
+
+returns pairs of atom indices corresponding to the pairwise distance features 
+"""
+function featurepairs(d::ISOKANN.SimulationData)
+    if d.featurizer isa OpenMM.FeaturesPairs
+        return d.featurizer.pairs
+    elseif d.featurizer isa OpenMM.FeaturesAll
+        return Tuple.(halfinds(OpenMM.natoms(d.sim)))
+    else
+        @error "featurepairs not defined for this featurizer"
+    end
 end
 
 import BioStructures
@@ -259,18 +275,36 @@ Propagates `nk` replicas of the OpenMMSimulation `sim` from the inintial states 
 - `nk`: The number of replicas to create.
 
 """
-function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk)
+function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk; retries=3)
     claim_memory(sim)
     dim, nx = size(x0)
     ys = isnothing(sim.bias) ? similar(x0, dim, nk, nx) : WeightedSamples(similar(x0, dim, nk, nx), zeros(1, nk, nx))
     p = ProgressMeter.Progress(nk * nx, desc="Propagating")
     for i in 1:nx
         for j in 1:nk
-            ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=false, reclaim=false)
+            with_retries(retries, PyCall.PyError) do 
+                    ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=true, reclaim=false)
+            end
             ProgressMeter.next!(p)
         end
     end
     return ys
+end
+
+function with_retries(f, retries, allowed_error=Any)
+    for trial in 1:retries
+        try
+            return f()
+        catch e 
+            if e isa allowed_error && trial < retries
+                @warn "retrying on error $e"
+                lasterr = e
+                continue
+            else
+                rethrow(e)
+            end
+        end
+    end
 end
 
 """
@@ -330,7 +364,8 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
     try
         for i in 1:n
             resample_velocities && set_random_velocities!(sim)
-            runtime += @elapsed int.step(saveevery)
+            runtime += @elapsed sim.pysim.step(saveevery)
+            #runtime += @elapsed int.step(saveevery)  # this does not trigger loggers
             xs[:, i] = coords(sim)
            # @assert norm(xs[:, i]) <= 1e5
             done = i
@@ -473,12 +508,23 @@ Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation) =
 ### CUSTOM INTEGRATORS
 
 """
-    integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int, nothing}=nothing)
+    integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), bias=nothing, saveevery=nothing, reclaim=true)
 
-Integrate the Langevin equations with a Euler-Maruyama scheme, allowing for external forces.
+Perform standard Langevin dynamics integration for a given system.
 
-- bias: An additional force perturbation. It is expected to have the form bias(F, x) and mutating the provided force F.
-- saveevery: If `nothing`, returns just the last point, otherwise returns an array saving every `saveevery` frame.
+# Arguments
+- `sim::OpenMMSimulation` : The simulation object with system parameters.
+- `x0` : Initial coordinates (default: `coords(sim)`).
+- `steps` : Number of integration steps (default: `steps(sim)`).
+- `bias` : Optional function `(F, x) -> nothing` to perturb the force `F` in-place.
+- `saveevery` : Interval to save coordinates (default: saves only final state).
+- `reclaim` : Whether to preallocate/reclaim memory for performance.
+
+# Returns
+- Array of positions: either the final positions or a trajectory if `saveevery` is specified.
+
+# Notes
+Uses a simple Euler-Maruyama step for (underdamped) Langevin dynamics with optional bias. Currently the momenta are intialized as zero.
 """
 function integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing, reclaim=true)
     reclaim && claim_memory(sim)
@@ -506,6 +552,26 @@ function langevin_step!(x, v, F, m, gamma, kBT, dt)
     @. x += v * dt
 end
 
+"""
+    integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
+
+Integrate overdamped Langevin dynamics while computing Girsanov weights for a given bias.
+
+# Arguments
+- `sim::OpenMMSimulation` : The simulation object.
+- `x0` : Initial coordinates (default: `coords(sim)`).
+- `steps` : Number of integration steps (default: `steps(sim)`).
+- `bias` : Function `x -> u` that returns the perturbation for Girsanov reweighting.
+- `reclaim` : Whether to preallocate memory for performance.
+
+# Returns
+- `x` : Final coordinates.
+- `g` : Cumulative Girsanov weight (logarithmic).
+- `z` : Full trajectory of positions.
+
+# Notes
+The method assumes overdamped Langevin dynamics and accumulates the corresponding Girsanov weight `g`.
+"""
 function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
     reclaim && claim_memory(sim)
     # TODO: check units on the following three lines
@@ -542,6 +608,32 @@ end
 
 trajectory(sim::OpenMMSimulation, steps=steps(sim); kwargs...) = langevin_girsanov!(sim, steps; kwargs...)
 
+
+"""
+    langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true)
+
+Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov reweighting.
+
+# Arguments
+- `sim::OpenMMSimulation` : Simulation object containing masses, friction, forces, and temperature.
+- `steps` : Number of integration steps (default: `steps(sim)`).
+- `bias` : Function `q; t, sigma, F -> B` returning perturbation force for reweighting.
+- `saveevery` : Interval to save coordinates and weights (default: 1).
+- `x0` : Initial coordinates (default: `coords(sim)`).
+- `resample_velocities` : If `true`, resample momenta when saving (invalidates Girsanov weights).
+- `showprogress` : Whether to show a progress bar.
+- `throw` : Whether to throw errors on invalid states.
+- `reclaim` : Whether to preallocate memory for performance.
+
+# Returns
+- `WeightedSamples` containing:
+  - `qs` : Saved coordinates at intervals of `saveevery`.
+  - `weights` : Corresponding Girsanov weights `exp(-g)`.
+
+# Notes
+- Uses the ABOBA splitting scheme for stable underdamped Langevin integration.
+- Computes Girsanov weights to account for the applied bias.
+"""
 function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true)
     reclaim && claim_memory(sim)
     prog = ProgressMeter.Progress(steps)

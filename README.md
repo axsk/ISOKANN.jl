@@ -48,6 +48,13 @@ exit_rates(iso)
 save_reactive_path(iso, out="path.pdb")
 ```
 
+In the case that the simulation data is already present, e.g. sampled externally, we can replace the `data` line above with either of
+```julia
+data = SimulationData(xs,ys) # For given initial points `xs` (D x N) and koopman samples `ys` (D x K x N)
+data = SimulationData(data_from_trajectory(xs)) # If `xs` is a trajectory of size (D x N)
+data = SimulationData(data_from_trajectories([xs1, xs2, ...]) # If each `xs_i` is a trajectory
+```
+
 More comprehensive usecase examples can be found in
 - [`scripts/villin.jl`](scripts/villin.jl): simulating the folding of the chicken villin
 - [`scripts/vgvapg.jl`](scripts/vgvapg.jl)
