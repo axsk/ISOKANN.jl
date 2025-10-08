@@ -99,7 +99,7 @@ end
 """ fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
     xs, ys = getobs(data)
-    target = koopman(model, ys) |> vec |> Flux.cpu
+    target = expectation(model, ys) |> vec |> Flux.cpu
     xs = model(xs) |> vec |> Flux.cpu
     lim = autolims(xs)
     scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ", xlims=lim, ylims=lim)
