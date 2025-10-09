@@ -100,7 +100,7 @@ end
 
 gpu(v::ValidationLossLogger) = ValidationLossLogger(gpu(v.data), v.losses, v.iters, v.logevery)
 
-function validationloss(iso, data)
+function validationloss_old(iso, data)
     xs, ys = getobs(data)
     kx = iso.model(xs) |> vec
     ky = StatsBase.mean(iso.model(ys), dims=2) |> vec
@@ -115,6 +115,16 @@ function validationloss(iso, data)
 
     #  kx = ky * A
     return mean(abs2, (ky*(ky\kx)-kx)[:, 1])
+end
+
+function validationloss(iso, valdata)
+    xs, ys = getobs(iso.data)
+    vx, vy = getobs(valdata)
+    c = iso.model(vx) |> vec
+    k1 = expectation(iso.model, vy) |> vec
+    k2 = expectation(iso.model, ys) |> vec # we use all data to estimate the shift-scale even for sparse validation coverage
+    SKc = shiftscale([k1; k2])[1:length(c)]
+    return mean(abs2, c - SKc)
 end
 
 
