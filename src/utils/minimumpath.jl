@@ -144,7 +144,7 @@ function reactionforce(iso, sim, x, direction, orth=1)
 end
 
 """ 
-    energyminimization_chilevel(iso, x0; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=false, algorithm=Optim.GradientDescent, xtol=nothing)
+    energyminimization_chilevel(iso, x0; f_reltol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, skipwater=false, algorithm=Optim.GradientDescent, xtol=nothing)
 
 Local energy minimization on the current levelset of the chi function
 """
@@ -165,13 +165,13 @@ function energyminimization_chilevel(iso, x0; skipwater=false, kwargs...)
     return minimize_levelset(x, chi, U, dU; kwargs...)
 end
 
-function minimize_levelset(x0, f, U, dU; f_tol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, algorithm=Optim.GradientDescent, xtol=nothing)
+function minimize_levelset(x0, f, U, dU; f_reltol=1e-3, alphaguess=1e-5, iterations=20, show_trace=false, algorithm=Optim.GradientDescent, xtol=nothing)
     manifold = Levelset(f, f(x0))
     linesearch = Optim.LineSearches.HagerZhang(alphamax=alphaguess)
     alg = algorithm(; linesearch, alphaguess, manifold)
 
 
-    o = Optim.optimize(U, dU, x0, alg, Optim.Options(; iterations, f_tol, show_trace,); inplace=false)
+    o = Optim.optimize(U, dU, x0, alg, Optim.Options(; iterations, f_reltol, show_trace,); inplace=false)
     return o.minimizer
 end
 

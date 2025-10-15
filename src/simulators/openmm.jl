@@ -134,7 +134,7 @@ stepsize(sim) = stepsize(sim.pysim)
 
 lagtime(sim::OpenMMSimulation) = steps(sim) * stepsize(sim) # in ps
 dim(sim::OpenMMSimulation) = length(coords(sim))
-defaultmodel(sim::OpenMMSimulation; kwargs...) = ISOKANN.pairnet(; kwargs...)
+defaultmodel(sim::OpenMMSimulation; n=dim(sim), kwargs...) = ISOKANN.pairnet(;n, kwargs...)
 
 coords(sim::OpenMMSimulation) = coords(sim.pysim)::Vector{Float64}
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)

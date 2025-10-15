@@ -13,15 +13,12 @@ using Plots
 
 using LinearAlgebra: norm, dot, cross, diag, svd, pinv, I, schur, qr
 using StatsBase: mean, sample, mean_and_std, Histogram, fit
-using StaticArrays: SVector
 using StatsBase: sample, quantile
 using CUDA: CuArray, CuMatrix, cu, CUDA
 using NNlib: batched_adjoint, batched_mul
-using Unitful: @u_str, unit
 using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
-using StaticArrays: @SVector
 using StochasticDiffEq: StochasticDiffEq
 using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 using SimpleWeightedGraphs: SimpleWeightedDiGraph

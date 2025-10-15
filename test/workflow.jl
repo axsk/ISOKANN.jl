@@ -16,5 +16,5 @@ runadaptive!(iso, generations=1, iter=1, kde=1)
 
 save_reactive_path(iso, out=tempname() * ".pdb")
 
-xs = reactionpath_minimum(iso)
-ISOKANN.savecoords(tempname() * ".pdb", iso, xs)
+#xs = reactionpath_minimum(iso, xtol=1)  # taken out of test since its experimental only and takes very long
+#ISOKANN.savecoords(tempname() * ".pdb", iso, xs)

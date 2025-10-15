@@ -2,6 +2,8 @@
 
 isotarget(iso) = isotarget(iso, iso.transform)
 
+isotarget(iso, transform) = isotarget(iso.model, features(iso.data), propfeatures(iso.data), transform)
+
 """ expectation(f, xs)
 
 Computes the expectation value of `f` over `xs`. Supports WeightedSamples
@@ -113,7 +115,6 @@ function isotarget(ks, t::TransformShiftscale; ret_shiftscale=false)
 end
 
 function isotarget(iso::Iso, t::TransformShiftscale)
-    iso.model
     _, ks = chi_kchi(iso.model, iso.data)
     isotarget(ks, t)
 end

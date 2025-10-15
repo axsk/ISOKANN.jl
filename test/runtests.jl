@@ -29,6 +29,8 @@ function with_possible_broken_domain(f)
     end
 end
 
+data = SimulationData(OpenMMSimulation(), 100, 8)
+
 @time @testset "ISOKANN.jl" verbose = true begin
 
     simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation()], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM", ])
@@ -40,22 +42,17 @@ end
                 @testset "Testing ISOKANN with $name" begin
                     i = Iso(sim) |> backend
                     run!(i)
-                    with_possible_broken_domain() do
-                        runadaptive!(i, generations=2, nx=1, iter=1)
-                    end
-                    #ISOKANN.addextrapolates!(i, 1, stepsize=0.01, steps=1)
+                    runadaptive!(i, generations=2, kde=1, iter=1)
                     @test true
                 end
             end
         end
 
         @testset "Iso Transforms ($backend)" begin
-            sim = MuellerBrown()
             for (d, t) in zip([1, 2, 2], [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()])
-                with_possible_broken_domain() do
-                    #@test begin
-                    run!(Iso(sim, model=pairnet(n=2, nout=d), transform=t) |> backend)
-                    #true
+                @testset "$t" begin
+                    run!(Iso(data, model=pairnet(data, nout=d), transform=t) |> backend)
+                    @test true
                 end
             end
         end
@@ -69,7 +66,7 @@ end
         ISOKANN.save(path, iso)
         isol = ISOKANN.load(path)
         @assert iso.data.coords == isol.data.coords
-        runadaptive!(isol, generations=1, nx=1, iter=1)
+        runadaptive!(isol, generations=1, kde=1, iter=1)
         @test true
     end
 end
