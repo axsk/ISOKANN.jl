@@ -181,15 +181,20 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
     batchsize = minibatch == 0 || size(xs, 2) < minibatch ? size(ys, 2) : minibatch
     data = Flux.DataLoader((xs, ys); batchsize, shuffle)
     ls = 0.0
+    w = size(ys,1) > 1 ? 1 ./ StatsBase.std(ys, dims=2) : 1. # weighting with variance should help fitting multidimensional targets 
     Flux.train!(model, data, opt) do m, x, y
-        l = sum(abs2, m(x) .- y)
+        l = sum(abs2, (m(x) .- y) .* w)
+        if isnan(l) || !isfinite(l)
+            throw(DomainError(sum(l), "The ISOKANN model became collapsed under training. Try reducing the learning rate or increasing regularization"))
+            @show sum(m(x)), sum(y), w, findall(!isfinite, m(x))
+        end
         ls += l
         l / numobs(x)
     end
     return ls / numobs(xs)
 end
 
-chis(iso::Iso) = iso.model(features(iso.data))
+chis(iso::Iso, data::SimulationData=iso.data) = iso.model(features(data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 #isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 

@@ -67,7 +67,25 @@ function plot_training(iso; subdata=nothing)
     plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)), fmt=:png)
 end
 
-function plot_chi(iso; target=true)
+
+function scatter_data(iso, x; kwargs...)
+    xs, ys = eachrow(coords(iso))
+    plot([scatter(xs, ys, marker_z=c; label=nothing, hover=c, kwargs...) for c in eachrow(x)]..., layout=(1,size(x, 1)); )
+end
+
+function plot_targets(iso)
+    c = chis(iso)
+    k = koopman(iso)
+    t = isotarget(iso)
+    clims = extrema(vcat(c,k,t))
+    plot(
+        scatter_data(iso, c, title="chi"; ),
+        scatter_data(iso, k, title="Kchi"; ),
+        scatter_data(iso, t, title="target"; ),
+        layout=(3, 1), size=(300* size(c,1), 600 ), cbar=false)
+end
+
+function plot_chi(iso; target=false)
     xs = features(iso.data)
     chi = iso.model(xs) |> cpu
     xs = xs |> cpu
@@ -75,7 +93,12 @@ function plot_chi(iso; target=true)
     if size(xs, 1) == 1
         scatter(xs', chi', xlabel="x", ylabel="χ")
     elseif size(xs, 1) == 2
-        scatter(xs[1, :], xs[2, :], marker_z=chi', label="", xlabel="x", ylabel="y", cbar_title="χ")
+        if target == true
+            chi = isotarget(iso) |> cpu
+        end
+        
+        plot([scatter(xs[1, :], xs[2, :], marker_z=c, label=nothing, xlabel=nothing, ylabel=nothing, cbar_title="χ", cbar=false) for c in eachrow(chi)]...)
+        
     elseif size(xs, 1) == 66  # TODO: dispatch on simulation
         scatter_ramachandran(xs, chi)
     else
@@ -83,8 +106,6 @@ function plot_chi(iso; target=true)
         target && scatter!(isotarget(iso)' |> cpu, label="SK\\chi", markerstrokewidth=0.1, markersize=2)
         scatter!(chi'; ylims=autolims(chi), xlabel="#", label="\\chi", markerstrokewidth=0.1, markersize=2)
     end
-
-
 end
 
 function autolims(chi)
@@ -99,10 +120,14 @@ end
 """ fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
     xs, ys = getobs(data)
-    target = expectation(model, ys) |> vec |> Flux.cpu
-    xs = model(xs) |> vec |> Flux.cpu
+    target = expectation(model, ys) |> Flux.cpu
+    xs = model(xs) |> Flux.cpu
     lim = autolims(xs)
-    scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ", xlims=lim, ylims=lim)
+    p= plot()
+    for i in 1:size(xs, 1)
+        scatter!(xs[i, :], target[i,:], markersize=2, xlabel="χ", ylabel="Kχ", xlims=lim, ylims=lim)
+    end
+    p
     #scatter(xs, target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
     #scatter(target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
     #plot!([minimum(xs), maximum(xs)], [minimum(target), maximum(target)], legend=false)

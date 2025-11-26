@@ -2,13 +2,15 @@
 
 isotarget(iso) = isotarget(iso, iso.transform)
 
+isotarget(iso, t) = isotarget(iso.model, features(iso), propfeatures(iso), t)
+
 """ expectation(f, xs)
 
 Computes the expectation value of `f` over `xs`. Supports WeightedSamples
 """
 expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
 
-koopman(iso::Iso) = expectation(iso.model, propfeatures(iso.data))
+koopman(iso::Iso, data::SimulationData=iso.data) = expectation(iso.model, propfeatures(data))
 
 chi_kchi(iso) = chi_kchi(iso.model, iso.data)
 chi_kchi(model, data::SimulationData) = (model(features(data)), expectation(model, propfeatures(data)))
@@ -70,6 +72,8 @@ Compute the target via the inner simplex algorithm (without feasiblization routi
 @kwdef struct TransformISA
     permute::Bool = true
 end
+
+
 
 # we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
 # which in turn assumes that the first column is equal to one.
@@ -666,10 +670,11 @@ function rr_gev(X, Y)
     return (; vals, vecs)
 end
 using LinearAlgebra: I
-function rr_cross(X, Y; alpha=0, τ=1e-3, p=2.0, wmin=1e-3, clip_s=(1e-2, 10.0))
+function rr_cross(X, Y; alpha=1e-8, τ=1e-3, p=2.0, wmin=1e-3, clip_s=(1e-2, 10.0))
     Q, R = qr(Y) # orth. basis of Y, Q: d×m orthonormal, R: m×m
     C = X' * X + alpha * I # tikh reg. with alpha
     M = X' * Matrix(Q)
+    #M = (X' * Q)[:, 1:size(R,1)]
     #@show C
     T = R * (C \ M)  # X=C\M solves CX = M
     vals, vecs = eigen(T, sortby=x -> -real(x))
@@ -691,7 +696,11 @@ function rr_cross(X, Y; alpha=0, τ=1e-3, p=2.0, wmin=1e-3, clip_s=(1e-2, 10.0))
     w = clamp.(real.(w), wmin, 1.0)
     s = sqrt.(w)
     s = clamp.(s, clip_s[1], clip_s[2])
-    Vscaled = V .* reshape(s, 1, :)
+    #Vscaled = V .* reshape(s, 1, :)
+
+    #Vscaled[:,1] .= 0.01
+    #Vscaled .*=  0.1 ./ maximum.(eachrow(abs.(Vscaled)))
+    Vscaled = V
 
     global ret = (; vals, vecs=Vscaled, res=residuals, relres, weights=w, vecs0=V)
     return ret
@@ -706,7 +715,12 @@ function TransformCross1(;npoints, maxcols)
     TransformCross1(X, Y, maxcols)
 end
 
-function isotarget(iso, t::TransformCross1) 
+function reset!(t::TransformCross1) 
+    t.X = zeros(size(t.X,1), 0)
+    t.Y = zeros(size(t.Y,1), 0)
+end
+
+function isotarget(iso, t::TransformCross1)
     x, y = chi_kchi(iso.model, iso.data)
     #display( stacktrace())
     isotarget(x,y,t)
@@ -723,10 +737,10 @@ function isotarget(x, y, t::TransformCross1)
         println("noupdate")
     end
     z = rr_cross(t.X, t.Y)
-    @show round.(z.vals, digits=3)
+    #@show round.(z.vals, digits=3)
     y = z.vecs[:, 1:M] |> real
     #plot(y) |> display
- 
+
     y = y .* sqrt(N) # scale to order 1
     y .*= sign.(sum(y .* x, dims=1))
 
@@ -738,3 +752,54 @@ function lastcols(X, i)
     m <= i && return X
     return X[:, end-i+1:end]
 end
+
+# looks at columns independently; does not capture subspace invariance.
+function residual_linear(iso, data=iso.data)
+    f = chis(iso, data)
+    g = ISOKANN.koopman(iso, data)
+    lambda = mean(g ./ f, dims=2)
+    res = g .- lambda .* f
+    relres = norm.(eachrow(res)) ./ norm.(eachrow(g))
+    (; res, relres, lambda)
+end
+
+# evaluates approximate eigenvectors, not individual columns of V.
+function residual_ritz(iso, data=iso.data)
+    V = chis(iso, data)' .|> Float64
+    KV = koopman(iso, data)' .|> Float64
+
+    Q, R = qr_thin(V)  # use of QR not only increases numeric stability, but also makes the residuals scale invariant
+    KQ = KV * inv(R)
+    Kr = Q' * KQ    # small r×r reduced matrix (in basis Q or V?)
+
+    vals, vecs = eigen(Kr, sortby=x->abs(1-x))  # columns of ws are small-space eigenvectors
+
+    residues = KQ * vecs - vals' .* (Q * vecs)
+    relres = norm.(eachcol(residues)) ./ norm.(eachcol(KQ * vecs))
+
+    return (; residues, relres, vals, vecs, Q)
+end
+
+
+residual_subspace(iso::Iso, data=iso.data) = residual_subspace(
+    chis(iso, data)' .|> Float64,
+    koopman(iso, data)' .|> Float64)
+
+# columnwise → identifies which columns are poorly represented in the subspace.
+function residual_subspace(V::AbstractMatrix, KV::AbstractMatrix, V_norms=false)
+    Q, _ = qr_thin(V)
+    PKV = Q * (Q' * KV)
+    res = KV - PKV
+
+    relres = if V_norms
+        norm.(eachcol(res)) ./ norm.(eachcol(V))    # rel. error wrt. to V
+    else
+        norm.(eachcol(res)) ./ norm.(eachcol(KV))   # rel. error wrt. to KV
+    end
+
+    return (; res, relres)
+end
+
+qr_thin(A::AbstractArray) = ((Q, R) = qr(A); (Matrix(Q), R))
+qr_thin(A::CuArray) = ((Q, R) = qr(A); (CuMatrix(Q), R))
+
