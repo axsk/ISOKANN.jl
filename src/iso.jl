@@ -20,7 +20,7 @@ function Iso(data;
     gpu=CUDA.has_cuda(),
     autoplot=0,
     validation=nothing,
-    loggers=[],
+    loggers=Any[],
     transform = nothing,
     kwargs...)
 
@@ -33,6 +33,7 @@ function Iso(data;
         end
     end
 
+    loggers = Vector{Any}(loggers)
     autoplot > 0 && push!(loggers, ISOKANN.autoplot(autoplot))
     isnothing(validation) || push!(loggers, ValidationLossLogger(data=validation))
 
@@ -82,13 +83,51 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
             push!(iso.losses, loss)
         end
 
+        diagnostics = [("loss", iso.losses[end]), ("n", length(iso.losses)), ("data", size(features(iso)))]
         for logger in iso.loggers
             log!(logger; iso, subdata=nothing)
+            d = diagnostic(logger)
+            isnothing(d) || push!(diagnostics, d)
         end
 
-        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(features(iso)))])
+        showprogress && ProgressMeter.next!(p; showvalues=diagnostics)
     end
     return iso
+end
+
+diagnostic(logger) = nothing
+
+
+@kwdef mutable struct FunctionLogger
+    f # ::Iso -> ::Any
+    name
+    values = []
+    iters = Int[]
+    logevery = 1
+end
+
+function FunctionLogger(f; kwargs...)
+    FunctionLogger(;f, kwargs...)
+end
+
+function log!(l::FunctionLogger; iso, kw...)
+    length(iso.losses) % l.logevery == 0 || return
+    push!(l.values, l.f(iso))
+    push!(l.iters, length(iso.losses))
+    return
+end
+
+diagnostic(l::FunctionLogger) = (l.name, if length(l.values) > 0
+    v = l.values[end] 
+    #round.(v, digits=5)
+else
+     nothing
+end )
+
+function ValidationLogger(valdata)
+    FunctionLogger(name="validation loss") do iso
+        validationloss(iso, valdata)
+    end
 end
 
 @kwdef struct ValidationLossLogger{T}
@@ -97,6 +136,8 @@ end
     iters = Int[]
     logevery = 10
 end
+
+diagnostic(l::ValidationLossLogger) = ("validation loss", length(l.losses) > 0 ? l.losses[end] : nothing)
 
 gpu(v::ValidationLossLogger) = ValidationLossLogger(gpu(v.data), v.losses, v.iters, v.logevery)
 
