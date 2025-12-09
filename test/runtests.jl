@@ -3,6 +3,8 @@ using ISOKANN
 using Test
 using CUDA
 
+@time @testset "ISOKANN.jl" verbose = true begin
+
 backends = Any[cpu]
 if CUDA.functional()
     CUDA.allowscalar(false)
@@ -29,48 +31,46 @@ function with_possible_broken_domain(f)
     end
 end
 
-@time @testset "ISOKANN.jl" verbose = true begin
+data = SimulationData(OpenMMSimulation(), 100, 8)
 
-    simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation()], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM", ])
 
-    for backend in backends
 
-        @testset "Running basic system tests on $backend" begin
-            for (sim, name) in simulations
-                @testset "Testing ISOKANN with $name" begin
-                    i = Iso(sim) |> backend
-                    run!(i)
-                    with_possible_broken_domain() do
-                        runadaptive!(i, generations=2, nx=1, iter=1)
-                    end
-                    #ISOKANN.addextrapolates!(i, 1, stepsize=0.01, steps=1)
-                    @test true
-                end
-            end
-        end
+simulations = zip([Doublewell(), Triplewell(), MuellerBrown(), ISOKANN.OpenMM.OpenMMSimulation()], ["Doublewell", "Triplewell", "MuellerBrown", "OpenMM", ])
 
-        @testset "Iso Transforms ($backend)" begin
-            sim = MuellerBrown()
-            for (d, t) in zip([1, 2, 2], [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()])
-                with_possible_broken_domain() do
-                    #@test begin
-                    run!(Iso(sim, model=pairnet(n=2, nout=d), transform=t) |> backend)
-                    #true
-                end
+for backend in backends
+
+    @testset "Running basic system tests on $backend" begin
+        for (sim, name) in simulations
+            @testset "Testing ISOKANN with $name" begin
+                i = Iso(sim) |> backend
+                run!(i)
+                runadaptive!(i, generations=2, kde=1, iter=1)
+                @test true
             end
         end
     end
 
-
-    @testset "Iso and IsoSimulation operations" begin
-        iso = Iso(OpenMMSimulation(), nx=10)
-        iso.data = iso.data[6:10] # data slicing
-        path = Base.Filesystem.tempname() * ".jld2"
-        ISOKANN.save(path, iso)
-        isol = ISOKANN.load(path)
-        @assert iso.data.coords == isol.data.coords
-        runadaptive!(isol, generations=1, nx=1, iter=1)
-        @test true
+    @testset "Iso Transforms ($backend)" begin
+        for (d, t) in zip([1, 2, 2], [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()])
+            @testset "$t" begin
+                run!(Iso(data, model=pairnet(data, nout=d), transform=t) |> backend)
+                @test true
+            end
+        end
     end
+end
+
+
+@testset "Iso and IsoSimulation operations" begin
+    iso = Iso(OpenMMSimulation(), nx=10)
+    iso.data = iso.data[6:10] # data slicing
+    path = Base.Filesystem.tempname() * ".jld2"
+    ISOKANN.save(path, iso)
+    isol = ISOKANN.load(path)
+    @assert iso.data.coords == isol.data.coords
+    runadaptive!(isol, generations=1, kde=1, iter=1)
+    @test true
+end
+
 end
 

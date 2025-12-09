@@ -2,7 +2,7 @@
 
 isotarget(iso) = isotarget(iso, iso.transform)
 
-isotarget(iso, t) = isotarget(iso.model, features(iso), propfeatures(iso), t)
+isotarget(iso, transform) = isotarget(iso.model, features(iso.data), propfeatures(iso.data), transform)
 
 """ expectation(f, xs)
 
@@ -117,7 +117,6 @@ function isotarget(ks, t::TransformShiftscale; ret_shiftscale=false)
 end
 
 function isotarget(iso::Iso, t::TransformShiftscale)
-    iso.model
     _, ks = chi_kchi(iso.model, iso.data)
     isotarget(ks, t)
 end

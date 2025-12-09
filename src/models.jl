@@ -35,7 +35,6 @@ outputdim(model::Flux.Dense) = size(model.weight, 1)
 iscuda(m::Flux.Chain) = typeof(m).parameters[1].parameters[end].parameters[end] <: CuArray
 
 defaultmodel(x::Tuple) = pairnet(n=size(x[1],1))
-defaultmodel(x; n=size(features(x), 1)) = ISOKANN.pairnet(; n)
 
 """ convenience wrapper returning the provided model with the default AdamW optimiser """
 model_with_opt(model, learnrate=1e-2, decay=1e-5) =
@@ -113,8 +112,8 @@ end
 # Used by AbstractLangevin
 function smallnet(nin, nout=1, activation=nl = Flux.sigmoid, lastactivation=identity)
     model = Flux.Chain(
-        Flux.Dense(nin, 5, activation),
-        Flux.Dense(5, 10, activation),
-        Flux.Dense(10, 5, activation),
-        Flux.Dense(5, nout, lastactivation))
+        Flux.Dense(nin, 8, activation),
+        Flux.Dense(8, 8, activation),
+        Flux.Dense(8, 8, activation),
+        Flux.Dense(8, nout, lastactivation))
 end
