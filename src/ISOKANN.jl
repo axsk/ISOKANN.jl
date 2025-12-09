@@ -88,6 +88,8 @@ export ca_rmsd
 export coords, features, propcoords, propfeatures
 export ExternalSimulation
 
+export picking
+
 
 include("utils/subsample.jl")  # adaptive sampling
 include("utils/pairdists.jl")       # pair distances

@@ -14,7 +14,6 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
     WeightedSamples, masses
 
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
-export OpenMMScript
 export FeaturesAll, FeaturesAll, FeaturesPairs
 
 export trajectory, propagate, setcoords, coords, savecoords
@@ -31,7 +30,7 @@ function __init__()
     # install / load OpenMM
     try
         OPENMM = pyimport_conda("openmm", "openmm", "conda-forge")
-        pyimport_conda("openmmforcefields", "openmmforcefields", "conda-forge")
+        #pyimport_conda("openmmforcefields", "openmmforcefields", "conda-forge")
         pyimport_conda("joblib", "joblib")
 
         @pyinclude("$(@__DIR__)/mopenmm.py")

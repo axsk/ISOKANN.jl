@@ -80,6 +80,22 @@ function pairnet(; n::Int, layers=3, features=identity, activation=Flux.sigmoid,
     return nn
 end
 
+"""
+    densenet(; layers::Vector{Int}, activation=Flux.sigmoid, lastactivation=identity, layernorm=true) -> Flux.Chain
+
+Construct a fully connected neural network (`Flux.Chain`) with customizable layer sizes, activations, 
+and optional input layer normalization.
+
+# Arguments
+- `layers::Vector{Int}`: List of layer dimensions. For example, `[10, 32, 16, 1]` creates
+  a network with input size 10, two hidden layers of size 32 and 16, and an output layer of size 1.
+- `activation`: Activation function applied to all layers except the last. Defaults to `Flux.sigmoid`.
+- `lastactivation`: Activation function for the final layer. Defaults to `identity`.
+- `layernorm::Bool`: Whether to prepend a `Flux.LayerNorm` layer to normalize the input. Defaults to `true`.
+
+# Returns
+A `Flux.Chain` composed of dense layers (and optionally a leading `LayerNorm`).
+"""
 function densenet(; layers::Vector{Int}, activation=Flux.sigmoid, lastactivation=identity, layernorm=true)
     L = [Flux.Dense(layers[i], layers[i+1], activation) for i in 1:length(layers)-2]
     L = [L; Flux.Dense(layers[end-1], layers[end], lastactivation)]

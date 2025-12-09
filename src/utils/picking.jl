@@ -29,7 +29,9 @@ function picking(X, n; dists = pairwise_one_to_many)
         q = argmax(mins)
     end
 
-    return X[:, qs], qs, d
+    xs, is, d = X[:, qs], qs, d
+
+    return (;xs, is, d)
 end
 
 """ 

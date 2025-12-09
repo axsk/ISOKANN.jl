@@ -158,7 +158,7 @@ function scatter_ramachandran(x::AbstractMatrix, z::Union{AbstractVector,Nothing
     ps = psi(cpu(x))
     z = cpu(z)
     scatter(ph, ps, marker_z=z, xlims=[-pi, pi], ylims=[-pi, pi],
-        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:tofino, legend=false,
+        markersize=3, markerstrokewidth=0, markercolor=:viridis, legend=false,
         xlabel="\\phi", ylabel="\\psi", title="Ramachandran", ; kwargs...
     )
 end
