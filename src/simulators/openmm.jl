@@ -24,18 +24,18 @@ FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber/tip3p_standard.xml"]
 
-global OPENMM
+#global OPENMM
 
 function __init__()
     # install / load OpenMM
     try
-        OPENMM = pyimport_conda("openmm", "openmm", "conda-forge")
+        #OPENMM = pyimport("openmm", "openmm", "conda-forge")
         #pyimport_conda("openmmforcefields", "openmmforcefields", "conda-forge")
-        pyimport_conda("joblib", "joblib")
+        #pyimport("joblib", "joblib")
 
         @pyinclude("$(@__DIR__)/mopenmm.py")
     catch
-        @warn "Could not load openmm."
+        @warn "Could not load openmm. Please make sure that the Python packages `openmm`, `openmmforcefields`, `joblib` are available in the python evironment used by PyCall.jl."
     end
 end
 
@@ -203,7 +203,7 @@ Creates a FeaturesPairs object from either:
 """
 FeaturesPairs(sim::OpenMMSimulation; kwargs...) = FeaturesPairs(pdbfile(sim); kwargs...)
 function FeaturesPairs(pdb::String; selector="all", maxdist=Inf, maxfeatures=Inf)
-    mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
+    mdtraj = pyimport("mdtraj", "mdtraj", "conda-forge")
     m = mdtraj.load(pdb)
     inds = m.top.select(selector) .+ 1
     if maxdist < Inf
