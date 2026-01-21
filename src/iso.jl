@@ -111,7 +111,8 @@ function FunctionLogger(f; kwargs...)
 end
 
 function log!(l::FunctionLogger; iso, kw...)
-    length(iso.losses) % l.logevery == 0 || return
+    last_iter = isempty(l.iters) ? 0 : l.iters[end]
+    last_iter + l.logevery >= length(iso.losses) || return
     push!(l.values, l.f(iso))
     push!(l.iters, length(iso.losses))
     return
