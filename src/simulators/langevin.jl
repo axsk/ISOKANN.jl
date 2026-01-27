@@ -14,7 +14,7 @@ function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=lagtime(l); dt=dt(l), a
     StochasticDiffEq.SDEProblem(drift, noise, x0, T, alg=alg, dt=dt; kwargs...)
 end
 
-function force(l::AbstractLangevin, x)
+function force(l::AbstractLangevin, x; reclaim=false)
     - ForwardDiff.gradient(x->potential(l, x), x)
 end
 
@@ -108,7 +108,7 @@ MuellerBrown(; kwargs...) = Diffusion(;
     potential=mueller_brown,
     dim=2,
     sigma=7.0,
-    support=[-1.5 1; -0.5 2],
+    support=[-1.4 1.1; -0.25 2],
     dt=0.0001,
     lagtime=0.001,
     kwargs...)
