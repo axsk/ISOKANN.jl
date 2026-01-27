@@ -119,11 +119,11 @@ end
 
 """ fixed point plot, i.e. x vs model(x) """
 function scatter_chifix(data, model)
+    p = plot()
     xs, ys = getobs(data)
     target = expectation(model, ys) |> Flux.cpu
     xs = model(xs) |> Flux.cpu
     lim = autolims(xs)
-    p= plot()
     for i in 1:size(xs, 1)
         scatter!(xs[i, :], target[i,:], markersize=2, xlabel="χ", ylabel="Kχ", xlims=lim, ylims=lim)
     end
