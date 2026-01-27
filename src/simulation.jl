@@ -11,7 +11,8 @@ Should implement the methods `coords`, `propagate`, `dim`
 """
 abstract type IsoSimulation end
 
-featurizer(::IsoSimulation) = identity
+# todo: check if features indeed become Float32
+featurizer(::IsoSimulation) = x->Float32.(x)
 
 @deprecate isodata SimulationData
 
