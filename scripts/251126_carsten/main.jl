@@ -98,7 +98,6 @@ function empirical_committor(x0::AbstractVector; sim, K=1, tmax=1_000_000, traje
     q = sum(==(2), hits) / length(hits)
     return (;q, hits, ts, x0, ys)
 end
-
 empirical_committor(X::AbstractMatrix; kwargs...) = StructArray(empirical_committor(x0;kwargs...) for x0 in eachcol(X))
 empirical_committor(data::SimulationData; kwargs...) = empirical_committor(coords(data); kwargs...)
 function refine_committor(Qs; kwargs...)
@@ -238,8 +237,10 @@ end
 const Z = zeros(66)
 uzero(x) = Z
 
+USTAR_MAXNORM::Float64 = 1000
+
 # optimal control
-function ustar(iso::Iso; eps=1e-4, maxnorm=1000)
+function ustar(iso::Iso; eps=1e-8, maxnorm=USTAR_MAXNORM)
     σ = constants(iso.data.sim).σ
     function ustar_iso(x)
         x = Float32.(x)
@@ -313,11 +314,13 @@ function _girsanov(sim, x0=coords(sim); steps=steps(sim), dt=stepsize(sim), bias
 
         F = force(sim, x, reclaim=false)
         ux = bias(x)
-        if norm(F) > 10_000
-            @show F, x
+        if norm(F) > 100_000
+            @show norm(F), norm(x)
+            println()
         end
         if norm(ux) > 1_000
-            @show ux, x, x0
+            #@show ux, x, x0
+            print(".")
             ux ./= norm(ux) * 1_000
         end
         #println(" F", norm(F), " u", norm(ux), " x", x)
@@ -349,31 +352,61 @@ end
 
 ### approximate policy iteration
 
-@kwdef mutable struct ApproxPolicyIter3{T}
-    Js::T
-    K::Int # number of new samples per target evaluation
-    α::Float32
-    classifier
+@kwdef mutable struct ApproxPolicyIter5{T}
+    sample_n::Int = 1 # number of new samples per target evaluation
+    sample_maxsteps::Int = 1000
+    sample_α::Float32 = 1/100
     q0::Float64 = 0
     q1::Float64 = 1
+    classifier
+    Js::T
 end
+
+function Base.show(io::IO, mime::MIME"text/plain", x::ApproxPolicyIter5)
+    indent = get(io, :indent, 0)
+    cio = IOContext(io,
+        :limit => get(io, :limit, true),
+        :compact => get(io, :compact, true),
+        :indent => indent + 2,
+        :displaysize => get(io, :displaysize, (24, 80)))
+
+    
+    pad = " "^indent
+    println(cio, pad, typeof(x))
+    pad = " "^(indent+2)
+    for field in fieldnames(typeof(x))
+        print(cio, pad, field, " = ", )
+        #Base.show(cio, mime, )
+        myshow(cio, mime, getfield(x, field))
+    end
+end
+
+myshow(io, mime, x) = (Base.show(io, mime, x); println())
+
+function myshow(io, mime, x::AbstractVector{<:Number}) 
+    m, s = mean_and_std(x)
+    mn, mx = extrema(x)
+    println(io, x, "  # n=", length(x), 
+        " μ=",round(m, sigdigits=4),
+        " σ=", round(s, sigdigits=4),
+        " ⇓=", round(mn, sigdigits=4),
+        " ⇑=", round(mx, sigdigits=4))
+end
+
 
 logclamped(x, eps=typeof(x)(1e-8)) = x < eps ? log(eps) : log(x)
 
-global RESAMPLE_MAXSTEPS::Int =1000
 
-function resample!(t::ApproxPolicyIter3, iso;
-        α=t.α, 
-        K=t.K, 
-        is=sort(sample(1:length(t.Js), K, replace=false)),
-        maxsteps=RESAMPLE_MAXSTEPS,
+function resample!(t::ApproxPolicyIter5, iso;
+        α=t.sample_α, 
+        steps=t.sample_maxsteps,
+        is=sort(sample(1:length(t.Js), t.sample_n, replace=false)),
         dt = stepsize(sim))
 
     bias = ustar(cpu(iso)) # cpu is faster for single calls
-    #bias(x) = [0, 0]
 
     for i in is
-        g = girsanov(iso.data.sim, coords(iso)[:, i]; steps=maxsteps, bias=bias, classify=t.classifier, dt)
+        g = girsanov(iso.data.sim, coords(iso)[:, i]; steps, bias, classify=t.classifier, dt)
 
         class = t.classifier(g.x)
         if class == :A
@@ -381,7 +414,8 @@ function resample!(t::ApproxPolicyIter3, iso;
         elseif class == :B
             j = g.u2 / 2 - logclamped(t.q1)
         else
-            j = g.u2 / 2 - logclamped(iso.model(g.x)|>only)
+            print("x")
+            j = g.u2 / 2 - logclamped(chicoords(iso,g.x)|>only)
         end
 
         @assert isfinite(j)
@@ -393,20 +427,14 @@ function resample!(t::ApproxPolicyIter3, iso;
             push!(HIST, h)
         end
 
-        if !isfinite(j)
-            @show class, j, g.u2
-            @error "got NaN for target"
-        end
-            
-        
         t.Js[i] += α * (j - t.Js[i]) # moving average
     end
 end
 
 # sample a single J realization per point (from K randomly chosen) and update moving average, return q estimate for training
-function ISOKANN.isotarget(iso, t::ApproxPolicyIter3)
+function ISOKANN.isotarget(iso, t::ApproxPolicyIter5)
     global Js
-    if t.α > 0
+    if t.sample_α > 0
         resample!(t, iso)
     end
     q = exp.(-t.Js)
@@ -415,17 +443,16 @@ end
 
 using ISOKANN.Flux
 
-function iso_api(; nx=200, α=Float32(1 / 10), K=nx, iso_q=nothing, classifier, data=iso_q.data, model=iso_q.model, q0::Float64=0., q1::Float64=1., isoargs...)
+function iso_api(; data=iso_q.data, nx=length(data), α=Float32(1 / 100), K=nx, iso_q=nothing, classifier, model=iso_q.model, q0::Float64=0., q1::Float64=1., isoargs...)
     ix = picking(features(data), nx).is
     data = data[ix]
     if !isnothing(iso_q)
         J0 = -logclamped.(chicoords(iso_q, coords(data)) |> vec)
-        transform = ApproxPolicyIter3(J0, K, α, classifier, q0, q1)
     else
         J0 = init_J(coords(data), classifier, q0, q1)
-        transform = ApproxPolicyIter3(J0, K, α, classifier, q0, q1)
     end
     
+    transform = ApproxPolicyIter5(;Js=J0, sample_n=K, sample_α=α, classifier, q0, q1)
     iso = Iso(data; transform, model=deepcopy(model), isoargs...)
     global QS = [Float32[] for i in 1:nx]
     return iso
@@ -468,7 +495,16 @@ function plot_girsanov_force(g, iso)
     plot_boxes!()
 end
 
-
+function aladip()
+    sim = sim = OpenMMSimulation(steps=200, integrator="brownian", step=5e-6) 
+    xs = laggedtrajectory(sim, 1000)
+    data = SimulationData(sim, xs, 0, featurizer=x->Float32.(OpenMM.FeaturesAll()(x)))
+    model = ISOKANN.defaultmodel(data, activation=ISOKANN.Flux.tanh_fast) 
+    ia = iso_api(;data, model, classifier=classify, K=1, q0=1., q1=10.)
+    ia.transform.sample_α = 1/10
+    ia.transform.sample_maxsteps = 100
+    return ia
+end
 #=
 
 archive
@@ -496,8 +532,7 @@ function iso_torsion(data=DATA)
     data = SimulationData(data.sim, data.coords; featurizer)
     Iso(data,
         transform=CommittorTarget(data),
-        model = ISOKANN.densenet(; layers=[2,16,16,16,1], layernorm=false, activation=Flux.sigmoid),
-        opt=AdamRegularized(1e-2, 0)
+        model = ISOKANN.densenet(; layers=[2,16,16,16,1], layernorm=false, activation=Flux.sigmoid),opt=AdamRegularized(1e-2, 0)
     )
 end
 
