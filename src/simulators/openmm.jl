@@ -1,6 +1,6 @@
 module OpenMM
 
-using PyCall, CUDA
+using CUDA
 using LinearAlgebra: norm, dot, diag
 using Random: randn!
 
@@ -13,6 +13,8 @@ import ..ISOKANN: ISOKANN, IsoSimulation,
     force, potential, lagtime, trajectory, laggedtrajectory,
     WeightedSamples, masses
 
+import StatsBase
+
 export OpenMMSimulation, FORCE_AMBER, FORCE_AMBER_IMPLICIT
 export FeaturesAll, FeaturesAll, FeaturesPairs
 
@@ -24,18 +26,21 @@ FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber/tip3p_standard.xml"]
 
-#global OPENMM
+import PythonCall
+
+const PyObject = PythonCall.Py
+const mopenmm = PythonCall.pynew()
+#PythonCall.@pyconst(PythonCall.pyimport("src.simulators.mopenmm"))
 
 function __init__()
-    # install / load OpenMM
     try
-        #OPENMM = pyimport("openmm", "openmm", "conda-forge")
-        #pyimport_conda("openmmforcefields", "openmmforcefields", "conda-forge")
-        #pyimport("joblib", "joblib")
-
-        @pyinclude("$(@__DIR__)/mopenmm.py")
-    catch
-        @warn "Could not load openmm. Please make sure that the Python packages `openmm`, `openmmforcefields`, `joblib` are available in the python evironment used by PyCall.jl."
+        # load the mopenmm.py script
+        sys = PythonCall.pyimport("sys")
+        sys.path.append(pwd())
+        PythonCall.pycopy!(mopenmm, PythonCall.pyimport("src.simulators.mopenmm"))
+    catch err
+        global PYTHON_ERR = err
+        @warn "Could not load openmm. Please make sure that the Python packages `openmm`, `joblib` (and if used for automatic solvent `openmmforcefields`) are available in the python evironment used by PythonCall.jl."
     end
 end
 
@@ -73,7 +78,7 @@ or supply a .pdb file via `pdb` and the following parameters (see also defaultsy
 
 """
 struct OpenMMSimulation{T} <: IsoSimulation
-    pysim::PyObject
+    pysim::PythonCall.Py
     steps::Int
     constructor
     bias::T
@@ -82,11 +87,13 @@ end
 function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
     k = NamedTuple(k)
     if haskey(k, :py)
-        py"""
-        julia=True
-        """
-        @pyinclude(k.py)
-        pysim = py"simulation"
+        @error "not supported with PythonCall yet"  # fix PythonCall
+        #py"""
+        #julia=True
+        #"""
+        #@pyinclude(k.py)
+        #pysim = py"simulation"
+        
 
         return OpenMMSimulation{T}(pysim, steps, k, bias)
     elseif haskey(k, :pdb)
@@ -116,149 +123,128 @@ function defaultsystem(;
     forcefield_kwargs=Dict(),
     kwargs...
 )
-    @pycall py"defaultsystem"(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, mmthreads, kwargs...)::PyObject
+    mopenmm.defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize; addwater, padding, ionicstrength, forcefield_kwargs, mmthreads, kwargs...)
 end
 
 
-# TODO: this are remnants of the old detailed openmm system, remove them eventually
-mmthreads(sim::OpenMMSimulation) = get(sim.constructor, :mmthreads, CUDA.functional() ? "gpu" : 1)
-nthreads(sim::OpenMMSimulation) = get(sim.constructor, :nthreads, CUDA.functional() ? 1 : Threads.nthreads())
-pdbfile(sim::OpenMMSimulation) = get(() -> createpdb(sim), sim.constructor, :pdb)
+## convencience wrappers
 
 steps(sim) = sim.steps::Int
 friction(sim) = friction(sim.pysim)
 temp(sim) = temp(sim.pysim)
 stepsize(sim) = stepsize(sim.pysim)
 
+iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
+pdbfile(sim::OpenMMSimulation) = get(() -> createpdb(sim), sim.constructor, :pdb)
 
 lagtime(sim::OpenMMSimulation) = steps(sim) * stepsize(sim) # in ps
 dim(sim::OpenMMSimulation) = length(coords(sim))
 defaultmodel(sim::OpenMMSimulation; n=dim(sim), kwargs...) = ISOKANN.pairnet(;n, kwargs...)
 
-coords(sim::OpenMMSimulation) = coords(sim.pysim)::Vector{Float64}
+coords(sim::OpenMMSimulation) = coords(sim.pysim)
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
 natoms(sim::OpenMMSimulation) = div(dim(sim), 3)
 
-friction(pysim::PyObject) = pysim.integrator.getFriction()._value # 1/ps
-temp(pysim::PyObject) = pysim.integrator.getTemperature()._value # kelvin
-stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value # ps
-coords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true).flatten()
+claim_memory(sim::OpenMMSimulation) = iscuda(sim) && CUDA.functional() && CUDA.reclaim()  # we call this to free cuda memory explicitly from julia for openmm
 
-iscuda(sim::OpenMMSimulation) = iscuda(sim.pysim)
-iscuda(pysim::PyObject) = pysim.context.getPlatform().getName() == "CUDA"
-claim_memory(sim::OpenMMSimulation) = iscuda(sim) && CUDA.functional() && CUDA.reclaim()
+# Python wrappers
 
-function createpdb(sim)
-    pysim = sim.pysim
-    file = tempname() * ".pdb"
-    pdb = py"app.PDBFile"
-    pdb.writeFile(pysim.topology, PyReverseDims(reshape(coords(sim), 3, :)), file)  # TODO: fix this
-    return file
+@inline _jlfloat(x) = PythonCall.pyconvert(Float64, x)
+@inline _jlint(x) = PythonCall.pyconvert(Int, x)
+@inline _xyz_jl_to_py(coords) = mopenmm.np.array(reshape(coords, 3, :)).T
+@inline _xyz_py_to_jl(x) = PythonCall.pyconvert(Vector{Float64}, x.reshape(-1))
+
+friction(pysim::PyObject) = pysim.integrator.getFriction()._value |> _jlfloat# 1/ps
+temp(pysim::PyObject) = pysim.integrator.getTemperature()._value  |> _jlfloat # kelvin
+stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value |> _jlfloat # ps
+iscuda(pysim::PyObject) = string(pysim.context.getPlatform().getName()) == "CUDA"
+
+
+coords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true)._value |> _xyz_py_to_jl
+
+function setcoords(sim::PyObject, coords::AbstractVector{T}) where {T}
+    c = _xyz_jl_to_py(coords)
+    sim.context.setPositions(c)
+    return nothing
 end
 
-featurizer(sim::OpenMMSimulation) = featurizer(sim, get(sim.constructor, :features, nothing))
 
-featurizer(sim, ::Nothing) =
-    if natoms(sim) < 100
-        FeaturesAll()
-    else
-        maxfeatures = 100
-        @warn("No default featurizer specified. Falling back to $maxfeatures random pairs")
-        FeaturesPairs(sim; maxdist=0, maxfeatures)
+function minimize!(sim::OpenMMSimulation, coords=coords(sim); iter=0)
+    setcoords(sim, coords)
+    return sim.pysim.minimizeEnergy(maxIterations=iter)
+    return nothing
+end
+
+function set_random_velocities!(sim::OpenMMSimulation)
+    context = sim.pysim.context
+    context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
+end
+
+force(sim::OpenMMSimulation, x::CuArray; kwargs...) = force(sim, Array(x); kwargs...) |> cu
+potential(sim::OpenMMSimulation, x::CuArray; kwargs...) = potential(sim, Array(x); kwargs...)
+masses(sim::OpenMMSimulation) = [_jlfloat(sim.pysim.system.getParticleMass(i - 1)._value) for i in 1:_jlint(sim.pysim.system.getNumParticles())] # in daltons
+
+function force(sim::OpenMMSimulation, x; reclaim=true)
+    reclaim && claim_memory(sim)
+    setcoords(sim, x)
+    force(sim; reclaim=false)
+end
+
+function force(sim::OpenMMSimulation; reclaim=true)
+    reclaim && claim_memory(sim)
+    sim.pysim.context.getState(getForces=true).getForces(asNumpy=true)._value |> _xyz_py_to_jl
+end
+
+function potential(sim::OpenMMSimulation, x; kwargs...)
+    mapslices(x, dims=1) do x
+        potential(sim, x; kwargs...)
     end
-featurizer(sim, atoms::Vector{Int}) = FeaturesAtoms(atoms)
-featurizer(sim, pairs::Vector{Tuple{Int,Int}}) = FeaturesPairs(pairs)
-featurizer(sim, features::Function) = features
-featurizer(sim, radius::Number) = FeaturesPairs([calpha_pairs(sim.pysim); local_atom_pairs(sim.pysim, radius)] |> unique)
-
-struct FeaturesCoords end
-(f::FeaturesCoords)(coords) = coords
-
-struct FeaturesAll end
-(f::FeaturesAll)(coords) = ISOKANN.flatpairdists(coords)
-
-""" Pairwise distances between all provided atoms """
-struct FeaturesAtoms
-    atominds::Vector{Int}
 end
-(f::FeaturesAtoms)(coords) = ISOKANN.flatpairdists(coords, f.atominds)
 
-struct FeaturesPairs
-    pairs::Vector{Tuple{Int,Int}}
+function potential(sim::OpenMMSimulation, x::AbstractVector; reclaim=true)
+    reclaim && claim_memory(sim)
+    setcoords(sim, x)
+    potential(sim; reclaim=false)
 end
-(f::FeaturesPairs)(coords) = ISOKANN.pdists(coords, f.pairs)
-Base.show(io::IO, f::FeaturesPairs) = print(io, "FeaturesPairs() with $(length(f.pairs)) features")
 
+function potential(sim::OpenMMSimulation; reclaim=true)
+    reclaim && claim_memory(sim)
+    sim.pysim.context.getState(getEnergy=true).getPotentialEnergy()._value |> _jlfloat
+end
 
-import StatsBase
+createpdb(sim) = savecoords(tempname() * ".pdb", sim)
 
 """
-    FeaturesPairs(pairs::Vector{Tuple{Int,Int}})
-    FeaturesPairs(system; selector="all", maxdist=Inf, maxfeatures=Inf)
+    savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T})
 
-Creates a FeaturesPairs object from either:
-- a list of index pairs (`Vector{Tuple{Int,Int}}`) passed directly.
-- an `OpenMMSimulation` or PDB file path (`String`), selecting atom pairs using MDTraj selector syntax (`selector`),
-  optionally filtered by `maxdist` (in nm) and limited to `maxfeatures` randomly sampled pairs.
+Save the given `coordinates` in a .pdb file using OpenMM
 """
-FeaturesPairs(sim::OpenMMSimulation; kwargs...) = FeaturesPairs(pdbfile(sim); kwargs...)
-function FeaturesPairs(pdb::String; selector="all", maxdist=Inf, maxfeatures=Inf)
-    mdtraj = pyimport("mdtraj", "mdtraj", "conda-forge")
-    m = mdtraj.load(pdb)
-    inds = m.top.select(selector) .+ 1
-    if maxdist < Inf
-        c = permutedims(m.xyz, (3, 2, 1))
-        c = reshape(c, :, size(c, 3))
-        inds = ISOKANN.restricted_localpdistinds(c, maxdist, inds)
-    else
-        inds = [(inds[i], inds[j]) for i in 1:length(inds) for j in i+1:length(inds)]
+function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}=coords(sim)) where {T}
+    coords = ISOKANN.cpu(coords)
+    s = sim.pysim
+    p = mopenmm.PDBFile
+    file = path
+    file = PythonCall.@pyeval (file = file) => `open(file, "w")`
+    #p = py"pdbfile.PDBFile" # fix PythonCall
+    #file = py"open"(path, "w") fix PythonCall
+    p.writeHeader(s.topology, file)
+    for (i, coords) in enumerate(eachcol(coords))
+        pos = reinterpret(Tuple{T,T,T}, coords .* 10)
+        pos = _xyz_jl_to_py(coords .* 10)
+        p.writeModel(s.topology, pos, file, modelIndex=i)
     end
-    if length(inds) > maxfeatures
-        inds = StatsBase.sample(inds, maxfeatures, replace=false) |> sort
-    end
-    return FeaturesPairs(inds)
+    p.writeFooter(s.topology, file)
+    file.close()
+    return path
 end
 
 
-"""
-    featurepairs(d::ISOKANN.SimulationData)
+### Featurizers
 
-returns pairs of atom indices corresponding to the pairwise distance features 
-"""
-function featurepairs(d::ISOKANN.SimulationData)
-    if d.featurizer isa OpenMM.FeaturesPairs
-        return d.featurizer.pairs
-    elseif d.featurizer isa OpenMM.FeaturesAll
-        return Tuple.(halfinds(OpenMM.natoms(d.sim)))
-    else
-        @error "featurepairs not defined for this featurizer"
-    end
-end
-
-import BioStructures
-struct FeaturesAngles
-    struc
-end
-
-function FeaturesAngles(sim::OpenMMSimulation)
-    return FeaturesAngles(read(sim.constructor.pdb, BioStructures.PDBFormat))
-end
-
-function (f::FeaturesAngles)(coords::AbstractVector)
-    coords = reshape(coords, 3, :)
-    atoms = collectatoms(f.struc)
-    for (a, c) in zip(atoms, eachcol(coords))
-        coords!(a, c)
-    end
-    filter(!isnan, vcat(phiangles(f.struc), psiangles(f.struc)))
-end
-
-function (f::FeaturesAngles)(coords)
-    mapslices(f, coords, dims=1)
-end
+include("../utils/features.jl")  # TODO: factor this out of the OpenMM
 
 
-
+### Integration
 
 """ generate `n` random inintial points for the simulation `mm` """
 randx0(sim::OpenMMSimulation, n) = ISOKANN.laggedtrajectory(sim, n)
@@ -281,7 +267,7 @@ function propagate(sim::OpenMMSimulation, x0::AbstractMatrix, nk; retries=3)
     p = ProgressMeter.Progress(nk * nx, desc="Propagating")
     for i in 1:nx
         for j in 1:nk
-            with_retries(retries, PyCall.PyError) do 
+            with_retries(retries, PythonCall.PyException) do 
                     ys[:, j, i] = laggedtrajectory(sim, 1, x0=x0[:, i], throw=true, showprogress=true, reclaim=false)
             end
             ProgressMeter.next!(p)
@@ -382,102 +368,6 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
         return xs[:, 1:done]
     end
     return xs
-end
-
-function minimize!(sim::OpenMMSimulation, coords=coords(sim); iter=0)
-    setcoords(sim, coords)
-    return sim.pysim.minimizeEnergy(maxIterations=iter)
-    return nothing
-end
-
-function setcoords(sim::PyObject, coords::AbstractVector{T}) where {T}
-    c = PyReverseDims(reshape(coords, 3, :))
-    sim.context.setPositions(c)::Nothing
-    return nothing
-end
-
-function set_random_velocities!(sim::OpenMMSimulation)
-    context = sim.pysim.context
-    context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
-end
-
-force(sim::OpenMMSimulation, x::CuArray; kwargs...) = force(sim, Array(x); kwargs...) |> cu
-potential(sim::OpenMMSimulation, x::CuArray; kwargs...) = potential(sim, Array(x); kwargs...)
-masses(sim::OpenMMSimulation) = [sim.pysim.system.getParticleMass(i - 1)._value for i in 1:sim.pysim.system.getNumParticles()] # in daltons
-
-function force(sim::OpenMMSimulation, x; reclaim=true)
-    reclaim && claim_memory(sim)
-    setcoords(sim, x)
-    pysim = sim.pysim
-    pyarray = PyArray(py"$pysim.context.getState(getForces=True).getForces(asNumpy=True)._value.reshape(-1)"o)
-    return pyarray
-end
-
-potential(sim::OpenMMSimulation, x; kwargs...) = mapslices(x, dims=1) do x potential(sim, x; kwargs...) end
-
-function potential(sim::OpenMMSimulation, x::AbstractVector; reclaim=true)
-    reclaim && claim_memory(sim)
-    setcoords(sim, x)
-    v = sim.pysim.context.getState(getEnergy=true).getPotentialEnergy()
-    v = v.value_in_unit(v.unit)
-end
-
-
-"""
-    savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T})
-
-Save the given `coordinates` in a .pdb file using OpenMM
-"""
-function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}=coords(sim)) where {T}
-    coords = ISOKANN.cpu(coords)
-    s = sim.pysim
-    p = py"pdbfile.PDBFile"
-    file = py"open"(path, "w")
-    p.writeHeader(s.topology, file)
-    for (i, coords) in enumerate(eachcol(coords))
-        pos = reinterpret(Tuple{T,T,T}, coords .* 10)
-        p.writeModel(s.topology, pos, file, modelIndex=i)
-    end
-    p.writeFooter(s.topology, file)
-    file.close()
-end
-
-### FEATURE FILTERS
-
-function remove_H_H2O_NACL(atom)
-    !(
-        atom.element.symbol == "H" ||
-        atom.residue.name in ["HOH", "NA", "CL"]
-    )
-end
-
-atoms(sim::OpenMMSimulation) = collect(sim.pysim.topology.atoms())
-
-function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
-    xs = reshape(coords(pysim), 3, :)
-    atoms = filter(atomfilter, pysim.topology.atoms() |> collect)
-    inds = map(atom -> atom.index + 1, atoms)
-
-    pairs = Tuple{Int,Int}[]
-    for i in 1:length(inds)
-        for j in i+1:length(inds)
-            if norm(xs[:, i] - xs[:, j]) <= radius
-                push!(pairs, (inds[i], inds[j]))
-            end
-        end
-    end
-    return pairs
-end
-
-function calpha_pairs(pysim::PyObject)
-    local_atom_pairs(pysim, Inf; atomfilter=x -> x.name == "CA")
-end
-
-calpha_inds(sim::OpenMMSimulation) = calpha_inds(sim.pysim)
-function calpha_inds(pysim::PyObject)
-    map(filter(x -> x.name == "CA", pysim.topology.atoms() |> collect)) do atom
-        atom.index + 1
-    end
 end
 
 
