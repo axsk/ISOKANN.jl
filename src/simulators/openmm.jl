@@ -591,7 +591,7 @@ function optcontrol(iso, forcescale=1.0)
     TT = temp(sim)
     σ = @. sqrt(2 * kB * TT / (γ * M)) # ODL noise
 
-    @show _, shift, lambda = ISOKANN.isotarget(iso.model, iso.data.features[1], iso.data.features[2], iso.transform, shiftscale=true)
+    @show _, shift, lambda = ISOKANN.isotarget(iso.model, iso.data.features[1], iso.data.features[2], iso.target, shiftscale=true)
     Tmax = stepsize(sim) * steps(sim)
     q = log(lambda) / Tmax
     b = shift

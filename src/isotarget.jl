@@ -1,12 +1,19 @@
-### ISOKANN target transformations
+import Combinatorics
+using ArnoldiMethod: partialschur
+using LinearAlgebra: I
+using LinearAlgebra: eigen, Diagonal
 
-isotarget(iso) = isotarget(iso, iso.transform)
+# ==================================================================================
+#                  CORE ISOKANN dispatches
+# ==================================================================================
 
-isotarget(iso, transform) = isotarget(iso.model, features(iso.data), propfeatures(iso.data), transform)
+isotarget(iso) = isotarget(iso, iso.target)
+
+isotarget(iso, target) = isotarget(target, iso.model, features(iso.data), propfeatures(iso.data))
 
 """ expectation(f, xs)
 
-Computes the expectation value of `f` over `xs`. Supports WeightedSamples
+Computes the expectation value of `f` over `xs`. Supports WeightedSamples through extra dispatch
 """
 expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
 
@@ -15,7 +22,83 @@ koopman(iso::Iso, data::SimulationData=iso.data) = expectation(iso.model, propfe
 chi_kchi(iso) = chi_kchi(iso.model, iso.data)
 chi_kchi(model, data::SimulationData) = (model(features(data)), expectation(model, propfeatures(data)))
 
+# ==================================================================================
+#                  1D TRANSFORMATION: SHIFTSCALE
+# ==================================================================================
 
+""" TransformShiftscale()
+
+Classical 1D shift-scale (ISOKANN 1) """
+struct TransformShiftscale end
+
+isotarget(t::TransformShiftscale, model, xs, ys) = shiftscale(expectation(model, ys))
+
+function shiftscale(ks)
+    @assert (ks isa AbstractVector) || (size(ks, 1) == 1) "TransformShiftscale only works with one dimensional chi functions"
+    min, max = extrema(ks)
+    max > min || throw(DomainError("Could not compute the shift-scale. chi function is constant"))
+    chi = (ks .- min) ./ (max - min)
+    return chi
+end
+
+
+# ==================================================================================
+#                  MULTIDIMENSIONAL ISA 
+# ==================================================================================
+
+""" TransformISA(permute)
+
+Compute the target via the inner simplex algorithm (without feasiblization routine).
+`permute` specifies whether to apply the stabilizing permutation """
+@kwdef struct TransformISA
+    permute::Bool = true
+end
+
+# we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
+# which in turn assumes that the first column is equal to one.
+function myisa(X)
+    try
+        inv(X[PCCAPlus.indexmap(X), :])
+    catch e
+        Base.showerror(e)
+        throw(DomainError("Could not compute the simplex transformation. The subspace might be singular/collapsed"))
+    end
+end
+
+function isotarget(t::TransformISA, model, xs::T, ys) where {T}
+    chi = model(xs) |> cpu
+    @assert size(chi, 1) > 1 "TransformISA does not work with one dimensional chi functions"
+    ks = expectation(model, ys) |> cpu
+    target = myisa(ks')' * ks
+    t.permute && (target = fixperm(target, chi))
+    return T(target)
+end
+
+### Permutation - stabilization
+
+"""
+    fixperm(new, old)
+
+Permutes the rows of `new` such as to minimize L1 distance to `old`.
+
+# Arguments
+- `new`: The data to match to the reference data.
+- `old`: The reference data.
+"""
+function fixperm(new, old)
+    # TODO: use the hungarian algorithm for larger systems
+    n = size(new, 1)
+    p = argmin(Combinatorics.permutations(1:n)) do p
+        norm(new[p, :] - old, 1)
+    end
+    new[p, :]
+end
+
+# ==================================================================================
+#                  EXPERIMENTAL TRANSFORMS 
+# ==================================================================================
+
+### PseudoInv
 
 """
     TransformPseudoInv(normalize, direct, eigenvecs, permute)
@@ -34,7 +117,7 @@ If `direct==true` solve `chi * pinv(K(chi))`, otherwise `inv(K(chi) * pinv(chi))
     permute::Bool = true
 end
 
-function isotarget(model, xs::S, ys, t::TransformPseudoInv) where {S}
+function isotarget(t::TransformPseudoInv, model, xs::S, ys) where {S}
     (; normalize, direct, eigenvecs, permute) = t
     chi = model(xs) |> cpu
     @assert size(chi, 1) > 1 "TransformPseudoInv does not work with one dimensional chi functions"
@@ -65,80 +148,22 @@ end
 
 
 
-""" TransformISA(permute)
-
-Compute the target via the inner simplex algorithm (without feasiblization routine).
-`permute` specifies whether to apply the stabilizing permutation """
-@kwdef struct TransformISA
-    permute::Bool = true
-end
-
-
-
-# we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
-# which in turn assumes that the first column is equal to one.
-function myisa(X)
-    try
-        inv(X[PCCAPlus.indexmap(X), :])
-    catch e
-        throw(DomainError("Could not compute the simplex transformation. The subspace might be singular/collapsed"))
-    end
-end
-
-function isotarget(model, xs::T, ys, t::TransformISA) where {T}
-    chi = model(xs) |> cpu
-    @assert size(chi, 1) > 1 "TransformISA does not work with one dimensional chi functions"
-    ks = expectation(model, ys) |> cpu
-    target = myisa(ks')' * ks
-    t.permute && (target = fixperm(target, chi))
-    return T(target)
-end
-
-""" TransformShiftscale()
-
-Classical 1D shift-scale (ISOKANN 1) """
-struct TransformShiftscale end
-
-function isotarget(ks, t::TransformShiftscale; ret_shiftscale=false)
-    @assert (ks isa AbstractVector) || (size(ks, 1) == 1) "TransformShiftscale only works with one dimensional chi functions"
-
-    min, max = extrema(ks)
-    max > min || throw(DomainError("Could not compute the shift-scale. chi function is constant"))
-    target = (ks .- min) ./ (max - min)
-    # TODO: find another solution for this, this is not typestable
-    #=
-    if (ret_shiftscale)
-        shift = min / (min + 1 - max)
-        lambda = max-min
-        return target, shift, lambda
-    end
-    =#
-    return target
-end
-
-function isotarget(iso::Iso, t::TransformShiftscale)
-    _, ks = chi_kchi(iso.model, iso.data)
-    isotarget(ks, t)
-end
-
-
-
 # TODO: design decision: do we want this as outer type or as part of what we have inside the other transforms?
-""" TransformStabilize(transform, last=nothing)
+""" TransformStabilize(target, last=nothing)
 
-Wraps another transform and permutes its target to match the previous target
+Wraps another target and permutes its target to match the previous target
 
-Currently we also have the stablilization (wrt to the model though) inside each Transform. TODO: Decide which to keep
+Currently we also have the stablilization (wrt to the model though) inside most Transforms. TODO: Decide which to keep
 """
-@kwdef mutable struct Stabilize2
-    transform
+@kwdef mutable struct Stabilize
+    target
     last = nothing
 end
 
-function isotarget(model, xs, ys, t::Stabilize2)
-    target = isotarget(model, xs, ys, t.transform)
+function isotarget(t::Stabilize, model, xs, ys)
+    target = isotarget(t.target, model, xs, ys)
     isnothing(t.last) && (t.last = target)
-    if t.transform isa TransformShiftscale  # TODO: is this even necessary?
+    if t.target isa TransformShiftscale  # TODO: is this even necessary?
         if (sum(abs, target - t.last)) > length(target) / 2
             println("flipping")
             target .= 1 .- target
@@ -151,45 +176,15 @@ function isotarget(model, xs, ys, t::Stabilize2)
 end
 
 
-### Permutation - stabilization
-import Combinatorics
-
-"""
-    fixperm(new, old)
-
-Permutes the rows of `new` such as to minimize L1 distance to `old`.
-
-# Arguments
-- `new`: The data to match to the reference data.
-- `old`: The reference data.
-"""
-function fixperm(new, old)
-    # TODO: use the hungarian algorithm for larger systems
-    n = size(new, 1)
-    p = argmin(Combinatorics.permutations(1:n)) do p
-        norm(new[p, :] - old, 1)
-    end
-    new[p, :]
-end
-
-using Random: shuffle
-function test_fixperm(n=3)
-    old = rand(n, n)
-    @show old
-    new = old[shuffle(1:n), :]
-    new = fixperm(new, old)
-    @show new
-    norm(new - old) < 1e-9
-end
 
 struct TransformGramSchmidt1 end
 
-function isotarget(model, xs::T, ys, t::TransformGramSchmidt1) where {T}
-    chi = model(xs)
+function isotarget(t::TransformGramSchmidt1, model, xs, ys)
+    chi = expectation(model, ys)
     dim = size(chi, 1)
 
     if dim == 1
-        chi .-= sum(chi) ./ length(chi)
+        chi .-= sum(chi) ./ length(chi)  # TODO: why not normalize correctly here?
     end
 
     for i in 1:dim
@@ -206,18 +201,14 @@ end
 
 Compute the target through a Gram-Schmidt orthonormalisation.
 """
-@kwdef struct TransformGramSchmidt2
-
-end
+struct TransformGramSchmidt2 end
 
 global rs = []
 
-function isotarget(model, xs, ys, t::TransformGramSchmidt2)
-
+function isotarget(t::TransformGramSchmidt2, model, xs, ys)
     renormalize = false
     firstconst = false
 
-    #chi = model(xs)  #  TODO: we dont use ys anywhere! this cant be right!
     chi = expectation(model, ys)
     c = sqrt(size(chi, 2))
 
@@ -228,7 +219,6 @@ function isotarget(model, xs, ys, t::TransformGramSchmidt2)
     end
 
     renormalize && (chi ./= c)
-
 
     q, r = qr(chi')
     q = typeof(q).types[1](q) # convert from compact to full representation
@@ -248,10 +238,10 @@ function isotarget(model, xs, ys, t::TransformGramSchmidt2)
 end
 
 
-@kwdef struct TransformLeftRight
-end
 
-function isotarget(model, xs, ys, t::TransformLeftRight)
+struct TransformLeftRight end
+
+function isotarget(t::TransformLeftRight, model, xs, ys)
     L = model(xs)'
     R = expectation(model, ys)'
     n, d = size(L)
@@ -277,7 +267,7 @@ end
 
 TransformLeftRightHistory(hist::Int) = TransformLeftRightHistory5(ones(0,hist), ones(0,hist))
 
-function isotarget(model, xs, ys, t::TransformLeftRightHistory5)
+function isotarget(t::TransformLeftRightHistory5, model, xs, ys)
     L = t.L
     R = t.R
 
@@ -350,10 +340,11 @@ function transformleftright(L::T, R) where {T}
     return target
 end
 
-struct TransformSVD
-end
 
-function isotarget(model, xs, ys, t::TransformSVD)
+
+struct TransformSVD end
+
+function isotarget(t::TransformSVD, model, xs, ys)
     # similar to DMD
     L = model(xs)'
     R = expectation(model, ys)'
@@ -368,10 +359,11 @@ function isotarget(model, xs, ys, t::TransformSVD)
     return target'
 end
 
-struct TransformSVDRev
-end
 
-function isotarget(model, xs, ys, t::TransformSVDRev)
+
+struct TransformSVDRev end
+
+function isotarget(t::TransformSVDRev, model, xs, ys)
     # similar to DMD
     L = model(xs)'
     R = expectation(model, ys)'
@@ -386,16 +378,14 @@ function isotarget(model, xs, ys, t::TransformSVDRev)
     return target'
 end
 
+
+
 abstract type TransformPinv end
-
-
 
 @kwdef mutable struct TransformPinv1{T<:AbstractMatrix} <: TransformPinv
     L::T
     R::T
 end
-
-
 
 function Base.show(io::IO, t::TransformPinv)#
     print(io, "$(typeof(t))($(size(t.L,2)))")
@@ -403,7 +393,7 @@ end
 
 TransformPinv(n::Int, hist::Int) = TransformPinv1(ones(n, hist), ones(n, hist))
 
-function isotarget(model, xs, ys, t::TransformPinv)
+function isotarget(t::TransformPinv, model, xs, ys, )
     l = model(xs)'
     r = expectation(model, ys)'
     n, d = size(l)
@@ -418,10 +408,9 @@ function isotarget(model, xs, ys, t::TransformPinv)
     target[1:d, :]
 end
 
-using ArnoldiMethod: partialschur
 
 matchcuda(typed, value) = typed isa CUDA.CuArray ? gpu(value) : cpu(value)
-function transformpinv(L, R, ::TransformPinv1)
+function transformpinv(::TransformPinv1, L, R)
     debug = true
     # we transpose as we work in rowspace
     L=L'
@@ -444,12 +433,12 @@ function transformpinv(L, R, ::TransformPinv1)
     target = Q * kinv * R
     #target = T * R
 
-
-
     target = rownormalize(target) .* size(target, 2)
     debug && display(target)
     return target'
 end
+
+
 
 @kwdef mutable struct TransformPinv2{T<:AbstractMatrix} <: TransformPinv
     L::T
@@ -457,14 +446,13 @@ end
     direct::Bool
 end
 
-function transformpinv(L, R, t::TransformPinv2)
+function transformpinv(t::TransformPinv2, L, R)
     # we transpose as we work in rowspace
     x = L'
     y = R'
 
     @show size(x)
     @show size(y)
-
 
     @assert size(x, 1) < size(x, 2)
 
@@ -478,7 +466,6 @@ function transformpinv(L, R, t::TransformPinv2)
         Q = LinearAlgebra.eigen(k).vectors[:, end:-1:1] |> realsubspace
         inv(Q)
     end
-
 
     #@show Q
     #display(Q)
@@ -502,7 +489,6 @@ function domsubspaceschur(A::T) where {T}
     return vecs, s.eigenvalues
 end
 
-
 """ computation of the real invariant subspace from complex eigenvectors """
 function realsubspace(V)
     V = copy(V)
@@ -518,7 +504,6 @@ function realsubspace(V)
     end
     real(V)
 end
-
 
 """
     updatehistory(L, l)
@@ -546,8 +531,8 @@ function updatehistory(L::T, l) where {T}
     L[:, 2:d+1] = l
 
     return L
-
 end
+
 
 
 mutable struct TransformPinv3{T<:AbstractArray}
@@ -568,8 +553,7 @@ function TransformPinv3(d::Int, h::Int, fixedone::Bool)
     TransformPinv3(x,y,fixedone)
 end
 
-
-function updatehistory!(x, y, t::TransformPinv3)
+function updatehistory!(t::TransformPinv3, x, y)
     d = size(x, 1)
     if t.fixedone
         t.L[d+2:end, :] = t.L[2:end-d, :]
@@ -584,11 +568,9 @@ function updatehistory!(x, y, t::TransformPinv3)
     end
 end
 
-isotarget(model, xs, ys, t::TransformPinv3) = isotarget(model(xs), expectation(model,ys), t)
-
-function isotarget(x::AbstractArray, y::AbstractArray, t::TransformPinv3)
+function isotarget(t::TransformPinv3, model, x::AbstractArray, y::AbstractArray, )
     d, n = size(x)
-    updatehistory!(x,y,t)
+    updatehistory!(t,x,y)
     #@show t.fixedone
     target = target_pseudoinverse(t.L, t.R)
     #return target[1:d,:]
@@ -619,22 +601,27 @@ function target_pseudoinverse(x,y)
     target = target .* sign.(sum(x .* target, dims=2)) # adjust signs
     return target
 end
+
 mysort(c::Complex) = mysort(real(c))
+
 function mysort(a::Real)
     a < 0.9 && return Inf
     a
 end
 
 
-### experiments starting october 25
 
-mutable struct TransformCross1
-    X
-    Y
+# ==================================================================================
+#                          CROSS TRANSFORMATION (October 25)
+# ==================================================================================
+
+mutable struct TransformCross
+    X  # these hold the former evaluations of chi and kchi
+    Y  # 
     maxcols
 end
-using LinearAlgebra: eigen, Diagonal
 
+# TODO: convencience constructor
 
 function rr_svd(X, Y)
     U, S, V = svd(X)
@@ -668,7 +655,7 @@ function rr_gev(X, Y)
     vecs = Y * vecs
     return (; vals, vecs)
 end
-using LinearAlgebra: I
+
 function rr_cross(X, Y; alpha=1e-8, τ=1e-3, p=2.0, wmin=1e-3, clip_s=(1e-2, 10.0))
     Q, R = qr(Y) # orth. basis of Y, Q: d×m orthonormal, R: m×m
     C = X' * X + alpha * I # tikh reg. with alpha
@@ -705,27 +692,22 @@ function rr_cross(X, Y; alpha=1e-8, τ=1e-3, p=2.0, wmin=1e-3, clip_s=(1e-2, 10.
     return ret
 end
 
-TransformCross = TransformCross1
 
-function TransformCross1(;npoints, maxcols)
+function TransformCross(;npoints, maxcols)
     X = zeros(npoints, 0)
     Y = zeros(npoints, 0)
 
-    TransformCross1(X, Y, maxcols)
+    TransformCross(X, Y, maxcols)
 end
 
-function reset!(t::TransformCross1) 
+function reset!(t::TransformCross) 
     t.X = zeros(size(t.X,1), 0)
     t.Y = zeros(size(t.Y,1), 0)
 end
 
-function isotarget(iso, t::TransformCross1)
-    x, y = chi_kchi(iso.model, iso.data)
-    #display( stacktrace())
-    isotarget(x,y,t)
-end
+isotarget(t::TransformCross, model, xs, ys) = isotarget(t, model(xs), expectation(model, ys))
 
-function isotarget(x, y, t::TransformCross1)
+function isotarget(t::TransformCross, x, y)
     x = x'
     y = y'
     N, M = size(y)
@@ -752,6 +734,12 @@ function lastcols(X, i)
     return X[:, end-i+1:end]
 end
 
+
+
+# ==================================================================================
+#                          RESIDUAL COMPUTATIONS
+# ==================================================================================
+
 # looks at columns independently; does not capture subspace invariance.
 function residual_linear(iso, data=iso.data)
     f = chis(iso, data)
@@ -761,6 +749,7 @@ function residual_linear(iso, data=iso.data)
     relres = norm.(eachrow(res)) ./ norm.(eachrow(g))
     (; res, relres, lambda)
 end
+
 
 # evaluates approximate eigenvectors, not individual columns of V.
 function residual_ritz(iso, data=iso.data)
@@ -801,4 +790,3 @@ end
 
 qr_thin(A::AbstractArray) = ((Q, R) = qr(A); (Matrix(Q), R))
 qr_thin(A::CuArray) = ((Q, R) = qr(A); (CuMatrix(Q), R))
-

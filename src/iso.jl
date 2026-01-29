@@ -4,7 +4,7 @@
     model::M
     opt
     data::D
-    transform
+    target
     losses = Float64[]
     loggers = Any[autoplot(1)]
     minibatch = 100
@@ -21,15 +21,15 @@ function Iso(data;
     autoplot=0,
     validation=nothing,
     loggers=Any[],
-    transform = nothing,
+    target = nothing,
     kwargs...)
 
     opt = Flux.setup(opt, model)
-    if isnothing(transform)
+    if isnothing(target)
         if outputdim(model) == 1
-            transform = TransformShiftscale()
+            target = TransformShiftscale()
         else
-            transform = TransformISA()
+            target = TransformISA()
         end
     end
 
@@ -37,7 +37,7 @@ function Iso(data;
     autoplot > 0 && push!(loggers, ISOKANN.autoplot(autoplot))
     isnothing(validation) || push!(loggers, ValidationLossLogger(data=validation))
 
-    iso = Iso(; model, opt, data, transform, loggers, kwargs...)
+    iso = Iso(; model, opt, data, target, loggers, kwargs...)
     gpu && (iso = ISOKANN.gpu(iso))
     return iso
 end
@@ -74,8 +74,6 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
     iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
     for _ in 1:n
-        #xs, ys = getobs(iso.data)
-        #target = isotarget(iso.model, xs, ys, iso.transform)
         target = isotarget(iso)
         xs = features(iso.data)
         for i in 1:epochs
@@ -197,7 +195,6 @@ end
 
 chis(iso::Iso, data::SimulationData=iso.data) = iso.model(features(data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
-#isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
 coords(iso::Iso) = coords(iso.data)
 features(iso::Iso) = features(iso.data)
@@ -216,13 +213,13 @@ resample_strat!(iso, ny; kwargs...) = (iso.data = resample_strat(iso.data, iso.m
 #Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
 # TODO: should this handled via @functor?
-gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), Flux.gpu(iso.transform), iso.losses, gpu.(iso.loggers), iso.minibatch)
-cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), Flux.cpu(iso.transform), iso.losses, iso.loggers, iso.minibatch)
+gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), Flux.gpu(iso.target), iso.losses, gpu.(iso.loggers), iso.minibatch)
+cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), Flux.cpu(iso.target), iso.losses, iso.loggers, iso.minibatch)
 
 function Base.show(io::IO, mime::MIME"text/plain", iso::Iso)
     println(io, "Iso: ")
     println(io, " model: $(iso.model.layers)")
-    println(io, first(" transform: $(iso.transform)", 160))
+    println(io, first(" target: $(iso.target)", 160))
     println(io, " opt: $(optimizerstring(iso.opt))")
     println(io, " minibatch: $(iso.minibatch)")
     println(io, " loggers: $(length(iso.loggers))")
@@ -272,12 +269,13 @@ log!(f::Function; kwargs...) = f(; kwargs...)
 log!(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
 
 
-
+#= defined in isotarget.jl
 """ empirical shift-scale operation """
 shiftscale(ks) =
     let (a, b) = extrema(ks)
         (ks .- a) ./ (b - a)
     end
+=#
 
 """ compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
 function chi_exit_rate(x, Kx, tau)
