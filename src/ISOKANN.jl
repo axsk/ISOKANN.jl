@@ -20,7 +20,6 @@ using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
 using StochasticDiffEq: StochasticDiffEq
-using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 using SimpleWeightedGraphs: SimpleWeightedDiGraph
 using SparseArrays: sparse
 using Functors: @functor, fmap
@@ -41,7 +40,8 @@ import OrdinaryDiffEq
 import Graphs
 import Optimisers
 import Optim
-import PyCall
+#import PyCall
+import PythonCall
 import Random
 import KernelDensity
 import ForwardDiff
@@ -84,6 +84,8 @@ export chicoords
 export ca_rmsd
 export coords, features, propcoords, propfeatures
 export ExternalSimulation
+
+export picking
 
 
 include("utils/subsample.jl")  # adaptive sampling

@@ -11,6 +11,7 @@ Should implement the methods `coords`, `propagate`, `dim`
 """
 abstract type IsoSimulation end
 
+# todo: check if features indeed become Float32
 featurizer(::IsoSimulation) = identity
 
 @deprecate isodata SimulationData
@@ -99,7 +100,7 @@ end
 
 function SimulationData(sim::IsoSimulation, (xs, ys)::Tuple; featurizer=featurizer(sim))
     coords = (xs, ys)
-    features = (featurizer(xs), fmap(featurizer, ys)) # fmap preserves girsanov weights
+    features = (featurizer(xs), fmap(featurizer, ys)) .|> x->Float32.(x)# fmap preserves girsanov weights
     return SimulationData(sim, features, coords, featurizer)
 end
 
@@ -108,16 +109,16 @@ end
 gpu(d::SimulationData) = SimulationData(d.sim, gpu(d.features), d.coords, d.featurizer)
 cpu(d::SimulationData) = SimulationData(d.sim, cpu(d.features), d.coords, d.featurizer)
 
-function features(d::SimulationData, x)
-    d.features[1] isa CuArray && (x = cu(x))
-    return d.featurizer(x)
+function features(d::SimulationData, coords)
+    features(d) isa CuArray && (coords = cu(coords))
+    return d.featurizer(coords)
 end
 
 defaultmodel(d::SimulationData; kwargs...) = defaultmodel(d.sim, n=featuredim(d); kwargs...) #pairnet(n=featuredim(d), kwargs...)
-featuredim(d::SimulationData) = size(d.features[1], 1)
-nk(d::SimulationData) = size(d.features[2], 2)
+featuredim(d::SimulationData) = size(features(d), 1)
+nk(d::SimulationData) = size(features(d), 2)
 
-Base.length(d::SimulationData) = size(d.features[1], 2)
+Base.length(d::SimulationData) = size(features(d), 2)
 Base.lastindex(d::SimulationData) = length(d)
 
 # facilitates easy indexing into the data, returning a new data object
@@ -179,8 +180,8 @@ function resample_strat(d::SimulationData, model, n; keepedges=false)
 end
 
 function chistratcoords(d::SimulationData, model, n; keepedges=false)
-    fs = d.features[2]
-    cs = d.coords[2]
+    fs = propfeatures(d)
+    cs = propcoords(d)
 
     dim, nk, _ = size(fs)
     fs, cs = flattenlast.((fs, cs))
@@ -200,14 +201,14 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=tru
     n == 0 && return data
 
     selinds = if unique
-        sampled = Set(eachcol(data.coords[1]))
-        [i for (i, c) in enumerate(eachcol(values(data.coords[2]) |> flattenlast)) if !(c in sampled)]
+        sampled = Set(eachcol(coords(data)))
+        [i for (i, c) in enumerate(eachcol(values(propcoords(data)) |> flattenlast)) if !(c in sampled)]
     else
         (:)
     end
 
-    chix = data.features[1] |> model |> vec |> cpu
-    chiy = data.features[2] |> flattenlast |> x -> getindex(x, :, selinds) |> model |> vec |> cpu
+    chix = features(data) |> model |> vec |> cpu
+    chiy = propfeatures(data)|> flattenlast |> x -> getindex(x, :, selinds) |> model |> vec |> cpu
 
 
     m1 = min(minimum(chix), minimum(chiy))
@@ -221,7 +222,7 @@ function resample_kde(data::SimulationData, model, n; bandwidth=0.02, unique=tru
 
     #@show selinds[iy]
 
-    ys = values(data.coords[2]) |> flattenlast |> x -> getindex(x, :, selinds)
+    ys = values(propcoords(data)) |> flattenlast |> x -> getindex(x, :, selinds)
     newdata = addcoords(data, ys[:, iy])
     return newdata
 end
@@ -235,8 +236,8 @@ function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
         io, """
         SimulationData(;
             sim=$(simstr),
-            features=$(size.(d.features)), $(typeof(d.features[2]).name.name),
-            coords=$(size.(d.coords)), $(typeof(d.coords[2]).name.name),
+            features=$(size.(d.features)), $(typeof(propfeatures(d)).name.name),
+            coords=$(size.(d.coords)), $(typeof(propcoords(d)).name.name),
             featurizer=$(d.featurizer))"""
     )
 end
@@ -245,11 +246,11 @@ datasize((xs, ys)::Tuple) = size(xs), size(ys)
 features((xs, ys)::Tuple) = xs
 
 """
-    laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
+    laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=coords(data)[:, end])
 
 Simulate a trajectory comprising of `n` simulations from the last point in `data`
 """
-laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=data.coords[1][:, end])
+laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=coords(data)[:, end])
 
 
 """

@@ -4,7 +4,7 @@
     model::M
     opt
     data::D
-    transform
+    target
     losses = Float64[]
     loggers = Any[autoplot(1)]
     minibatch = 100
@@ -20,23 +20,24 @@ function Iso(data;
     gpu=CUDA.has_cuda(),
     autoplot=0,
     validation=nothing,
-    loggers=[],
-    transform = nothing,
+    loggers=Any[],
+    target = nothing,
     kwargs...)
 
     opt = Flux.setup(opt, model)
-    if isnothing(transform)
+    if isnothing(target)
         if outputdim(model) == 1
-            transform = TransformShiftscale()
+            target = TransformShiftscale()
         else
-            transform = TransformISA()
+            target = TransformISA()
         end
     end
 
+    loggers = Vector{Any}(loggers)
     autoplot > 0 && push!(loggers, ISOKANN.autoplot(autoplot))
     isnothing(validation) || push!(loggers, ValidationLossLogger(data=validation))
 
-    iso = Iso(; model, opt, data, transform, loggers, kwargs...)
+    iso = Iso(; model, opt, data, target, loggers, kwargs...)
     gpu && (iso = ISOKANN.gpu(iso))
     return iso
 end
@@ -73,8 +74,6 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
     iso.opt isa Optimisers.AbstractRule && (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
     for _ in 1:n
-        #xs, ys = getobs(iso.data)
-        #target = isotarget(iso.model, xs, ys, iso.transform)
         target = isotarget(iso)
         xs = features(iso.data)
         for i in 1:epochs
@@ -82,13 +81,52 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
             push!(iso.losses, loss)
         end
 
+        diagnostics = [("loss", iso.losses[end]), ("n", length(iso.losses)), ("data", size(features(iso)))]
         for logger in iso.loggers
             log!(logger; iso, subdata=nothing)
+            d = diagnostic(logger)
+            isnothing(d) || push!(diagnostics, d)
         end
 
-        showprogress && ProgressMeter.next!(p; showvalues=() -> [(:loss, iso.losses[end]), (:n, length(iso.losses)), (:data, size(features(iso)))])
+        showprogress && ProgressMeter.next!(p; showvalues=diagnostics)
     end
     return iso
+end
+
+diagnostic(logger) = nothing
+
+
+@kwdef mutable struct FunctionLogger
+    f # ::Iso -> ::Any
+    name
+    values = []
+    iters = Int[]
+    logevery = 1
+end
+
+function FunctionLogger(f; kwargs...)
+    FunctionLogger(;f, kwargs...)
+end
+
+function log!(l::FunctionLogger; iso, kw...)
+    last_iter = isempty(l.iters) ? 0 : l.iters[end]
+    last_iter + l.logevery >= length(iso.losses) || return
+    push!(l.values, l.f(iso))
+    push!(l.iters, length(iso.losses))
+    return
+end
+
+diagnostic(l::FunctionLogger) = (l.name, if length(l.values) > 0
+    v = l.values[end] 
+    #round.(v, digits=5)
+else
+     nothing
+end )
+
+function ValidationLogger(valdata)
+    FunctionLogger(name="validation loss") do iso
+        validationloss(iso, valdata)
+    end
 end
 
 @kwdef struct ValidationLossLogger{T}
@@ -98,9 +136,11 @@ end
     logevery = 10
 end
 
+diagnostic(l::ValidationLossLogger) = ("validation loss", length(l.losses) > 0 ? l.losses[end] : nothing)
+
 gpu(v::ValidationLossLogger) = ValidationLossLogger(gpu(v.data), v.losses, v.iters, v.logevery)
 
-function validationloss(iso, data)
+function validationloss_old(iso, data)
     xs, ys = getobs(data)
     kx = iso.model(xs) |> vec
     ky = StatsBase.mean(iso.model(ys), dims=2) |> vec
@@ -117,6 +157,16 @@ function validationloss(iso, data)
     return mean(abs2, (ky*(ky\kx)-kx)[:, 1])
 end
 
+function validationloss(iso, valdata)
+    xs, ys = getobs(iso.data)
+    vx, vy = getobs(valdata)
+    c = iso.model(vx) |> vec
+    k1 = expectation(iso.model, vy) |> vec
+    k2 = expectation(iso.model, ys) |> vec # we use all data to estimate the shift-scale even for sparse validation coverage
+    SKc = shiftscale([k1; k2])[1:length(c)]
+    return mean(abs2, c - SKc)
+end
+
 
 function log!(v::ValidationLossLogger; iso, kw...)
     length(iso.losses) % v.logevery == 0 || return
@@ -130,17 +180,21 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
     batchsize = minibatch == 0 || size(xs, 2) < minibatch ? size(ys, 2) : minibatch
     data = Flux.DataLoader((xs, ys); batchsize, shuffle)
     ls = 0.0
+    w = size(ys,1) > 1 ? 1 ./ StatsBase.std(ys, dims=2) : 1. # weighting with variance should help fitting multidimensional targets 
     Flux.train!(model, data, opt) do m, x, y
-        l = sum(abs2, m(x) .- y)
+        l = sum(abs2, (m(x) .- y) .* w)
+        if isnan(l) || !isfinite(l)
+            throw(DomainError(sum(l), "The ISOKANN model became collapsed under training. Try reducing the learning rate or increasing regularization"))
+            @show sum(m(x)), sum(y), w, findall(!isfinite, m(x))
+        end
         ls += l
         l / numobs(x)
     end
     return ls / numobs(xs)
 end
 
-chis(iso::Iso) = iso.model(features(iso.data))
+chis(iso::Iso, data::SimulationData=iso.data) = iso.model(features(data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
-#isotarget(iso::Iso) = isotarget(iso.model, getobs(iso.data)..., iso.transform)
 
 coords(iso::Iso) = coords(iso.data)
 features(iso::Iso) = features(iso.data)
@@ -159,13 +213,13 @@ resample_strat!(iso, ny; kwargs...) = (iso.data = resample_strat(iso.data, iso.m
 #Optimisers.setup(iso::Iso) = (iso.opt = Optimisers.setup(iso.opt, iso.model))
 
 # TODO: should this handled via @functor?
-gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), Flux.gpu(iso.transform), iso.losses, gpu.(iso.loggers), iso.minibatch)
-cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), Flux.cpu(iso.transform), iso.losses, iso.loggers, iso.minibatch)
+gpu(iso::Iso) = Iso(Flux.gpu(iso.model), Flux.gpu(iso.opt), Flux.gpu(iso.data), Flux.gpu(iso.target), iso.losses, gpu.(iso.loggers), iso.minibatch)
+cpu(iso::Iso) = Iso(Flux.cpu(iso.model), Flux.cpu(iso.opt), Flux.cpu(iso.data), Flux.cpu(iso.target), iso.losses, iso.loggers, iso.minibatch)
 
 function Base.show(io::IO, mime::MIME"text/plain", iso::Iso)
     println(io, "Iso: ")
     println(io, " model: $(iso.model.layers)")
-    println(io, first(" transform: $(iso.transform)", 160))
+    println(io, first(" target: $(iso.target)", 160))
     println(io, " opt: $(optimizerstring(iso.opt))")
     println(io, " minibatch: $(iso.minibatch)")
     println(io, " loggers: $(length(iso.loggers))")
@@ -215,12 +269,13 @@ log!(f::Function; kwargs...) = f(; kwargs...)
 log!(logger::NamedTuple; kwargs...) = :call in keys(logger) && logger.call(; kwargs...)
 
 
-
+#= defined in isotarget.jl
 """ empirical shift-scale operation """
 shiftscale(ks) =
     let (a, b) = extrema(ks)
         (ks .- a) ./ (b - a)
     end
+=#
 
 """ compute the chi exit rate as per Ernst, Weber (2017), chap. 3.3 """
 function chi_exit_rate(x, Kx, tau)

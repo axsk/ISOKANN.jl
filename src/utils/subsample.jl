@@ -124,9 +124,11 @@ end
 Pick `n` indices `iys` of the samples `ys` such that `[xs; ys[iys]]` approximates the `target` distribution.
 Approximates the density through an AverageShiftedHistogram on the range `rng` with window width `m`.
 """
-function resample_kde_ash(xs, ys, n=10; m=20, target=Distributions.Uniform(), rng=0:0.001:1)
-    debug = false
+function resample_kde_ash(xs, ys, n=10; m=20, target=Distributions.Uniform(), rng=-0.1:0.001:1.1)
+    debug = true
     iys = zeros(Int, n)
+
+    xs = [xs; -xs; 2 .- xs]
     
     kde = AverageShiftedHistograms.ash(xs; rng, m)
     while minimum(kde.density) <= 0.1  || maximum(kde.density) > 3 # underdeveloped heuristic helping in the case of large gaps
@@ -134,8 +136,27 @@ function resample_kde_ash(xs, ys, n=10; m=20, target=Distributions.Uniform(), rn
         kde = AverageShiftedHistograms.ash(xs; rng, m)
     end
 
-    debug && plot(kde)|>display
+    debug && @show m
+
+    #debug && plot(kde)
     #display(kde)
+    
+    p = map(to_pdf(target), ys)
+
+    for i in 1:n
+        del = p - [AverageShiftedHistograms.pdf(kde, y) for y in ys]
+        iy = argmax(del)
+        p[iy] = 0
+        AverageShiftedHistograms.ash!(kde, ys[iy])
+        iys[i] = iy
+    end
+    @show iys, ys[iys]
+    
+    #debug && display(scatter!(ys[iys], zeros(length(iys))))
+    return iys
+
+    #new trial above
+    #old version below
     target = to_pdf(target)(rng)
     for i in 1:n
         chi = rng[argmax(target - kde.density)] # position of maximal difference to target pdf
@@ -147,9 +168,11 @@ function resample_kde_ash(xs, ys, n=10; m=20, target=Distributions.Uniform(), rn
                 iy = j
             end
         end
+        debug && @show iy, ys[iy]
         AverageShiftedHistograms.ash!(kde, ys[iy])
         iys[i] = iy
     end
-    debug && @show m, ys[iys]
+    debug && (plot!(kde) |> display)
+    #debug && @show ys[iys]
     return iys
 end
