@@ -1,6 +1,6 @@
 name = "ISOKANN"
 uuid = "512544ac-929d-4ba3-aa9d-55e9313a4b47"
-version = "1.3.0"
+version = "2.0.0"
 authors = ["Sikorski <sikorski@zib.de> and contributors"]
 
 [deps]
