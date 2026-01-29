@@ -73,7 +73,7 @@ wrapper around Python's `mdtraj.load()`.
 Returns a (3 * natom, nframes) shaped array.
 """
 function load_trajectory(filename; top::Union{Nothing,String}=nothing, stride=nothing, atom_indices=nothing)
-    throw("This method is broken since the switch to PythonCall, please write a ticket to get it fixed")
+    throw("This method is broken since the switch to PythonCall, please write a ticket to get it fixed. Consider `readchemfile` and `writechemfile` as alternative.")
     #mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     mdtraj = PythonCall.pyimport("mdtraj")
 
@@ -102,7 +102,7 @@ end
 save the trajectory given in `coords` to `filename` with the topology provided by the file `top` using mdtraj.
 """
 function save_trajectory(filename, coords::AbstractMatrix; top::String)
-    throw("This method is broken since the switch to PythonCall, please write a ticket to get it fixed")
+    throw("This method is broken since the switch to PythonCall, please write a ticket to get it fixed. Consider `readchemfile` and `writechemfile` as alternative.")
     #mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     mdtraj = PythonCall.pyimport("mdtraj")
     traj = mdtraj.load(top, stride=-1)
