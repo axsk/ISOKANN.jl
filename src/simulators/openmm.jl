@@ -441,10 +441,26 @@ function langevin_step!(x, v, F, m, gamma, kBT, dt)
     @. x += v * dt
 end
 
+function constants(sim::OpenMMSimulation)
+    kB = 0.008314463
+    dt = stepsize(sim)
+    gamma = friction(sim)
+
+    M = repeat(masses(sim), inner=3)
+    T = temp(sim)
+    sigma = @. sqrt(2 * kB * T / (gamma * M))
+
+    return (;sigma, T, M, gamma, dt, kB)
+end
+
+
 """
     integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
 
-Integrate overdamped Langevin dynamics while computing Girsanov weights for a given bias.
+Integrate overdamped Langevin dynamics while computing Girsanov weights for a given bias:
+
+    Xt = F dt + σ u dt + sigma dBt
+    where F = force(sim, Xt), σ = sqrt(2 kB T / (γ M)), u = bias(Xt; t, sigma, F)
 
 # Arguments
 - `sim::OpenMMSimulation` : The simulation object.
@@ -464,23 +480,19 @@ The method assumes overdamped Langevin dynamics and accumulates the correspondin
 function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
     reclaim && claim_memory(sim)
     # TODO: check units on the following three lines
-    kB = 0.008314463
-    dt = stepsize(sim)
-    γ = friction(sim)
-
-    M = repeat(masses(sim), inner=3)
-    T = temp(sim)
-    σ = @. sqrt(2 * kB * T / (γ * M))
+    (;sigma, T, M, gamma, dt, kB) = constants(sim)
 
     x = copy(x0)
     g = 0.0
+    t = 0.0
 
     z = similar(x, length(x), steps)
 
     for i in 1:steps
         F = force(sim, x, reclaim=false)
-        ux = bias(x)
-        g += od_langevin_step_girsanov!(x, F, M, σ, γ, dt, ux)
+        ux = bias(x; t, sigma, F)
+        g += od_langevin_step_girsanov!(x, F, M, sigma, gamma, dt, ux)
+        t += dt
         z[:, i] = x
     end
 
