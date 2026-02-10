@@ -128,7 +128,7 @@ function resample_kde_ash(xs, ys, n=10; m=20, target=Distributions.Uniform(), rn
     debug = true
     iys = zeros(Int, n)
 
-    xs = [xs; -xs; 2 .- xs]
+    xs = [xs; -xs; 2 .- xs] # periodic closure of the interval [0,1]
     
     kde = AverageShiftedHistograms.ash(xs; rng, m)
     while minimum(kde.density) <= 0.1  || maximum(kde.density) > 3 # underdeveloped heuristic helping in the case of large gaps

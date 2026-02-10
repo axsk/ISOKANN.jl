@@ -116,7 +116,7 @@ end
 
 defaultmodel(d::SimulationData; kwargs...) = defaultmodel(d.sim, n=featuredim(d); kwargs...) #pairnet(n=featuredim(d), kwargs...)
 featuredim(d::SimulationData) = size(features(d), 1)
-nk(d::SimulationData) = size(features(d), 2)
+nk(d::SimulationData) = size(propfeatures(d), 2)
 
 Base.length(d::SimulationData) = size(features(d), 2)
 Base.lastindex(d::SimulationData) = length(d)

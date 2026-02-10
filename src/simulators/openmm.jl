@@ -483,7 +483,7 @@ function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(s
     (;sigma, T, M, gamma, dt, kB) = constants(sim)
 
     x = copy(x0)
-    g = 0.0
+    logw = 0.0
     t = 0.0
 
     z = similar(x, length(x), steps)
@@ -491,19 +491,19 @@ function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(s
     for i in 1:steps
         F = force(sim, x, reclaim=false)
         ux = bias(x; t, sigma, F)
-        g += od_langevin_step_girsanov!(x, F, M, sigma, gamma, dt, ux)
+        logw -= od_langevin_step_girsanov!(x, F, M, sigma, gamma, dt, ux)
         t += dt
         z[:, i] = x
     end
 
-    return x, g, z
+    return x, logw, z
 end
 
 function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
     dB = randn(length(x)) * sqrt(dt)
     @. x += (1 / (γ * M) * F + (σ * u)) * dt + σ * dB
-    dg = dot(u, u) / 2 * dt + dot(u, dB)
-    return dg
+    dlogw = dot(u, u) / 2 * dt + dot(u, dB)
+    return dlogw
 end
 
 
@@ -540,7 +540,7 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
     prog = ProgressMeter.Progress(steps)
     nout = div(steps, saveevery)
     qs = similar(x0, length(x0), nout)
-    gs = zeros(1, nout)
+    logws = zeros(1, nout)
 
     # ABOBA scheme from from https://pubs.acs.org/doi/full/10.1021/acs.jpcb.4c01702
     kB = 0.008314463
@@ -563,7 +563,7 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
     b = similar(p)
     η = similar(p)
     Δη = similar(p)
-    g = 0
+    logw = 0
 
     for k in 1:steps
         randn!(η)
@@ -571,7 +571,7 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
         F = force(sim, q, reclaim=false)
         B = bias(q; t=(k - 1) * dt, sigma=σ, F=F) # perturbation force ∇U_bias = -F
         @. Δη = (d + 1) / f * dt / 2 * B
-        g += η' * Δη + Δη' * Δη / 2
+        logw -= η' * Δη + Δη' * Δη / 2
         F .+= B  # total force: -∇V - ∇U_bias
 
         @. b = t2 * F
@@ -583,14 +583,17 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
         if k % saveevery == 0
             let i = div(k, saveevery)
                 qs[:, i] = q
-                gs[1, i] = g
+                logws[1, i] = logw
             end
-            resample_velocities && (p = randn(length(M)) .* sqrt.(M .* kB .* T))  # note that here the girsanov weights become meaningless
+            if resample_velocities 
+                p = randn(length(M)) .* sqrt.(M .* kB .* T)
+                logw = 0  # reset girsanov weights for each "snippet" anew
+            end
         end
 
         showprogress && ProgressMeter.next!(prog)
     end
-    return WeightedSamples(qs, exp.(-gs))
+    return WeightedSamples(qs, exp.(logws))
 end
 
 # optimal control for sampling of chi function with OVERDAMPED langevin

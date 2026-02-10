@@ -103,8 +103,8 @@ end
 
 function remove_H_H2O_NACL(atom)
     !(
-        atom.element.symbol == "H" ||
-        atom.residue.name in ["HOH", "NA", "CL"]
+        string(atom.element.symbol) == "H" ||
+        string(atom.residue.name) in ["HOH", "NA", "CL"]
     )
 end
 
@@ -119,7 +119,7 @@ function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)
     for i in 1:length(inds)
         for j in i+1:length(inds)
             if norm(xs[:, i] - xs[:, j]) <= radius
-                push!(pairs, (inds[i], inds[j]))
+                push!(pairs, (_jlint(inds[i]), _jlint(inds[j])))
             end
         end
     end
