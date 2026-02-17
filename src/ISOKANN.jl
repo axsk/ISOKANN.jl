@@ -59,7 +59,7 @@ export pairnet
 #export PDB_ACEMD, PDB_1UAO, PDB_diala_water
 #export MollyLangevin, propagate, solve#, MollySDE
 
-export propagate
+export propagate, trajectory
 export laggedtrajectory
 
 export run!, runadaptive!
@@ -72,7 +72,7 @@ export Doublewell, Triplewell, MuellerBrown
 export chis
 export SimulationData
 export addcoords, addcoords!, resample_kde!, resample_kde
-export exit_rates
+export rates
 export load_trajectory, save_trajectory
 export savecoords
 export atom_indices

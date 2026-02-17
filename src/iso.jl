@@ -288,22 +288,25 @@ end
 
 chi_exit_rate(iso::Iso) = chi_exit_rate(vec.(cpu.(chi_kchi(iso)))..., lagtime(iso.data.sim))
 
+"""
+    rates(iso::Iso)
 
-function exit_rates(x, kx, tau)
-    o = ones(length(x))
-    x = vec(x)
-    kx = vec(kx)
-    P = [x o .- x] \ [kx o .- kx]
-    return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
+Return the coarse grained rate matrix Q satisfying Kχ = exp(τQ)χ
+
+In the 1D ISOKANN case return the rates for χ and 1-χ.
+"""
+function rates(iso::Iso)
+    x = chis(iso)
+    y = koopman(iso)
+    if size(x, 1) == 1
+        x = [x; 1 .- x]
+        y = [y; 1 .- y]
+    end
+    log(y/x) / lagtime(iso.data.sim)
 end
 
-# generalization of above approach to higher dimensions
-function exit_rates(x::AbstractMatrix, kx::AbstractMatrix, tau)
-    P = x \ kx
-    return -1 / tau .* [p > 0 ? Base.log(p) : NaN for p in diag(P)]
-end
+@deprecate exit_rates(iso) -LinearAlgebra.diagview(rates(iso))
 
-exit_rates(iso::Iso) = exit_rates(vec.(cpu.(chi_kchi(iso)))..., lagtime(iso.data.sim))
 
 function koopman_variance(iso, ys=iso.data.coords[2])
     chi = chicoords(iso, ys)

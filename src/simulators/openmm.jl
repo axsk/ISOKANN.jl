@@ -453,6 +453,10 @@ function constants(sim::OpenMMSimulation)
     return (;sigma, T, M, gamma, dt, kB)
 end
 
+function sigma(sim::OpenMMSimulation, x=nothing)
+    constants(sim).sigma
+end
+
 
 """
     integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
