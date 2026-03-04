@@ -2,3 +2,4 @@
 openmm = ""
 numpy = ""
 joblib = ""
+mdtraj = ""
