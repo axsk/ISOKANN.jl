@@ -73,8 +73,6 @@ wrapper around Python's `mdtraj.load()`.
 Returns a (3 * natom, nframes) shaped array.
 """
 function load_trajectory(filename; top::Union{Nothing,String}=nothing, stride=nothing, atom_indices=nothing)
-    throw("This method is broken since the switch to PythonCall, please write a ticket to get it fixed. Consider `readchemfile` and `writechemfile` as alternative.")
-    #mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     mdtraj = PythonCall.pyimport("mdtraj")
 
     if isnothing(top)
@@ -90,8 +88,7 @@ function load_trajectory(filename; top::Union{Nothing,String}=nothing, stride=no
     end
 
     traj = mdtraj.load(filename; top, stride, atom_indices)
-    #xs = permutedims(PyArray(py"$traj.xyz"o), (3, 2, 1)) # TODO: fix PythonCall
-    xs = permutedims(traj.xyz, (3,2,1))
+    xs = PythonCall.pyconvert(Array, traj.xyz.transpose(2,1,0))
     xs = reshape(xs, :, size(xs, 3))
     return xs::Matrix{Float32}
 end
@@ -112,11 +109,10 @@ function save_trajectory(filename, coords::AbstractMatrix; top::String)
 end
 
 function atom_indices(filename::String, selector::String)
-    throw("This method is broken since switching to PythonCall, please write a ticket to get it fixed")
-    #mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     mdtraj = PythonCall.pyimport("mdtraj")
     traj = mdtraj.load(filename, stride=-1)
-    inds = traj.top.select(selector) .+ 1
+    inds = traj.top.select(selector) .+ 1 
+    inds = PythonCall.pyconvert(Vector{Int}, inds)
     return inds::Vector{Int}
 end
 

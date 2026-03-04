@@ -74,6 +74,7 @@ export SimulationData
 export addcoords, addcoords!, resample_kde!, resample_kde
 export rates
 export load_trajectory, save_trajectory
+export readchemfile, writechemfile
 export savecoords
 export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
