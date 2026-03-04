@@ -17,7 +17,7 @@ Computes the expectation value of `f` over `xs`. Supports WeightedSamples throug
 """
 expectation(f, xs) = dropdims(sum(f(xs); dims=2); dims=2) ./ size(xs, 2)
 
-koopman(iso::Iso, data::SimulationData=iso.data) = expectation(iso.model, propfeatures(data))
+koopman(iso::Iso, data::Union{SimulationData, <:Tuple}=iso.data) = expectation(iso.model, propfeatures(data))
 
 chi_kchi(iso) = chi_kchi(iso.model, iso.data)
 chi_kchi(model, data::SimulationData) = (model(features(data)), expectation(model, propfeatures(data)))
@@ -41,6 +41,27 @@ function shiftscale(ks)
     return chi
 end
 
+# prescribe a state as zero and flip the target if necessary
+#=
+struct ShiftscalePrimed{T}
+    zero::T
+end
+
+function isotarget(t::ShiftscalePrimed, model, xs, ys)
+    ks = expectation(model, ys)
+    @assert (ks isa AbstractVector) || (size(ks, 1) == 1) "TransformShiftscale only works with one dimensional chi functions"
+    min, max = extrema(ks)
+    max > min || throw(DomainError("Could not compute the shift-scale. chi function is constant"))
+    chi = (ks .- min) ./ (max - min)
+
+    if all((model(t.zero) .- min) ./ (max.-min) .> 0.5)
+        println("flipping")
+        chi = 1 .- chi
+    end
+
+    return chi
+end
+=#
 
 # ==================================================================================
 #                  MULTIDIMENSIONAL ISA 

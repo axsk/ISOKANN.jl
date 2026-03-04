@@ -38,7 +38,7 @@ ExternalSimulation(;kwargs...) = ExternalSimulation(Dict(kwargs))
 Base.show(io::IO, mime::MIME"text/plain", sim::ExternalSimulation) = print(io, "ExternalSimulation with parameters $(sim.dict)")
 masses(sim::ExternalSimulation) = get(sim.dict, :masses, nothing)
 pdbfile(sim::ExternalSimulation) = get(sim.dict, :pdbfile, nothing)
-lagtime(sim::ExternalSimulation) = get(sim.dict, :lagtime, nothing)
+lagtime(sim::ExternalSimulation) = get(sim.dict, :lagtime, 1)
 
 
 #TODO:
@@ -115,6 +115,7 @@ function features(d::SimulationData, coords)
 end
 
 defaultmodel(d::SimulationData; kwargs...) = defaultmodel(d.sim, n=featuredim(d); kwargs...) #pairnet(n=featuredim(d), kwargs...)
+defaultmodel(sim::Any; n, kwargs...) = pairnet(;n, kwargs...)
 featuredim(d::SimulationData) = size(features(d), 1)
 nk(d::SimulationData) = size(propfeatures(d), 2)
 
@@ -242,8 +243,8 @@ function Base.show(io::IO, mime::MIME"text/plain", d::SimulationData)#
     )
 end
 
-datasize((xs, ys)::Tuple) = size(xs), size(ys)
 features((xs, ys)::Tuple) = xs
+propfeatures((xs, ys)::Tuple) = ys
 
 """
     laggedtrajectory(data::SimulationData, n) = laggedtrajectory(data.sim, n, x0=coords(data)[:, end])
