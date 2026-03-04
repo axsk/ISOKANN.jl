@@ -20,7 +20,6 @@ using SpecialFunctions: erf
 using Plots: plot, plot!, scatter, scatter!
 using MLUtils: numobs, getobs, shuffleobs, unsqueeze
 using StochasticDiffEq: StochasticDiffEq
-using PyCall: @py_str, pyimport_conda, PyReverseDims, PyArray
 using SimpleWeightedGraphs: SimpleWeightedDiGraph
 using SparseArrays: sparse
 using Functors: @functor, fmap
@@ -41,7 +40,8 @@ import OrdinaryDiffEq
 import Graphs
 import Optimisers
 import Optim
-import PyCall
+#import PyCall
+import PythonCall
 import Random
 import KernelDensity
 import ForwardDiff
@@ -59,7 +59,7 @@ export pairnet
 #export PDB_ACEMD, PDB_1UAO, PDB_diala_water
 #export MollyLangevin, propagate, solve#, MollySDE
 
-export propagate
+export propagate, trajectory
 export laggedtrajectory
 
 export run!, runadaptive!
@@ -72,8 +72,9 @@ export Doublewell, Triplewell, MuellerBrown
 export chis
 export SimulationData
 export addcoords, addcoords!, resample_kde!, resample_kde
-export exit_rates
+export rates
 export load_trajectory, save_trajectory
+export readchemfile, writechemfile
 export savecoords
 export atom_indices
 export localpdistinds, pdists, restricted_localpdistinds
@@ -84,6 +85,8 @@ export chicoords
 export ca_rmsd
 export coords, features, propcoords, propfeatures
 export ExternalSimulation
+
+export picking
 
 
 include("utils/subsample.jl")  # adaptive sampling

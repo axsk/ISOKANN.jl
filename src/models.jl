@@ -60,26 +60,31 @@ pairnet(data; kwargs...) = pairnet(n=featuredim(data); kwargs...)
 
 
 """ Fully connected neural network with `layers` layers from `n` to `nout` dimensions.
-`features` allows to pass a featurizer as preprocessor,
 `activation` determines the activation function for each but the last layer
 `lastactivation` can be used to modify the last layers activation function """
-function pairnet(; n::Int, layers=3, features=identity, activation=Flux.sigmoid, lastactivation=identity, nout=1, layernorm=true)
-    float32(x) = Float32.(x)
-    nn = Flux.Chain(
-        #float32,
-        features,
-        layernorm ? Flux.LayerNorm(n) : identity,
-        [Flux.Dense(
-            round(Int, n^(l / layers)),
-            round(Int, n^((l - 1) / layers)),
-            activation)
-         for l in layers:-1:2]...,
-        Flux.Dense(round(Int, n^(1 / layers)), nout, lastactivation),
-    )
-    return nn
+function pairnet(; n::Int, layers=3, activation=Flux.sigmoid, lastactivation=identity, nout=1, layernorm=true)
+    layers = [round(Int, n^(l / layers)) for l in layers:-1:1]
+    layers = [layers; nout]
+    return densenet(; layers, activation, lastactivation, layernorm)
 end
 
-function densenet(; layers::Vector{Int}, activation=Flux.sigmoid, lastactivation=identity, layernorm=true)
+"""
+    densenet(; layers::Vector{Int}, activation=Flux.sigmoid, lastactivation=identity, layernorm=true) -> Flux.Chain
+
+Construct a fully connected neural network (`Flux.Chain`) with customizable layer sizes, activations, 
+and optional input layer normalization.
+
+# Arguments
+- `layers::Vector{Int}`: List of layer dimensions. For example, `[10, 32, 16, 1]` creates
+  a network with input size 10, two hidden layers of size 32 and 16, and an output layer of size 1.
+- `activation`: Activation function applied to all layers except the last. Defaults to `Flux.sigmoid`.
+- `lastactivation`: Activation function for the final layer. Defaults to `identity`.
+- `layernorm::Bool`: Whether to prepend a `Flux.LayerNorm` layer to normalize the input. Defaults to `true`.
+
+# Returns
+A `Flux.Chain` composed of dense layers (and optionally a leading `LayerNorm`).
+"""
+function densenet(; layers::Vector{Int}, activation=Flux.sigmoid, lastactivation=identity, layernorm=false)
     L = [Flux.Dense(layers[i], layers[i+1], activation) for i in 1:length(layers)-2]
     L = [L; Flux.Dense(layers[end-1], layers[end], lastactivation)]
     layernorm && (L = [Flux.LayerNorm(layers[1]); L])

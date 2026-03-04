@@ -33,30 +33,15 @@ end
 
 ## Plotting
 
-function plot_training(iso; subdata=nothing)
+function plot_training(iso; maxpoints=0)
     (; losses, data, model) = iso
 
-    !isnothing(subdata) && (data = subdata)
 
-    p1 = plot(losses, yaxis=:log, title="loss", label="trainloss", xlabel="iter", ylabel="squared loss")
+    p1 = plot_losses(iso; maxpoints)
 
-    for v in filter(x -> isa(x, ValidationLossLogger), iso.loggers)
-        p1 = plot!(v.iters, v.losses, label="validation")
-    end
-    #=
-    for tl in filter(l -> isa(l, TrainlossLogger), iso.loggers)
-        if length(tl.losses) > 1
-            plot!(tl.xs, tl.losses, label="validationloss")
-        end
-    end
-    =#
+    p2 = plot_chi(iso; maxpoints)
 
-    xs, ys = getobs(data)
-    p2 = plot_chi(iso)
-
-
-
-    p3 = scatter_chifix(data, model)
+    p3 = scatter_chifix(iso; maxpoints)
     #annotate!(0,0, repr(iso)[1:10])
     ps = [p1, p2, p3]
     for l in iso.loggers
@@ -67,24 +52,78 @@ function plot_training(iso; subdata=nothing)
     plot(ps..., layout=(length(ps), 1), size=(400, 300 * length(ps)), fmt=:png)
 end
 
-function plot_chi(iso; target=true)
+function filter_maxpoints(x::AbstractVector, n)
+    (n == 0 || length(x) <= n) && return x
+    x[round.(Int, LinRange(1, length(x), n))]
+end
+
+function filter_maxpoints(x::AbstractMatrix, n)
+    (n == 0 || size(x, 2) <= n) && return x
+    x[:, round.(Int, LinRange(1, size(x, 2), n))]
+end
+
+function plot_losses(iso; maxpoints=0)
+    losses = iso.losses
+    ix = 1:length(losses)
+
+    ix, losses = filter_maxpoints.((1:length(losses), losses), maxpoints)
+    p = plot(ix, losses, yaxis=:log, title="loss", label="trainloss", xlabel="iter", ylabel="squared loss")
+    
+    for v in filter(x -> isa(x, ValidationLossLogger), iso.loggers)
+        ix, vlosses = filter_maxpoints.((v.iters, v.losses), maxpoints)
+        plot!(p, ix, vlosses, label="validation")
+    end
+    return p
+end
+
+
+function scatter_data(iso, x; kwargs...)
+    xs, ys = eachrow(coords(iso))
+    plot([scatter(xs, ys, marker_z=c; label=nothing, hover=c, kwargs...) for c in eachrow(x)]..., layout=(1,size(x, 1)); )
+end
+
+function plot_targets(iso)
+    c = chis(iso)
+    k = koopman(iso)
+    t = isotarget(iso)
+    clims = extrema(vcat(c,k,t))
+    plot(
+        scatter_data(iso, c, title="chi"; ),
+        scatter_data(iso, k, title="Kchi"; ),
+        scatter_data(iso, t, title="target"; ),
+        layout=(3, 1), size=(300* size(c,1), 600 ), cbar=false)
+end
+
+function plot_chi(iso; target=false, maxpoints = 0)
     xs = features(iso.data)
     chi = iso.model(xs) |> cpu
     xs = xs |> cpu
+    ix = 1:size(xs, 2)
+    ix, xs, chi = filter_maxpoints.((ix, xs, chi), maxpoints)
 
     if size(xs, 1) == 1
+        # 1D space: plot chi over x axis
         scatter(xs', chi', xlabel="x", ylabel="χ")
     elseif size(xs, 1) == 2
-        scatter(xs[1, :], xs[2, :], marker_z=chi', label="", xlabel="x", ylabel="y", cbar_title="χ")
-    elseif size(xs, 1) == 66  # TODO: dispatch on simulation
+        # 2D space: scatter plot of chi as color over the 2D space
+        if target == true
+            chi = isotarget(iso) |> cpu
+        end
+        
+        plot([scatter(xs[1, :], xs[2, :], marker_z=c, label=nothing, xlabel=nothing, ylabel=nothing, cbar_title="χ", cbar=false) for c in eachrow(chi)]...)
+        
+    elseif size(xs, 1) == 66  
+        # alanine dipeptide: scatter plot of chi as color over the Ramachandran plot
+        # TODO: dispatch on simulation
         scatter_ramachandran(xs, chi)
     else
+        # otherwise: plot chi over data index
         plot()
+        
         target && scatter!(isotarget(iso)' |> cpu, label="SK\\chi", markerstrokewidth=0.1, markersize=2)
+
         scatter!(chi'; ylims=autolims(chi), xlabel="#", label="\\chi", markerstrokewidth=0.1, markersize=2)
     end
-
-
 end
 
 function autolims(chi)
@@ -97,12 +136,19 @@ function autolims(chi)
 end
 
 """ fixed point plot, i.e. x vs model(x) """
-function scatter_chifix(data, model)
-    xs, ys = getobs(data)
-    target = expectation(model, ys) |> vec |> Flux.cpu
-    xs = model(xs) |> vec |> Flux.cpu
-    lim = autolims(xs)
-    scatter(xs, target, markersize=2, xlabel="χ", ylabel="Kχ", xlims=lim, ylims=lim)
+function scatter_chifix(iso; maxpoints=0)
+    chi = chis(iso) |> cpu
+    kchi = koopman(iso) |> cpu
+
+    chi, kchi = filter_maxpoints.((chi, kchi), maxpoints)
+    
+    lim = autolims(chi)
+
+    p = plot()
+    for i in 1:size(chi, 1)
+        scatter!(chi[i, :], kchi[i,:], markersize=2, xlabel="χ", ylabel="Kχ", xlims=lim, ylims=lim)
+    end
+    p
     #scatter(xs, target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
     #scatter(target .- xs, markersize=2, xlabel="χ", ylabel="Kχ")
     #plot!([minimum(xs), maximum(xs)], [minimum(target), maximum(target)], legend=false)
@@ -133,8 +179,8 @@ function scatter_ramachandran(x::AbstractMatrix, z::Union{AbstractVector,Nothing
     ps = psi(cpu(x))
     z = cpu(z)
     scatter(ph, ps, marker_z=z, xlims=[-pi, pi], ylims=[-pi, pi],
-        markersize=3, markerstrokewidth=0, markeralpha=1, markercolor=:tofino, legend=false,
-        xlabel="\\phi", ylabel="\\psi", title="Ramachandran", ; kwargs...
+        markersize=3, markerstrokewidth=0, markercolor=:viridis, legend=false,
+        xlabel="\\phi", ylabel="\\psi", title="Ramachandran", aspect_ratio=1; kwargs...
     )
 end
 

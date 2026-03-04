@@ -17,7 +17,7 @@ function picking(X, n; dists = pairwise_one_to_many)
     @assert size(X, 2) >= n
 
     d = similar(X, size(X, 2), n) .= 0
-    mins = similar(X, size(X, 2)) .= Inf
+    mins = similar(X, size(X, 2)) .= typemax(eltype(X))
     origin = similar(X, size(X, 1)) .= 0
     qs = Int[]
     q = argmax(dists(origin, X))  # start with the point furthest from origin
@@ -29,7 +29,9 @@ function picking(X, n; dists = pairwise_one_to_many)
         q = argmax(mins)
     end
 
-    return X[:, qs], qs, d
+    xs, is, d = X[:, qs], qs, d
+
+    return (;xs, is, d)
 end
 
 """ 

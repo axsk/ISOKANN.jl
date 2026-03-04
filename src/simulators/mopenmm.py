@@ -48,7 +48,8 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
 # from the OpenMM documentation
 def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, 
 addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, 
-flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedCutoff=1, constraints= None):
+flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedCutoff=1, constraints= None,
+integrator="langevin"):
     pdb = PDBFile(pdb)
 
     if mmthreads == 'gpu':
@@ -106,7 +107,13 @@ flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedC
                 constraints=parse_constraints(constraints),
                 **forcefield_kwargs)
 
-    integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
+    if integrator == "langevin":
+        integrator = LangevinMiddleIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
+    elif integrator == "brownian":
+        integrator = BrownianIntegrator(temp*kelvin, friction/picosecond, step*picoseconds)
+    else:
+        raise ValueError(f"no valid integrator supplied ({integrator})")
+
     simulation = Simulation(modeller.topology, system, integrator, platform, platformargs)
 
     simulation.context.setPositions(modeller.positions)

@@ -14,7 +14,7 @@ function SDEProblem(l::AbstractLangevin, x0=randx0(l), T=lagtime(l); dt=dt(l), a
     StochasticDiffEq.SDEProblem(drift, noise, x0, T, alg=alg, dt=dt; kwargs...)
 end
 
-function force(l::AbstractLangevin, x)
+function force(l::AbstractLangevin, x; reclaim=false)
     - ForwardDiff.gradient(x->potential(l, x), x)
 end
 
@@ -33,12 +33,12 @@ propagate(l::AbstractLangevin, x0::CuArray, ny) = gpu(propagate(l, cpu(x0), ny))
 generate a trajectory of length `T`, starting at x0 with stepsize `dt`, saving the output every `saveat` time. """
 function trajectory(l::AbstractLangevin; T=lagtime(l), x0=randx0(l), save_start=false, saveat=dt(l), dt=dt(l))
     sde = SDEProblem(l, x0, T)
-    sol = StochasticDiffEq.solve(sde; saveat, save_start)
+    sol = StochasticDiffEq.solve(sde; saveat, save_start, dt)
     xs = reduce(hcat, sol.u)
     return xs::Matrix
 end
 
-laggedtrajectory(l::AbstractLangevin, steps; kwargs...) = trajectory(l, T=lagtime(l) * steps, saveat=lagtime(l); kwargs...)
+laggedtrajectory(l::AbstractLangevin, lags; lagtime=lagtime(l), T=lags*lagtime, kwargs...) = trajectory(l; T, saveat=lagtime, kwargs...)
 
 # helper functions to generate random initial data
 
@@ -93,20 +93,24 @@ Triplewell(; kwargs...) = Diffusion(;
     support=[-2 2; -1.5 2.5],
     kwargs...)
 
+
+# as per 2006 - Philipp Metzner, Christof Schütte, and Eric Vanden-Eijnden
 triplewell(x) = triplewell(x...)
-triplewell(x,y) = (3/4 * exp(-x^2 - (y-1/3)^2)
-            - 3/4 * exp(-x^2 - (y-5/3)^2)
-            - 5/4 * exp(-(x-1)^2 - y^2)
-            - 5/4 * exp(-(x+1)^2 - y^2)
-            + 1/20 * x^4 + 1/20 * (y-1/3)^4)
+triplewell(x,y) = (3 * exp(-x^2 - (y-1/3)^2)
+            - 3 * exp(-x^2 - (y-5/3)^2)
+            - 5 * exp(-(x-1)^2 - y^2)
+            - 5 * exp(-(x+1)^2 - y^2)
+            + 1/5 * x^4 + 1/5 * (y-1/3)^4
+)
 
 
 MuellerBrown(; kwargs...) = Diffusion(;
     potential=mueller_brown,
     dim=2,
-    sigma=1.0,
-    support=[-1.5 1; -0.5 2],
-    dt=0.001,
+    sigma=7.0,
+    support=[-1.4 1.1; -0.25 2],
+    dt=0.0001,
+    lagtime=0.001,
     kwargs...)
 
 mueller_brown(x::AbstractVector) = mueller_brown(x...)
