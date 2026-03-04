@@ -36,8 +36,8 @@ function __init__()
     try
         # load the mopenmm.py script
         sys = PythonCall.pyimport("sys")
-        sys.path.append(pwd())
-        PythonCall.pycopy!(mopenmm, PythonCall.pyimport("src.simulators.mopenmm"))
+        sys.path.append(@__DIR__)
+        PythonCall.pycopy!(mopenmm, PythonCall.pyimport("mopenmm"))
     catch err
         global PYTHON_ERR = err
         @warn "Could not load openmm. Please make sure that the Python packages `openmm`, `joblib` (and if used for automatic solvent `openmmforcefields`) are available in the python evironment used by PythonCall.jl."
