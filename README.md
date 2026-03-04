@@ -12,10 +12,11 @@ See the [documentation](https://axsk.github.io/ISOKANN.jl/dev) for details.
 
 ## Quick start
 
-Install the package via `julia> ]add https://github.com/axsk/ISOKANN.jl`.
+Install the package via `julia> ]add ISOKANN` for the release version (or `julia> ]add https://github.com/axsk/ISOKANN.jl` for the current GitHub version).
 
 If you want to use Julia's built Conda.jl to automatically install OpenMM, you shoud build the package after setting the environment variable
-`PYTHON=""`, e.g. through `ENV["PYTHON"]=""; using Pkg; Pkg.build()`.
+`PYTHON=""`, e.g. through `ENV["PYTHON"]=""; using Pkg; Pkg.build()`. (Release 1.3.0)
+Note: After 1.3 we switched to using CondaPkg/PythonCall as a backend. The required Python packages should be installed automatically. In the case of issues please refer to the CondaPkg/PythonCall documentation or create a GitHub issue.
 
 The usual pipeline consists of the creation of system simulation, generation of training data, training ISOKANN and a posteriori analysis of the results.
 
@@ -58,8 +59,8 @@ data = SimulationData(data_from_trajectories([xs1, xs2, ...]) # If each `xs_i` i
 More comprehensive usecase examples can be found in
 - [`scripts/villin.jl`](scripts/villin.jl): simulating the folding of the chicken villin
 - [`scripts/vgvapg.jl`](scripts/vgvapg.jl)
-- [`scripts/trpcaeg.jl](scripts/trpcage.jl)
-- [`scripts/multitraj.jl](scripts/multitraj.jl): Extraction of reaction paths from multiple long trajectories.
+- [`scripts/trpcaeg.jl`](scripts/trpcage.jl)
+- [`scripts/multitraj.jl`](scripts/multitraj.jl): Extraction of reaction paths from multiple long trajectories.
 
 For further information on specific functions use Julias built-in help/docstring functionality, e.g. `?Iso`.
 
