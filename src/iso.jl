@@ -193,7 +193,7 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
     return ls / numobs(xs)
 end
 
-chis(iso::Iso, data::SimulationData=iso.data) = iso.model(features(data))
+chis(iso::Iso, data::Union{SimulationData, <:Tuple}=iso.data) = iso.model(features(data))
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 
 coords(iso::Iso) = coords(iso.data)
@@ -298,15 +298,18 @@ In the 1D ISOKANN case return the rates for χ and 1-χ.
 function rates(iso::Iso)
     x = chis(iso)
     y = koopman(iso)
+    rates(x, y) / lagtime(iso.data.sim)
+end
+
+function rates(x::AbstractArray, y::AbstractArray)
     if size(x, 1) == 1
         x = [x; 1 .- x]
         y = [y; 1 .- y]
     end
-    log(y/x) / lagtime(iso.data.sim)
+    log(cpu(y/x))
 end
 
 @deprecate exit_rates(iso) -LinearAlgebra.diagview(rates(iso))
-
 
 function koopman_variance(iso, ys=iso.data.coords[2])
     chi = chicoords(iso, ys)
