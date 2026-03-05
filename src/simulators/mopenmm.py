@@ -164,7 +164,7 @@ def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
 
 ### State helpers
 
-def get_numpy_state(context, withmomenta):
+def get_numpy_state(context, withmomenta=False):
     if withmomenta:
         state = context.getState(getPositions=True, getVelocities=True)
         x = np.concatenate([
@@ -174,7 +174,7 @@ def get_numpy_state(context, withmomenta):
         x = context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
     return x
 
-def set_numpy_state(context, x, withmomenta):
+def set_numpy_state(context, x, withmomenta=False):
     if withmomenta:
         n = len(x) // 2
         context.setPositions(x[:n])
@@ -224,9 +224,19 @@ def test():
   ff99 = ['amber99sbildn.xml', 'amber99_obc.xml']
   ff14 = ["amber14-all.xml"]
 
-  pdb_nowater = "data/alanine-dipeptide-nowater av.pdb"
+  pdb = "data/systems/alanine dipeptide.pdb"
 
-  s = defaultsystem(pdb_nowater, ff14, 298, 1, 0.002, False, 'CPU', {'Threads':'1'})
+  s = defaultsystem(pdb, ff14, 298, 1, 0.002, False, 'CPU', {'Threads':'1'})
   x0 = s.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
   threadedrun([x0], s, 500, 1)
   return s
+
+def test():
+    ff14 = ["amber14-all.xml"]
+    pdb = "data/systems/alanine dipeptide.pdb"
+
+
+    sim = defaultsystem(pdb, "", ff14, 298, 1, 0.002, False, 1)
+    x0 = get_numpy_state(sim.context)
+    threadedrun([x0], sim, 0.002, 100, 1)
+    return sim
