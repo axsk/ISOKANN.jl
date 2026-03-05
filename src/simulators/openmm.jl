@@ -1,7 +1,7 @@
 module OpenMM
 
 using CUDA
-using LinearAlgebra: norm, dot, diag
+using LinearAlgebra: norm, dot, diag, pinv
 using Random: randn!
 
 import JLD2
@@ -25,6 +25,8 @@ DEFAULT_PDB = normpath("$(@__DIR__)/../../data/systems/alanine dipeptide.pdb")
 FORCE_AMBER = ["amber14-all.xml"]
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber/tip3p_standard.xml"]
+
+const kB = 0.008314462618  # Boltzmann constant in kJ/(mol*K)
 
 import PythonCall
 
@@ -87,7 +89,7 @@ end
 function OpenMMSimulation(; steps=100, bias::T=nothing, k...) where {T}
     k = NamedTuple(k)
     if haskey(k, :py)
-        @error "not supported with PythonCall yet"  # fix PythonCall
+        throw(@error "not supported with PythonCall yet")  # fix PythonCall
         #py"""
         #julia=True
         #"""
@@ -172,7 +174,6 @@ end
 function minimize!(sim::OpenMMSimulation, coords=coords(sim); iter=0)
     setcoords(sim, coords)
     return sim.pysim.minimizeEnergy(maxIterations=iter)
-    return nothing
 end
 
 function set_random_velocities!(sim::OpenMMSimulation)
@@ -225,11 +226,8 @@ function savecoords(path, sim::OpenMMSimulation, coords::AbstractArray{T}=coords
     p = mopenmm.PDBFile
     file = path
     file = PythonCall.@pyeval (file = file) => `open(file, "w")`
-    #p = py"pdbfile.PDBFile" # fix PythonCall
-    #file = py"open"(path, "w") fix PythonCall
     p.writeHeader(s.topology, file)
     for (i, coords) in enumerate(eachcol(coords))
-        pos = reinterpret(Tuple{T,T,T}, coords .* 10)
         pos = _xyz_jl_to_py(coords .* 10)
         p.writeModel(s.topology, pos, file, modelIndex=i)
     end
@@ -283,7 +281,6 @@ function with_retries(f, retries, allowed_error=Any)
         catch e 
             if e isa allowed_error && trial < retries
                 @warn "retrying on error $e"
-                lasterr = e
                 continue
             else
                 rethrow(e)
@@ -335,7 +332,7 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
     reclaim && claim_memory(sim)
     n = div(steps, saveevery)
     xs = similar(x0, length(x0), n)
-    int = sim.pysim.context.getIntegrator()
+    # int = sim.pysim.context.getIntegrator()
 
     p = ProgressMeter.Progress(n, "Computing trajectory")
     done = 0
@@ -350,9 +347,9 @@ function trajectory(sim::OpenMMSimulation{Nothing}, steps=steps(sim); saveevery=
         for i in 1:n
             resample_velocities && set_random_velocities!(sim)
             runtime += @elapsed sim.pysim.step(saveevery)
-            #runtime += @elapsed int.step(saveevery)  # this does not trigger loggers
+            # runtime += @elapsed int.step(saveevery)  # this does not trigger loggers
             xs[:, i] = coords(sim)
-           # @assert norm(xs[:, i]) <= 1e5
+            # @assert norm(xs[:, i]) <= 1e5
             done = i
 
             simtime = round(lagtime * i, sigdigits=3)
@@ -386,7 +383,7 @@ Base.convert(::Type{OpenMMSimulation{T}}, s::OpenMMSimulationSerialized) where {
 try
     OpenMMSimulation(; s.constructor...)
 catch
-    @warn "Could not reconstruct OpenMMSimulation(; $(s.constructor))"
+    @warn "Could not reconstruct OpenMMSimulation(; $(s.constructor)), falling back to default OpenMMSimulation()"
     OpenMMSimulation()
 end
 
@@ -397,7 +394,7 @@ Base.show(io::IO, mime::MIME"text/plain", sim::OpenMMSimulation) =
 ### CUSTOM INTEGRATORS
 
 """
-    integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), bias=nothing, saveevery=nothing, reclaim=true)
+    integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), perturbation!::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing, reclaim=true)
 
 Perform standard Langevin dynamics integration for a given system.
 
@@ -405,7 +402,7 @@ Perform standard Langevin dynamics integration for a given system.
 - `sim::OpenMMSimulation` : The simulation object with system parameters.
 - `x0` : Initial coordinates (default: `coords(sim)`).
 - `steps` : Number of integration steps (default: `steps(sim)`).
-- `bias` : Optional function `(F, x) -> nothing` to perturb the force `F` in-place.
+- `perturbation!` : Optional function `(F, x) -> nothing` to perturb the force `F` in-place.
 - `saveevery` : Interval to save coordinates (default: saves only final state).
 - `reclaim` : Whether to preallocate/reclaim memory for performance.
 
@@ -413,23 +410,23 @@ Perform standard Langevin dynamics integration for a given system.
 - Array of positions: either the final positions or a trajectory if `saveevery` is specified.
 
 # Notes
-Uses a simple Euler-Maruyama step for (underdamped) Langevin dynamics with optional bias. Currently the momenta are intialized as zero.
+Uses a simple Euler-Maruyama step for (underdamped) Langevin dynamics with optional bias.
 """
-function integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), bias::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing, reclaim=true)
+function integrate_langevin(sim::OpenMMSimulation, x0=coords(sim); steps=steps(sim), perturbation!::Union{Function,Nothing}=nothing, saveevery::Union{Int,Nothing}=nothing, reclaim=true)
     reclaim && claim_memory(sim)
     # we use the default openmm units, i.e. nm, ps
     x = copy(x0)
-    v = zero(x) # this should be either provided or drawn from the Maxwell Boltzmann distribution
-    kBT = 0.008314463 * temp(sim)
+    M = repeat(masses(sim), inner=3)
+    v = randn(length(x)) .* sqrt.(M .* temp(sim) .* kB) # Maxwell Boltzmann distribution
+    kBT = kB * temp(sim)
     dt = stepsize(sim)
     gamma = friction(sim)
-    m = repeat(masses(sim), inner=3)
     out = isnothing(saveevery) ? x : similar(x, length(x), cld(steps, saveevery))
 
     for i in 1:steps
         F = force(sim, x, reclaim=false)
-        isnothing(bias) || (bias(F, x)) # note that bias(F, x) is assumed to be mutating F
-        langevin_step!(x, v, F, m, gamma, kBT, dt)
+        isnothing(perturbation!) || (perturbation!(F, x)) # note that perturbation!(F, x) is assumed to be mutating F
+        langevin_step!(x, v, F, M, gamma, kBT, dt)
         isnothing(saveevery) || i % saveevery == 0 && (out[:, div(i, saveevery)] = x)
     end
     return out
@@ -442,7 +439,6 @@ function langevin_step!(x, v, F, m, gamma, kBT, dt)
 end
 
 function constants(sim::OpenMMSimulation)
-    kB = 0.008314463
     dt = stepsize(sim)
     gamma = friction(sim)
 
@@ -470,7 +466,7 @@ Integrate overdamped Langevin dynamics while computing Girsanov weights for a gi
 - `sim::OpenMMSimulation` : The simulation object.
 - `x0` : Initial coordinates (default: `coords(sim)`).
 - `steps` : Number of integration steps (default: `steps(sim)`).
-- `bias` : Function `x -> u` that returns the perturbation for Girsanov reweighting.
+- `bias` : Function `x -> u` that returns the bias `u` for the Girsanov reweighting (note that the actual force perturbation is sigma * u).
 - `reclaim` : Whether to preallocate memory for performance.
 
 # Returns
@@ -483,8 +479,7 @@ The method assumes overdamped Langevin dynamics and accumulates the correspondin
 """
 function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
     reclaim && claim_memory(sim)
-    # TODO: check units on the following three lines
-    (;sigma, T, M, gamma, dt, kB) = constants(sim)
+    (;sigma, T, M, gamma, dt) = constants(sim)
 
     x = copy(x0)
     logw = 0.0
@@ -495,7 +490,7 @@ function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(s
     for i in 1:steps
         F = force(sim, x, reclaim=false)
         ux = bias(x; t, sigma, F)
-        logw -= od_langevin_step_girsanov!(x, F, M, sigma, gamma, dt, ux)
+        logw += od_langevin_step_girsanov!(x, F, M, sigma, gamma, dt, ux)
         t += dt
         z[:, i] = x
     end
@@ -506,12 +501,12 @@ end
 function od_langevin_step_girsanov!(x, F, M, σ, γ, dt, u)
     dB = randn(length(x)) * sqrt(dt)
     @. x += (1 / (γ * M) * F + (σ * u)) * dt + σ * dB
-    dlogw = dot(u, u) / 2 * dt + dot(u, dB)
+    dlogw = -(dot(u, u) / 2 * dt + dot(u, dB))
     return dlogw
 end
 
 
-trajectory(sim::OpenMMSimulation, steps=steps(sim); kwargs...) = langevin_girsanov!(sim, steps; kwargs...)
+trajectory(sim::OpenMMSimulation{<:Function}, steps=steps(sim); kwargs...) = langevin_girsanov!(sim, steps; kwargs...)
 
 
 """
@@ -529,6 +524,7 @@ Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov r
 - `showprogress` : Whether to show a progress bar.
 - `throw` : Whether to throw errors on invalid states.
 - `reclaim` : Whether to preallocate memory for performance.
+- `sigmascaled` : Whether the bias is scaled by the noise amplitude, i.e. whether the resulting force is `σ * bias` (true) or only `bias` (false) (default: true).
 
 # Returns
 - `WeightedSamples` containing:
@@ -539,7 +535,7 @@ Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov r
 - Uses the ABOBA splitting scheme for stable underdamped Langevin integration.
 - Computes Girsanov weights to account for the applied bias.
 """
-function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true)
+function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true)
     reclaim && claim_memory(sim)
     prog = ProgressMeter.Progress(steps)
     nout = div(steps, saveevery)
@@ -547,7 +543,6 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
     logws = zeros(1, nout)
 
     # ABOBA scheme from from https://pubs.acs.org/doi/full/10.1021/acs.jpcb.4c01702
-    kB = 0.008314463
     dt = stepsize(sim)
     ξ = friction(sim)
     T = temp(sim)
@@ -556,6 +551,7 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
     # Maxwell-Boltzmann distribution
     p = randn(length(M)) .* sqrt.(M .* kB .* T)
 
+    # note the noise amplitude for underdamped Langevin is different from overdamped, i.e.
     σ = @. sqrt(2 * kB * T * ξ * M)
 
     t2 = dt / 2
@@ -574,6 +570,7 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
         @. q += a * p # A
         F = force(sim, q, reclaim=false)
         B = bias(q; t=(k - 1) * dt, sigma=σ, F=F) # perturbation force ∇U_bias = -F
+        sigmascaled && (B .*= σ)
         @. Δη = (d + 1) / f * dt / 2 * B
         logw -= η' * Δη + Δη' * Δη / 2
         F .+= B  # total force: -∇V - ∇U_bias
@@ -604,13 +601,12 @@ end
 function optcontrol(iso, forcescale=1.0)
     sim = iso.data.sim
 
-    kB = 0.008314463
     γ = friction(sim)
     M = repeat(masses(sim), inner=3)
     TT = temp(sim)
     σ = @. sqrt(2 * kB * TT / (γ * M)) # ODL noise
 
-    @show _, shift, lambda = ISOKANN.isotarget(iso.model, iso.data.features[1], iso.data.features[2], iso.target, shiftscale=true)
+    _, shift, lambda = ISOKANN.isotarget(iso.model, iso.data.features[1], iso.data.features[2], iso.target, shiftscale=true)
     Tmax = stepsize(sim) * steps(sim)
     q = log(lambda) / Tmax
     b = shift
@@ -618,17 +614,19 @@ function optcontrol(iso, forcescale=1.0)
 
     χ(x) = ISOKANN.chicoords(iso, x) |> ISOKANN.myonly
 
-    function bias(x; t, sigma)
+    # NOTE: this control is derived for overdamped Langevin dynamics.
+    # Behavior when used with langevin_girsanov! (underdamped/ABOBA) is undefined.
+    # In particular it is not clear which sigma should be used for the control, i.e. the overdamped or underdamped noise amplitude.
+    function bias(x; t, sigma, F)
         λ = exp(q * (Tmax - t))
         logψ(x) = log(λ * (χ(x) - b) + b)
-        u = σ .* σ .* only(ISOKANN.Zygote.gradient(logψ, x))
+        u = sigma .* only(ISOKANN.Zygote.gradient(logψ, x))
         return forcescale .* u
     end
 
     return bias
 end
 
-using LinearAlgebra  # For pseudoinverse function
 function shift_and_scale(xs, ys)
     X = [ones(length(xs)) xs]
     X_pinv = pinv(X)
