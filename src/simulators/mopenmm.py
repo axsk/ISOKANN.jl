@@ -5,47 +5,8 @@ from openmm.app import *
 from openmm.unit import *
 import numpy as np
 
-def threadedrun(xs, sim, stepsize, steps, nthreads, withmomenta=False):
-    def singlerun(i):
-        if nthreads > 1:
-            c = newcontext(sim.context)
-        else:
-            c = sim.context
-        set_numpy_state(c, xs[i], withmomenta)
-        c.getIntegrator().setStepSize(stepsize)
+### Default OpenMM Simulation constructor
 
-        try:
-          c.getIntegrator().step(steps)
-        except OpenMMException as e:
-          print("Error integrating trajectory", e)
-          return get_numpy_state(c, withmomenta).fill(np.nan)
-
-        x = get_numpy_state(c, withmomenta)
-        return x
-
-    if nthreads > 1:
-        out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
-    else:
-        out = [singlerun(i) for i in range(len(xs))]
-    return np.array(out).flatten()
-
-def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
-  n_states = steps // saveevery + 1
-  trajectory = np.zeros((n_states,) + np.array(x0).shape)
-  trajectory[0] = x0
-
-  c = newcontext(sim.context)
-
-  set_numpy_state(c, x0, withmomenta)
-  c.getIntegrator().setStepSize(stepsize)
-
-  for n in range(1,n_states):
-    c.getIntegrator().step(saveevery)
-    trajectory[n] = get_numpy_state(c, withmomenta)
-
-  return trajectory
-
-# from the OpenMM documentation
 def defaultsystem(pdb, ligand, forcefields, temp, friction, step, minimize, mmthreads, 
 addwater=False, padding=1, ionicstrength=0, forcefield_kwargs={}, 
 flexibleConstraints = False, rigidWater=True, nonbondedMethod="auto", nonbondedCutoff=1, constraints= None,
@@ -130,6 +91,79 @@ integrator="langevin"):
         simulation.minimizeEnergy()
     return simulation
 
+
+def parse_nonbondedMethod(method: str, pdb, addwater):
+    method_map = {
+        "NoCutoff": NoCutoff,
+        "CutoffNonPeriodic": CutoffNonPeriodic,
+        "CutoffPeriodic": CutoffPeriodic,
+        "Ewald": Ewald,
+        "PME": PME,
+        "LJPME": LJPME,
+        "auto": CutoffNonPeriodic if pdb.getTopology().getPeriodicBoxVectors() is None and not addwater else CutoffPeriodic
+    }
+
+    try:
+        return method_map[method]
+    except KeyError:
+        raise ValueError(f"Invalid method name: {method}. Must be one of {', '.join(method_map.keys())}.")
+
+def parse_constraints(constraints: str):
+    constraint_map = {
+        None: None,
+        "None": None,
+        "HBonds": HBonds,
+        "AllBonds": AllBonds,
+        "HAngles": HAngles,
+    }
+    return constraint_map[constraints]
+
+### Simulation functions
+
+# Simulate multiple simulations with multi-threading support
+def threadedrun(xs, sim, stepsize, steps, nthreads, withmomenta=False):
+    def singlerun(i):
+        if nthreads > 1:
+            c = newcontext(sim.context)
+        else:
+            c = sim.context
+        set_numpy_state(c, xs[i], withmomenta)
+        c.getIntegrator().setStepSize(stepsize)
+
+        try:
+          c.getIntegrator().step(steps)
+        except OpenMMException as e:
+          print("Error integrating trajectory", e)
+          return get_numpy_state(c, withmomenta).fill(np.nan)
+
+        x = get_numpy_state(c, withmomenta)
+        return x
+
+    if nthreads > 1:
+        out = Parallel(n_jobs=nthreads, prefer="threads")(delayed(singlerun)(i) for i in range(len(xs)))
+    else:
+        out = [singlerun(i) for i in range(len(xs))]
+    return np.array(out).flatten()
+
+# Trajectory integration with support for momenta
+def trajectory(sim, x0, stepsize, steps, saveevery, mmthreads, withmomenta):
+  n_states = steps // saveevery + 1
+  trajectory = np.zeros((n_states,) + np.array(x0).shape)
+  trajectory[0] = x0
+
+  c = newcontext(sim.context)
+
+  set_numpy_state(c, x0, withmomenta)
+  c.getIntegrator().setStepSize(stepsize)
+
+  for n in range(1,n_states):
+    c.getIntegrator().step(saveevery)
+    trajectory[n] = get_numpy_state(c, withmomenta)
+
+  return trajectory
+
+### State helpers
+
 def get_numpy_state(context, withmomenta):
     if withmomenta:
         state = context.getState(getPositions=True, getVelocities=True)
@@ -149,28 +183,12 @@ def set_numpy_state(context, x, withmomenta):
         context.setPositions(x)
         context.setVelocitiesToTemperature(context.getIntegrator().getTemperature())
     if has_barostat(context):
-        set_box_from_positions(context, positions)
+        set_box_from_positions(context, x)
 
 def set_box_from_current_positions(context, buffer=0.01):
-    """
-    Reads positions from the context, computes tight box + buffer, 
-    and sets periodic box vectors accordingly.
-    
-    buffer: in nanometers (default 0.01 nm = 0.1 Å)
-    """
     state = context.getState(getPositions=True)
-    positions = state.getPositions(asNumpy=True)  # Quantity array
-    
-    # Convert positions to plain nm ndarray for calculation
-    pos_nm = positions.value_in_unit(nanometer)
-    
-    mins = pos_nm.min(axis=0)
-    maxs = pos_nm.max(axis=0)
-    lengths = (maxs - mins + buffer)
-    
-    a = Vec3(lengths[0], 0, 0)
-    b = Vec3(0, lengths[1], 0)
-    c = Vec3(0, 0, lengths[2])
+    pos_nm = state.getPositions(asNumpy=True).value_in_unit(nanometer)
+    set_box_from_positions(context, pos_nm, buffer)
     
     context.setPeriodicBoxVectors(a * nanometer, b * nanometer, c * nanometer)
 
@@ -200,6 +218,8 @@ def set_random_velocities(context):
 def newcontext(context):
   return Context(context.getSystem(), copy.copy(context.getIntegrator()), context.getPlatform())
 
+### Test
+
 def test():
   ff99 = ['amber99sbildn.xml', 'amber99_obc.xml']
   ff14 = ["amber14-all.xml"]
@@ -210,29 +230,3 @@ def test():
   x0 = s.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(nanometer)
   threadedrun([x0], s, 500, 1)
   return s
-
-def parse_nonbondedMethod(method: str, pdb, addwater):
-    method_map = {
-        "NoCutoff": NoCutoff,
-        "CutoffNonPeriodic": CutoffNonPeriodic,
-        "CutoffPeriodic": CutoffPeriodic,
-        "Ewald": Ewald,
-        "PME": PME,
-        "LJPME": LJPME,
-        "auto": CutoffNonPeriodic if pdb.getTopology().getPeriodicBoxVectors() is None and not addwater else CutoffPeriodic
-    }
-
-    try:
-        return method_map[method]
-    except KeyError:
-        raise ValueError(f"Invalid method name: {method}. Must be one of {', '.join(method_map.keys())}.")
-
-def parse_constraints(constraints: str):
-    constraint_map = {
-        None: None,
-        "None": None,
-        "HBonds": HBonds,
-        "AllBonds": AllBonds,
-        "HAngles": HAngles,
-    }
-    return constraint_map[constraints]
