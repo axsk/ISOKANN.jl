@@ -5,7 +5,7 @@ using ISOKANN: coords
 
 mutable struct GuidedLangevinBridge
     sim
-    xi
+    xi # function mapping positions to RCs
     guide
     gain
 end
@@ -59,7 +59,7 @@ end
 
 ##
 
-function brigde_rama(;
+function bridge_rama(;
     sim=OpenMMSimulation(friction=1000, integrator="brownian"),
     g = 1, 
     T=1,
@@ -70,7 +70,6 @@ function brigde_rama(;
     zs = [z0 z1]
 
     guide = LinearInterpolant(ts, zs)
-    
 
     gain(t) = g
     xi(x) = [ISOKANN.phi(x), ISOKANN.psi(x)]
@@ -156,6 +155,7 @@ XC = [0.45542977606928714, 2.2920101447835832, 0.45145048358190043, 0.3603593472
 const ZA = [-2.5, 2.5]
 const ZB = [-1.5, 1]
 const ZC = [1, -1]
+const ZCC = [pi/2, -pi/2]
 
 
 function pickfeatures!(iso, n)
@@ -163,13 +163,6 @@ function pickfeatures!(iso, n)
     iso.data = iso.data[pick.is]
 end
 
-function loss_res(iso, model=iso.model, reg=1e-3)
-    chi = model(features(iso))
-    kchi = ISOKANN.expectation(model, propfeatures(iso))
-
-    K = chi * pinv(kchi)
-    norm(kchi - K * chi) / size(features(iso), 2) + reg * norm(chi * chi'-I)
-end
 
 using ProgressMeter
 
@@ -180,6 +173,15 @@ function run_res!(iso, n=1, reg=1e-1)
         push!(iso.losses, loss_res(iso, iso.model, reg))
     end
 end
+
+function loss_res(iso, model=iso.model, reg=1e-3)
+    chi = model(features(iso))
+    kchi = ISOKANN.expectation(model, propfeatures(iso))
+
+    K = chi * pinv(kchi)
+    norm(kchi - K * chi) / size(features(iso), 2) + reg * norm(chi * chi'-I)
+end
+
 
 using Plots
 global XHIST = reshape(XC, :, 1)
@@ -197,32 +199,45 @@ end
 
 global TS=zeros(66,0)
 
-function addbridges!(iso, n=100; zs = [ZA, ZB, ZC]) 
+function addbridges!(iso, n=100; zs = [ZA, ZB, ZC], T = 20., g=0.3) 
     xs = map(zs) do z
         is = findall(norm.(eachcol(phipsi(coords(iso)) .- z)) .< 0.1)
-        i = rand(is)
+        if isempty(is)
+            i = argmin(norm.(eachcol(phipsi(coords(iso)) .- z)))
+        else
+            i = rand(is)
+        end
         return coords(iso)[:,i]
     end
-    ts = reduce(hcat, bridges(; zs, xs))
+    ts = reduce(hcat, bridges(; zs, xs, T, g))
     ts = ts[:, sort(rand(1:size(ts, 2), n))]
     addcoords!(iso, ts)
 
 end
 
+# compute and visualize all bridges in ramachandran space between ZA, ZB, ZC 
 function bridges(; 
     zs = [ZA, ZB, ZC],
-    xs = [XA, XB, XC]
+    xs = [XA, XB, XC],
+    plot=false,
+    T = 20.,
+    g = 0.3
 )
-    
+    if plot
+        Plots.plot(title="T=$T, g=$g", xlims=(-pi, pi), ylims=(-pi, pi)) |> display
+    end
     ts = []
     ij = [(i,j) for  i in 1:3, j in 1:3 if i!=j]
     for (i,j) in ij
         @show i,j
-        b = brigde_rama(;z0=zs[i], z1=zs[j], T=20, g=.3)
+        b = bridge_rama(;z0=zs[i], z1=zs[j], T, g)
         t = trajectory(b; x0=xs[i])[3]
         @show norm(phipsi(t[:,end]) - zs[j])
         push!(ts,t)
-        global TS = [TS t]
+        if plot
+            Plots.scatter!(eachrow(phipsi(t))..., label="bridge $i to $j", markersize=0.3, msw=0, alpha=0.8) |> display
+        end
+        #global TS = [TS t]
     end
     return ts
 end
@@ -235,10 +250,19 @@ function resample_picking_features!(iso, n=length(iso.data))
     #fys = propfeatures(iso) |> ISOKANN.flattenlast
     ys = allcoords(iso)
     fys = allfeats(iso)
-    is = picking(fys, n).is
+    is = picking(cpu(fys), n).is # TODO this should work on gpu!
     is = sort(is)
-    xs = ys[:, picking(fys, n).is]
-    iso.data = similar(iso.data, xs)
+    iold = is[is .<= length(iso.data)]
+    inew = is[is .> length(iso.data)]
+    println("resampling ", length(inew), " new samples")
+
+
+    iso.data = addcoords(iso.data[iold], ys[:, inew])
+
+#
+#    
+#    xs = ys[:, is]
+#    iso.data = similar(iso.data, xs) |> gpu
 end
 
 
@@ -247,13 +271,19 @@ function ISOKANN.SimulationData(data::ISOKANN.SimulationData; featurizer)
     SimulationData(data.sim, (ISOKANN.coords(data), ISOKANN.propcoords(data)); featurizer)
 end
 
-function adaptive(n)
+function adaptive(iso, n)
     for _ in 1:n
         @time "picking" resample_picking_features!(iso, 2000)
         @time "bridges" addbridges!(iso, 200)
         @time "kde" resample_kde!(iso, 200)
-        run!(iso, 3000)
+        run!(iso, 500)
+        plot_training(iso) |> display
+        scatter_ramachandran(iso, title=i) |> display
     end
 end
+
+# hijacking to allow gpu computatio
+Distances.pairwise(metric::Distances.SqEuclidean, a::AbstractMatrix) = ISOKANN.sqpairdist(a)
+
 
 # TODO if density is reasonable, pick by ramach angle
