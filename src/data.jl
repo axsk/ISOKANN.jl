@@ -99,11 +99,39 @@ function data_from_trajectory(xs::AbstractMatrix; reverse=true, stride=1, lag=1)
     return xs, ys
 end
 
+"""
+    data_from_trajectories(xss::AbstractVector{<:AbstractMatrix}; kwargs...)
+    data_from_trajectories(xs::AbstractArray{<:Any,3}; kwargs...)
+
+Generate training data (x, y) pairs for ISOKANN from trajectories by calling `data_from_trajectory` 
+on each and concatenating the results.
+
+See `data_from_trajectory` for details on the keyword arguments (reverse, stride, lag).
+"""
+data_from_trajectories(xs::AbstractArray{<:Any,3}; kwargs...) = data_from_trajectories(eachslice(xs, dims=3); kwargs...)
+
 function data_from_trajectories(xss::AbstractVector{<:AbstractMatrix}; kwargs...)
-    mapreduce(mergedata, xss) do xs
-        data_from_trajectory(xs; kwargs...)
+    # essentially concatenation of the data_from_trajectory calls, but preallocating the output arrays for better performance
+    datas = [data_from_trajectory(xs; kwargs...) for xs in xss]
+    dim = size(datas[1][1], 1)
+    nk = size(datas[1][2], 2)
+    len = sum(size(d[1], 2) for d in datas)
+
+    xs = similar(datas[1][1], dim, len)
+    ys = similar(datas[1][2], dim, nk, len)
+
+    offset = 0
+    for i in eachindex(datas)
+        x, y = datas[i]
+        l = size(x, 2)
+        rng = offset .+ (1:l)
+        offset += l
+        xs[:, rng] = x
+        ys[:, :, rng] = y
     end
+    return xs, ys
 end
+
 
 """
     subsample(data, nx)
