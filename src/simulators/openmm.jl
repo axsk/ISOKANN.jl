@@ -154,7 +154,7 @@ claim_memory(sim::OpenMMSimulation) = iscuda(sim) && CUDA.functional() && CUDA.r
 @inline _jlfloat(x) = PythonCall.pyconvert(Float64, x)
 @inline _jlint(x) = PythonCall.pyconvert(Int, x)
 @inline _xyz_jl_to_py(coords) = mopenmm.np.array(reshape(coords, 3, :)).T
-@inline _xyz_py_to_jl(x) = PythonCall.pyconvert(Vector{Float64}, x.reshape(-1))
+@inline _xyz_py_to_jl(x) = PythonCall.pyconvert(Vector{Float32}, x.reshape(-1))
 
 friction(pysim::PyObject) = pysim.integrator.getFriction()._value |> _jlfloat# 1/ps
 temp(pysim::PyObject) = pysim.integrator.getTemperature()._value  |> _jlfloat # kelvin
@@ -510,7 +510,7 @@ trajectory(sim::OpenMMSimulation{<:Function}, steps=steps(sim); kwargs...) = lan
 
 
 """
-    langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true)
+    langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true)
 
 Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov reweighting.
 
@@ -535,9 +535,9 @@ Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov r
 - Uses the ABOBA splitting scheme for stable underdamped Langevin integration.
 - Computes Girsanov weights to account for the applied bias.
 """
-function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true)
+function langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true)
     reclaim && claim_memory(sim)
-    prog = ProgressMeter.Progress(steps)
+    prog = ProgressMeter.Progress(steps, desc="Langevin Girsanov", dt=1)
     nout = div(steps, saveevery)
     qs = similar(x0, length(x0), nout)
     logws = zeros(1, nout)
@@ -558,7 +558,7 @@ function langevin_girsanov!(sim::OpenMMSimulation, steps=steps(sim); bias=sim.bi
     a = @. t2 / M # eq 18
     d = @. exp(-ξ * dt) # eq 17
     f = @. sqrt(kB * T * M * (1 - exp(-2 * ξ * dt))) # eq 17
-    q = x0
+    q = copy(x0)
 
     b = similar(p)
     η = similar(p)
