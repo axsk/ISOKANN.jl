@@ -138,8 +138,7 @@ function resample_kde_ash(xs, ys, n=10; m=20, target=Distributions.Uniform(), rn
 
     debug && @show m
 
-    #debug && plot(kde)
-    #display(kde)
+    debug && display(kde)
     
     p = map(to_pdf(target), ys)
 

@@ -78,7 +78,7 @@ end
 
 
 function scatter_data(iso, x; kwargs...)
-    xs, ys = eachrow(coords(iso))
+    xs, ys = cpu(phi(iso|>coords)), cpu(psi(iso|>coords)) #eachrow(coords(iso))
     plot([scatter(xs, ys, marker_z=c; label=nothing, hover=c, kwargs...) for c in eachrow(x)]..., layout=(1,size(x, 1)); )
 end
 
@@ -112,10 +112,11 @@ function plot_chi(iso; target=false, maxpoints = 0)
         
         plot([scatter(xs[1, :], xs[2, :], marker_z=c, label=nothing, xlabel=nothing, ylabel=nothing, cbar_title="χ", cbar=false) for c in eachrow(chi)]...)
         
-    elseif size(xs, 1) == 66  
+    #=elseif size(xs, 1) == 66  
         # alanine dipeptide: scatter plot of chi as color over the Ramachandran plot
         # TODO: dispatch on simulation
         scatter_ramachandran(xs, chi)
+        =#
     else
         # otherwise: plot chi over data index
         plot()
@@ -183,6 +184,12 @@ function scatter_ramachandran(x::AbstractMatrix, z::Union{AbstractVector,Nothing
         xlabel="\\phi", ylabel="\\psi", title="Ramachandran", aspect_ratio=1; kwargs...
     )
 end
+
+function plot_potential(iso::Iso)
+    u = OpenMM.potential(iso.data.sim, coords(iso))
+    plot(u, title="potential", xlabel="n", ylabel="U(x_n)")
+end
+
 
 ### Simplex plotting - should be in PCCAPlus.jl
 using Plots
@@ -279,8 +286,8 @@ end
 # note there is also plot_callback in isokann.jl
 function autoplot(secs=10)
     Flux.throttle(
-        function plotcallback(; iso, subdata, kwargs...)
-            p = plot_training(iso; subdata)
+        function plotcallback(; iso, kwargs...)
+            p = plot_training(iso; kwargs...)
             try
                 display("image/png", p)
             catch e

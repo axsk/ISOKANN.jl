@@ -83,7 +83,7 @@ function run!(iso::Iso, n=1, epochs=1; showprogress=true)
 
         diagnostics = [("loss", iso.losses[end]), ("n", length(iso.losses)), ("data", size(features(iso)))]
         for logger in iso.loggers
-            log!(logger; iso, subdata=nothing)
+            log!(logger; iso)
             d = diagnostic(logger)
             isnothing(d) || push!(diagnostics, d)
         end
@@ -227,20 +227,21 @@ function Base.show(io::IO, mime::MIME"text/plain", iso::Iso)
     length(iso.losses) > 0 && println(io, " loss: $(iso.losses[end]) (length: $(length(iso.losses)))")
 end
 
+@deprecate runadaptive!(iso; kwargs...) run_kde!(iso; kwargs...)
 """
-    runadaptive!(iso; generations=1, nx=10, iter=100, cutoff=Inf)
+    run_kde!(iso; generations=1, iter=100, cutoff=Inf, kde=1, unique=true)
 
 Train iso with adaptive sampling. Sample `kde` new data points followed by `iter` isokann iterations and repeat this `generations` times.
 `cutoff` specifies the maximal data size, after which new data overwrites the oldest data.
 `unique` enforces resampling from yet unsampled `ys` only.
 """
-function runadaptive!(iso; generations=1, iter=100, cutoff=Inf, kde=1, unique=true)
+function run_kde!(iso; generations=1, iter=100, cutoff=Inf, kde=1, unique=true)
     p = ProgressMeter.Progress(generations)
     t_kde = 0.0
     t_train = 0.
     t_extra = 0.0
     for g in 1:generations
-        GC.gc()
+        #GC.gc()
 
         t_kde += @elapsed ISOKANN.resample_kde!(iso, kde; unique)
 

@@ -62,7 +62,7 @@ export pairnet
 export propagate, trajectory
 export laggedtrajectory
 
-export run!, runadaptive!
+export run!, run_kde!
 export AdamRegularized, NesterovRegularized
 export plot_training, scatter_ramachandran
 export reactive_path, save_reactive_path
@@ -85,6 +85,8 @@ export chicoords
 export ca_rmsd
 export coords, features, propcoords, propfeatures
 export ExternalSimulation
+export densenet
+export flattenlast
 
 export picking
 
