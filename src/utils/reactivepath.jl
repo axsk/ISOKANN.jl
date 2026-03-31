@@ -249,7 +249,9 @@ import SparseArrays
 
 # CUDA implementation of Bellman Ford for sparse matrices
 # each thread corresponds to one column
-function bellmanford(s::CUDA.CUSPARSE.AbstractCuSparseMatrix, source::AbstractVector)
+function bellmanford(
+    s::Union{CUDA.CUSPARSE.AbstractCuSparseMatrix,CUDA.CUSPARSE.CuSparseMatrixCSC},
+    source::AbstractVector)
     colptr = s.colPtr
     rowval = s.rowVal
     val = s.nzVal
