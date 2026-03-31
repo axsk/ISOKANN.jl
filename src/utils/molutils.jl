@@ -21,19 +21,19 @@ function dihedral(coord0, coord1, coord2, coord3)
 end
 
 dihedral(x::AbstractMatrix) = @views dihedral(x[:, 1], x[:, 2], x[:, 3], x[:, 4])
+dihedral(x::AbstractVector, inds) = @views dihedral(reshape(x, 3, :)[:, inds])
 
-function psi(x::AbstractVector, inds=[7, 9, 15, 17])  # dihedral of the oxygens
-    x = reshape(x, 3, :)
-    @views dihedral(x[:, inds])
-end
 
-function phi(x::AbstractVector, inds=[5, 7, 9, 15])
-    x = reshape(x, 3, :)
-    @views dihedral(x[:, inds])
-end
+theta(x::AbstractVector) = dihedral(x, [2, 5, 7, 9])
+phi(x::AbstractVector) = dihedral(x, [5, 7, 9, 15])
+psi(x::AbstractVector) = dihedral(x, [7, 9, 15, 17])
+omega(x::AbstractVector) = dihedral(x, [9, 15, 17, 19])
 
+theta(x::AbstractMatrix) = mapslices(theta, x, dims=1) |> vec
 phi(x::AbstractMatrix) = mapslices(phi, x, dims=1) |> vec
 psi(x::AbstractMatrix) = mapslices(psi, x, dims=1) |> vec
+omega(x::AbstractMatrix) = mapslices(omega, x, dims=1) |> vec
+
 
 # compute the rotationmatrix rotating e1 and e2 onto the cartesian axes
 function rotationmatrix(e1, e2)
@@ -99,12 +99,15 @@ end
 save the trajectory given in `coords` to `filename` with the topology provided by the file `top` using mdtraj.
 """
 function save_trajectory(filename, coords::AbstractMatrix; top::String)
-    throw("This method is broken since the switch to PythonCall, please write a ticket to get it fixed. Consider `readchemfile` and `writechemfile` as alternative.")
+    #throw("This method is broken since the switch to PythonCall, please write a ticket to get it fixed. Consider `readchemfile` and `writechemfile` as alternative.")
     #mdtraj = pyimport_conda("mdtraj", "mdtraj", "conda-forge")
     mdtraj = PythonCall.pyimport("mdtraj")
+    np = PythonCall.pyimport("numpy")
     traj = mdtraj.load(top, stride=-1)
     xyz = reshape(coords, 3, :, size(coords, 2))
-    traj = mdtraj.Trajectory(PyReverseDims(xyz), traj.topology)
+    #reverse dimensions of xyz to match mdtraj's expected shape (nframes, natoms, 3)
+    xyz = np.array(permutedims(xyz, (3, 2, 1)))
+    traj = mdtraj.Trajectory(xyz, traj.topology)
     traj.save(filename)
 end
 
