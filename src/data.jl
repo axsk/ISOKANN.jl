@@ -111,23 +111,20 @@ See `data_from_trajectory` for details on the keyword arguments (reverse, stride
 data_from_trajectories(xs::AbstractArray{<:Any,3}; kwargs...) = data_from_trajectories(eachslice(xs, dims=3); kwargs...)
 
 function data_from_trajectories(xss::AbstractVector{<:AbstractMatrix}; kwargs...)
-    # essentially concatenation of the data_from_trajectory calls, but preallocating the output arrays for better performance
     datas = [data_from_trajectory(xs; kwargs...) for xs in xss]
-    dim = size(datas[1][1], 1)
-    nk = size(datas[1][2], 2)
+    dim, nk, _ = size(datas[1][2])
     len = sum(size(d[1], 2) for d in datas)
 
     xs = similar(datas[1][1], dim, len)
     ys = similar(datas[1][2], dim, nk, len)
 
     offset = 0
-    for i in eachindex(datas)
-        x, y = datas[i]
+    for (x, y) in datas
         l = size(x, 2)
-        rng = offset .+ (1:l)
-        offset += l
+        rng = offset+1 : offset+l
         xs[:, rng] = x
         ys[:, :, rng] = y
+        offset += l
     end
     return xs, ys
 end
