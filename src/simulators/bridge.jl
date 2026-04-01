@@ -37,7 +37,13 @@ end
 
 function trajectory(B::GuidedLangevinBridge; x0)
     steps = floor(Int, tmax(B) / OpenMM.stepsize(B.sim))
-    OpenMM.integrate_girsanov(B.sim; x0, steps, bias=biasforce(B))
+    if get(B.sim.constructor, :integrator, "langevin") == "brownian"
+        return OpenMM.integrate_girsanov(B.sim; x0, steps, bias=biasforce(B))
+    else
+         return OpenMM.langevin_girsanov!(B.sim; steps, x0, bias=biasforce(B))
+    end
+    #OpenMM.integrate_girsanov(B.sim; x0, steps, bias=biasforce(B))
+    #OpenMM.langevin_girsanov(B.sim; x0
 end
 
 ##
@@ -58,6 +64,68 @@ function (itp::LinearInterpolant)(x)
 end
 
 ##
+using ISOKANN: phi, psi
+function bridge_simplex(iso; ix=(1,2), eps=0.1, T=1, gain=1, deposit=10, p=plot(), display=false)
+    nd = ISOKANN.outputdim(iso.model)
+    z0 = zeros(nd)
+    z1 = zeros(nd)
+    z0[ix[1]] = 1
+    z1[ix[2]] = 1
+
+    c = chis(iso) |> cpu
+    starts = findall(norm.(eachcol(c .- z0)) .< eps)
+    if  isempty(starts) 
+        @warn("No starting point found within eps=$eps of $z0. Try increasing eps or check the model output.")
+        return nothing
+    end
+
+    @show length(starts)
+    i = rand(starts)
+
+    x0 = coords(iso)[:, i]
+    guide = LinearInterpolant([0,T], hcat(z0, z1))
+
+    glb = GuidedLangevinBridge(iso.data.sim, x->chicoords(iso, x), guide, t->gain)
+    t = trajectory(glb; x0).values
+    #p = scatter_ramachandran(t, ms=1, title="bridge_simplex(ix=$(ix), eps=$(eps), T=$(T), gain=$(gain), deposit=$(deposit))")
+    scatter!(p, ISOKANN.phi(t), ISOKANN.psi(t); ms=1, msw=0, label="$ix", xlims=(-pi, pi), ylims=(-pi, pi))
+
+    if deposit > 0
+        #histogram(chicoords(iso, t)|>vec, bins=20) |> display
+        i_trans = findall(vec(sum(abs2, chicoords(iso, t), dims=1)) .< 0.9)
+        @show length(i_trans)
+        if !isempty(i_trans)
+            xs = t[:, unique(rand(i_trans, deposit))]
+            scatter!(p, ISOKANN.phi(xs), ISOKANN.psi(xs); ms=5, label="deposit", markercolor=:orange)
+            #addcoords!(iso, t[:, 1:div(size(t, 2), deposit):end])
+            addcoords!(iso, xs) #
+        end
+    end
+
+    display && Plots.display(p)
+
+    t
+end
+
+function run_bridges!(iso; sample_bridge=1, train=100, generations=1, plots = [], kwargs...)
+    nd = ISOKANN.outputdim(iso.model)
+    l = @layout [[a; b] c{0.3w}]
+    for i in 1:generations
+        p = plot()
+        for i1 in 1:nd, i2 in 1:nd
+            i1 == i2 && continue
+            bridge_simplex(iso; ix=(i1,i2), p, kwargs...)
+        end
+        run!(iso, train)
+        if plots != false
+            p = plot(scatter_ramachandran(iso), p, plot_training(iso); layout=l,size = (800, 800))
+            display(p)
+            push!(plots, p)
+        end
+    end
+    plots
+end
+
 
 function bridge_rama(;
     sim=OpenMMSimulation(friction=1000, integrator="brownian"),
@@ -283,7 +351,7 @@ function adaptive(iso, n)
 end
 
 # hijacking to allow gpu computatio
-Distances.pairwise(metric::Distances.SqEuclidean, a::AbstractMatrix) = ISOKANN.sqpairdist(a)
+ISOKANN.Distances.pairwise(metric::ISOKANN.Distances.SqEuclidean, a::AbstractMatrix) = ISOKANN.sqpairdist(a)
 
 
 # TODO if density is reasonable, pick by ramach angle

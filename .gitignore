@@ -16,3 +16,6 @@ LocalPreferences.toml
 *.pdf
 core
 docs/Manifest.toml
+*.mp4
+*.gif
+*.iso
