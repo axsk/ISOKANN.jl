@@ -1,44 +1,38 @@
 using LinearAlgebra: norm
 using Interpolations
 
-global HEIGHT = 1f0   # default Gaussian height
-global SIGMA = 0.1f0  # default Gaussian width
-global dT::Float32 = 600       # well-tempered offset (Inf = classic metadynamics)
-
-const DT=600f0
 # well tempered metadynamics reweighting
-rescale_welltempered(U, dt::Float32=DT) = isfinite(dt) ? dt * log(1 + U / dt) : U
+rescale_welltempered(U, dt=1600f0) = isfinite(dt) ? dt * log(1 + U / dt) : U
 
 ### MetadynamicsSimulator (main API)
 
-mutable struct MetadynamicsSimulator
-    sim
-    force
-    mdstate
+mutable struct MetadynamicsSimulator{S, R, MS, T<:Real}
+    sim::S
+    rc::R
+    mdstate::MS
+    dt::T     ## welltempered offset (Inf = classic metadynamics)
+    height::T ## Gaussian height
+    sigma::T  ## Gaussian width
 end
 
 @functor MetadynamicsSimulator (mdstate,)
 
-function MetadynamicsSimulator(sim, rc::Function; height=HEIGHT, sigma=SIGMA, centers=Vector{Float32}[], mdstatetype=MetadynamicsStateMatrix)
-    mdstate = mdstatetype(centers; height, sigma)
-    function mdforce(x::AbstractVector; kwargs...)
-        grad, = Zygote.gradient(x -> bias_potential(mdstate, rc(x)), x)
-        return -grad
-    end
-    return MetadynamicsSimulator(sim, mdforce, mdstate)
+function (ms::MetadynamicsSimulator)(x::AbstractVector; kwargs...)
+    grad, = Zygote.gradient(x -> rescale_welltempered(bias_potential(ms.mdstate, ms.rc(x); ms.height, ms.sigma), ms.dt), x)
+    return -grad
 end
 
 # Convenience constructor: use chicoords of an Iso as the reaction coordinate
-function MetadynamicsSimulator(iso::Iso; height=HEIGHT, sigma=SIGMA)
+function MetadynamicsSimulator(iso::Iso; height=1f0, sigma=0.1f0, dt=600f0)
     isokann_rc(x) = project_onto_simplex_hyperplane(chicoords(iso, x))
-    centers = chis(iso)
-    return MetadynamicsSimulator(iso.data.sim, isokann_rc; height, sigma, centers)
+    mdstate = MetadynamicsStateMatrix(chis(iso))
+    return MetadynamicsSimulator(iso.data.sim, isokann_rc, mdstate, dt, height, sigma)
 end
 
 project_onto_simplex_hyperplane(x) = length(x) > 1 ? x .- ((sum(x)-1) / length(x)) : x
 
 trajectory(mdsim::MetadynamicsSimulator; kwargs...) =
-    OpenMM.langevin_girsanov!(mdsim.sim; bias=mdsim.force, sigmascaled=false, kwargs...)
+    OpenMM.langevin_girsanov!(mdsim.sim; bias=mdsim, sigmascaled=false, kwargs...)
 
 # TODO: OpenMM-style online metadynamics via step!(mdsim, nsteps)
 # Add `frequency::Int` field to MetadynamicsSimulator (deposit every N steps).
@@ -49,7 +43,7 @@ trajectory(mdsim::MetadynamicsSimulator; kwargs...) =
 #       x = x0
 #       samples = []
 #       for _ in 1:(nsteps ÷ mdsim.frequency)
-#           t = OpenMM.langevin_girsanov!(mdsim.sim; bias=mdsim.force,
+#           t = OpenMM.langevin_girsanov!(mdsim.sim; bias=mdsim,
 #                   steps=mdsim.frequency, saveevery=mdsim.frequency,
 #                   sigmascaled=false, x0=x)
 #           x = t.values[:, end]
@@ -66,44 +60,46 @@ trajectory(mdsim::MetadynamicsSimulator; kwargs...) =
 # iso is passed separately since this is iso-specific visualization
 function plot_profile(mdsim::MetadynamicsSimulator, iso; zs=-0.1:0.01:1.1)
     T = OpenMM.temp(mdsim.sim)
-    global dT
     mdstate = cpu(mdsim.mdstate)   # plotting is always CPU
     if ISOKANN.outputdim(iso.model) == 1
         # plot over uniform grid
-        V = [bias_potential(mdstate, [z]) for z in zs]
-        F = -(T + dT) / T * V
+        F = wt_free_energy(mdsim, zs)
         plot(zs, F, xlabel="z", ylabel="V(z)", title="Metadynamics Free Energy Profile")
         chilast = chicoords(iso, coords(iso)[:, end]) |> cpu
-        Flast = -(T + dT) / T * bias_potential(mdstate, chilast)
+        Flast = -(T + mdsim.dt) / T * bias_potential(mdstate, chilast; mdsim.height, mdsim.sigma)
         scatter!(chilast, [Flast])
     else
         # scatter over data points
-        chi_vals = cpu(chis(iso))
-        V = [bias_potential(mdstate, x) for x in eachcol(chi_vals)]
-        F = -(T + dT) / T * V
+        F = wt_free_energy(mdsim, eachcol(chi_vals))
         scatter(eachrow(chi_vals)..., marker_z=F, camera=(135, 35))
     end
 end
 
-function adaptive_metadynamics(iso; deposit=OpenMM.steps(iso.data.sim), height=HEIGHT, sigma=SIGMA, x0=coords(iso)[:, end])
-    md = MetadynamicsSimulator(iso; height, sigma)
-    @time "Girsanov trajectory" t = trajectory(md; x0, saveevery=deposit)
+function wt_free_energy(mdsim::MetadynamicsSimulator, zs) 
+    T = OpenMM.temp(mdsim.sim)
+    V = [bias_potential(mdsim.mdstate, [z]; mdsim.height, mdsim.sigma) for z in zs]
+    F = -(T + mdsim.dt) / T * V
+    return F
+end
+function adaptive_metadynamics(iso; deposit=OpenMM.steps(iso.data.sim), x0=coords(iso)[:, end], mdargs...)
+    md = MetadynamicsSimulator(iso; mdargs...)
+    t = trajectory(md; x0, saveevery=deposit)
     @assert norm(t.values[:, end]) < 100
     xnew = values(t)
     addcoords!(iso, xnew)
     return (; t, md, xnew)
 end
 
-function run_metadynamics!(iso; generations=100, height=HEIGHT, sigma=SIGMA, iter=100, plots=[])
+function run_metadynamics!(iso; generations=100, iter=100, plots=[], mdargs...)
     for _ in 1:generations
-        @time adaptive_metadynamics(iso; height, sigma)
+        @time adaptive_metadynamics(iso; mdargs...)
         @time run!(iso, iter)
         if plots != false
             l = @layout [[a; b] c{0.3w}]
             global p1 = scatter_ramachandran(iso)
             scatter!(p1, [ISOKANN.phi(coords(iso)[:, end])], [ISOKANN.psi(coords(iso)[:, end])])
             global p2 = plot_training(iso)
-            global p3 = plot_profile(MetadynamicsSimulator(iso; height, sigma), iso)
+            global p3 = plot_profile(MetadynamicsSimulator(iso; mdargs...), iso)
             p = plot(p1, p3, p2, layout=l, size=(800, 800))
             display(p)
             push!(plots, p)
@@ -148,22 +144,6 @@ function makeanim(ps, filename)
     mp4(a, filename)
 end
 
-function benchmark_metadynamics(n=10000, d=3)
-    centers = randn(Float32, d, n)
-    z = rand(d)
-    ms = [
-        #MetadynamicsState(centers; height=HEIGHT, sigma=SIGMA),
-        MetadynamicsStateMatrix(centers; height=HEIGHT, sigma=SIGMA),
-        #MetadynamicsStateGridded(centers, tuple(repeat([range(0f0, 1f0, length=10)], d)...); height=HEIGHT, sigma=SIGMA)
-    ]
-    for m in ms
-        @show typeof(m)
-        @show @time bias_potential(m, z)
-        m = gpu(m)
-        z = gpu(z)
-        @show @time bias_potential(m, z)
-    end
-end
 
 ### State implementations (optional variants)
 
@@ -180,22 +160,20 @@ See also: `MetadynamicsStateMatrix`, `MetadynamicsStateGridded`
 """
 struct MetadynamicsState{T<:Number,V<:AbstractVector{T}}
     centers::Vector{V}   # visited RC values s_i
-    height::T       # h
-    sigma::T        # σ
 end
 
-MetadynamicsState(centers::AbstractMatrix{T}; height=HEIGHT, sigma=SIGMA) where T =
-    MetadynamicsState([view(centers, :, i) for i in 1:size(centers, 2)], T(height), T(sigma))
+MetadynamicsState(centers::AbstractMatrix{T}) where T =
+    MetadynamicsState([view(centers, :, i) for i in 1:size(centers, 2)])
 
 
 # Bias potential in RC space: V(s) = sum_i h * exp(-|s-s_i|^2 / 2σ^2)
-function bias_potential(mdstate::MetadynamicsState{T}, z::AbstractVector) where T
+function bias_potential(mdstate::MetadynamicsState{T}, z::AbstractVector; height, sigma) where T
     isempty(mdstate.centers) && return zero(T)
     @assert length(z) == length(mdstate.centers[1])
     wN = sum(mdstate.centers) do sᵢ
-        mdstate.height * exp(-sum(abs2, z .- sᵢ) / (2 * mdstate.sigma^2))
+        height * exp(-sum(abs2, z .- sᵢ) / (2 * sigma^2))
     end
-    return rescale_welltempered(wN)
+    return wN
 end
 
 """
@@ -211,20 +189,14 @@ See also: `MetadynamicsState`, `MetadynamicsStateGridded`
 """
 struct MetadynamicsStateMatrix{T<:Number, M<:AbstractMatrix{T}}
     centers::M
-    height::T
-    sigma::T
 end
 
-function MetadynamicsStateMatrix(centers::AbstractMatrix{T}; height=HEIGHT, sigma=SIGMA) where T
-    MetadynamicsStateMatrix(centers, T(height), T(sigma))
-end
-
-function bias_potential(mdstate::MetadynamicsStateMatrix{T}, z::AbstractVector) where T
+function bias_potential(mdstate::MetadynamicsStateMatrix{T}, z::AbstractVector; height, sigma) where T
     size(mdstate.centers, 2) == 0 && return zero(T)
     @assert length(z) == size(mdstate.centers, 1)
     dists_sq = sum(abs2, z .- mdstate.centers, dims=1)
-    wN = sum(mdstate.height .* exp.(-dists_sq ./ (2 * mdstate.sigma^2)))
-    return rescale_welltempered(wN)
+    wN = sum(height .* exp.(-dists_sq ./ (2 * sigma^2)))
+    return wN
 end
 
 """
@@ -242,7 +214,7 @@ struct MetadynamicsStateGridded{ITP}
     interpolant::ITP  # cubic spline interpolator (encodes grid structure and data)
 end
 
-function MetadynamicsStateGridded(xs::AbstractMatrix{T}, ranges::NTuple{N,<:AbstractRange}; height=HEIGHT, sigma=SIGMA) where {T,N}
+function MetadynamicsStateGridded(xs::AbstractMatrix{T}, ranges::NTuple{N,<:AbstractRange}; height, sigma) where {T,N}
     grid = zeros(T, length.(ranges)...)  # Create grid of correct size
     for idx in CartesianIndices(grid)
         z = [ranges[i][idx[i]] for i in 1:N]  # Get RC coords at grid point
@@ -256,5 +228,5 @@ function MetadynamicsStateGridded(xs::AbstractMatrix{T}, ranges::NTuple{N,<:Abst
 end
 
 function bias_potential(mdstate::MetadynamicsStateGridded, z::AbstractVector)
-    return rescale_welltempered(mdstate.interpolant(z...))
+    return mdstate.interpolant(z...)
 end

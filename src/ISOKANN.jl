@@ -113,6 +113,7 @@ include("isotarget.jl")
 include("utils/plots.jl")           # visualizations
 
 include("simulators/openmm.jl")
+include("simulators/metadynamics.jl")
 
 import .OpenMM.OpenMMSimulation
 export OpenMMSimulation

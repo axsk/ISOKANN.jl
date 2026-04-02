@@ -17,6 +17,10 @@ end
     include("workflow.jl")
 end
 
+@time @testset "MetadynamicsSimulator" verbose = true begin
+    include("metadynamics.jl")
+end
+
 function with_possible_broken_domain(f)
     try
         r = f()
