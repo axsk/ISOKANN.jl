@@ -33,6 +33,10 @@ function sqpairdist(x::AbstractArray{<:Any,3})
     return p
 end
 
+function sqpairdist(x::CuArray{<:Any,3})
+    return sqpairdist_fused(x)
+end
+
 sqpairdist(x::AbstractMatrix) = sqpairdist(reshape(x, size(x)..., 1))[:, :, 1]
 
 pairdist(x::AbstractArray) = sqrt.(sqpairdist(x))
@@ -126,4 +130,66 @@ function localpdists(coords, radius)
   inds = localpdistinds(coords, radius)
   dists = pdists(coords, inds)
   dists, inds
+end
+
+# --- Fused forward kernel ---
+function sqpairdist_kernel!(p, x, d, n)
+    i = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+    j = (CUDA.blockIdx().y - 1) * CUDA.blockDim().y + CUDA.threadIdx().y
+    b = CUDA.blockIdx().z
+    (i > n || j > n) && return
+
+    s = zero(eltype(p))
+    for k in 1:d
+        @inbounds diff = x[k, i, b] - x[k, j, b]
+        s += diff * diff
+    end
+    @inbounds p[i, j, b] = s
+    return
+end
+
+# --- Fused backward kernel ---
+function sqpairdist_bwd_kernel!(Δx, x, Δp, d, n)
+    # Each thread computes one element Δx[k, i, b]
+    k = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+    i = (CUDA.blockIdx().y - 1) * CUDA.blockDim().y + CUDA.threadIdx().y
+    b = CUDA.blockIdx().z
+    (k > d || i > n) && return
+
+    s = zero(eltype(Δx))
+    for j in 1:n
+        # From the formula: Δx_ab = 2 * Σ_m (Δp_bm + Δp_mb)(x_ab - x_am)
+        @inbounds s += (Δp[i, j, b] + Δp[j, i, b]) * (x[k, i, b] - x[k, j, b])
+    end
+    @inbounds Δx[k, i, b] = 2 * s
+    return
+end
+
+#0.8ms
+function sqpairdist_fused(x::CuArray{T,3}) where T
+    d, n, batch = size(x)
+    p = similar(x, n, n, batch)
+    threads = (min(n, 16), min(n, 16))
+    blocks = (cld(n, threads[1]), cld(n, threads[2]), batch)
+    CUDA.@cuda threads=threads blocks=blocks sqpairdist_kernel!(p, x, d, n)
+    return p
+end
+
+function ChainRulesCore.rrule(::typeof(sqpairdist_fused), x::CuArray{T,3}) where T
+    d, n, batch = size(x)
+    p = similar(x, n, n, batch)
+    threads = (min(n, 16), min(n, 16))
+    blocks = (cld(n, threads[1]), cld(n, threads[2]), batch)
+    CUDA.@cuda threads=threads blocks=blocks sqpairdist_kernel!(p, x, d, n)
+
+    function sqpairdist_fused_pullback(Δp̄)
+        Δp = similar(p) .= Zygote.unthunk(Δp̄)
+        Δx = similar(x)
+        threads_bwd = (min(d, 8), min(n, 32))
+        blocks_bwd = (cld(d, threads_bwd[1]), cld(n, threads_bwd[2]), batch)
+        CUDA.@cuda threads=threads_bwd blocks=blocks_bwd sqpairdist_bwd_kernel!(Δx, x, Δp, d, n)
+        return Zygote.NoTangent(), Δx
+    end
+
+    return p, sqpairdist_fused_pullback
 end
