@@ -1,5 +1,6 @@
 [deps]
 openmm = ""
+cudatoolkit = ""
 numpy = ""
 joblib = ""
 mdtraj = ""

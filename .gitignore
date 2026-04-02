@@ -19,3 +19,7 @@ docs/Manifest.toml
 *.mp4
 *.gif
 *.iso
+scripts
+plots
+notebooks
+CLAUDE.md
