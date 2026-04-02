@@ -87,6 +87,7 @@ export coords, features, propcoords, propfeatures
 export ExternalSimulation
 export densenet
 export flattenlast
+export MetadynamicsSimulation
 
 export picking
 
@@ -114,6 +115,7 @@ include("utils/plots.jl")           # visualizations
 
 include("simulators/openmm.jl")
 include("simulators/metadynamics.jl")
+include("workflows.jl")
 
 import .OpenMM.OpenMMSimulation
 export OpenMMSimulation
