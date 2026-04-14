@@ -161,8 +161,11 @@ temp(pysim::PyObject) = pysim.integrator.getTemperature()._value  |> _jlfloat # 
 stepsize(pysim::PyObject) = pysim.integrator.getStepSize()._value |> _jlfloat # ps
 iscuda(pysim::PyObject) = string(pysim.context.getPlatform().getName()) == "CUDA"
 
+isbrownian(sim) = get(sim.constructor, :integrator, nothing) == "brownian"
+
 
 coords(pysim::PyObject) = pysim.context.getState(getPositions=true, enforcePeriodicBox=true).getPositions(asNumpy=true)._value |> _xyz_py_to_jl
+velocities(pysim::PyObject) = pysim.context.getState(getVelocities=true, enforcePeriodicBox=true).getVelocities(asNumpy=true)._value |> _xyz_py_to_jl
 
 function setcoords(sim::PyObject, coords::AbstractVector{T}) where {T}
     c = _xyz_jl_to_py(coords)
@@ -438,13 +441,18 @@ function langevin_step!(x, v, F, m, gamma, kBT, dt)
     @. x += v * dt
 end
 
-function constants(sim::OpenMMSimulation)
+
+function constants(sim::OpenMMSimulation, overdamped=isbrownian(sim))
     dt = stepsize(sim)
     gamma = friction(sim)
 
     M = repeat(masses(sim), inner=3)
     T = temp(sim)
-    sigma = @. sqrt(2 * kB * T / (gamma * M))
+    sigma = if overdamped
+        @. sqrt(2 * kB * T / (gamma * M))
+    else
+        @. sqrt(2 * kB * T * gamma * M)
+    end
 
     return (;sigma, T, M, gamma, dt, kB)
 end
@@ -479,7 +487,7 @@ The method assumes overdamped Langevin dynamics and accumulates the correspondin
 """
 function integrate_girsanov(sim::OpenMMSimulation; x0=coords(sim), steps=steps(sim), bias, reclaim=true)
     reclaim && claim_memory(sim)
-    (;sigma, T, M, gamma, dt) = constants(sim)
+    (;sigma, T, M, gamma, dt) = constants(sim, overdamped=true)
 
     x = copy(x0)
     logw = 0.0
@@ -549,7 +557,7 @@ function langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bi
     M = repeat(masses(sim), inner=3)
 
     # Maxwell-Boltzmann distribution
-    p = randn(length(M)) .* sqrt.(M .* kB .* T)
+    p = sample_velocity ? randn(length(M)) .* sqrt.(M .* kB .* T) : velocities(sim.pysim)
 
     # note the noise amplitude for underdamped Langevin is different from overdamped, i.e.
     σ = @. sqrt(2 * kB * T * ξ * M)
