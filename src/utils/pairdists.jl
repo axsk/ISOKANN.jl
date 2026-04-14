@@ -18,6 +18,7 @@ function flatpairdists(x, cols=:)
 
     inds = halfinds(c)
     p = p[inds, :]
+    p = max.(p, 0) # numerical stability
     p = sqrt.(p)
     return reshape(p, length(inds), s...)
 end
