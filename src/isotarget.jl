@@ -73,13 +73,24 @@ Compute the target via the inner simplex algorithm (without feasiblization routi
 `permute` specifies whether to apply the stabilizing permutation """
 @kwdef struct TransformISA
     permute::Bool = true
+    whitening::Bool = false
 end
 
 # we cannot use the PCCAPAlus inner simplex algorithm because it uses feasiblize!,
 # which in turn assumes that the first column is equal to one.
-function myisa(X)
+function myisa(X, whitening)
+    X = Float64.(X)
     try
-        inv(X[PCCAPlus.indexmap(X), :])
+        # whitened row choice
+        if whitening
+            C = 1/size(X, 1) * X' * X
+            W = C^(-1/2)
+            XW = X * W
+            i = PCCAPlus.indexmap(XW)
+        else
+            i = PCCAPlus.indexmap(X)
+        end
+        inv(X[i, :])
     catch e
         Base.showerror(e)
         throw(DomainError("Could not compute the simplex transformation. The subspace might be singular/collapsed"))
@@ -90,7 +101,7 @@ function isotarget(t::TransformISA, model, xs::T, ys) where {T}
     chi = model(xs) |> cpu
     @assert size(chi, 1) > 1 "TransformISA does not work with one dimensional chi functions"
     ks = expectation(model, ys) |> cpu
-    target = myisa(ks')' * ks
+    target = myisa(ks', t.whitening)' * ks
     t.permute && (target = fixperm(target, chi))
     return T(target)
 end
