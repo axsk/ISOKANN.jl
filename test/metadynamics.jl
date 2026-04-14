@@ -8,4 +8,5 @@ using Test
     run!(iso, 1)
     ms = MetadynamicsSimulator(iso)
     trajectory(ms)
+    run_metadynamics!(iso; generations=1, iter=1)
 end

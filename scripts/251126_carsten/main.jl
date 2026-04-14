@@ -201,9 +201,9 @@ function gendata(; steps=100, nx0 = 10_000, nx=1000, k=8, iter=2000)
     DATA = SimulationData(SIM, X[:, ix], k; featurizer)
 
     #committors = empirical_committor(data;K)  # monte carlo committor estimation
-    #iso = Iso(data, transform=CommittorTarget(committors))
+    #iso = Iso(data, target=CommittorTarget(committors))
 
-    ISO = Iso(DATA, transform=CommittorTarget(DATA))
+    ISO = Iso(DATA, target=CommittorTarget(DATA))
     run!(ISO, iter)
 end
 
@@ -246,13 +246,14 @@ function ustar(iso::Iso; eps=1e-8, maxnorm=USTAR_MAXNORM)
         x = Float32.(x)
         phi = ISOKANN.chicoords(iso, x) |> cpu |> only
         dphi = ISOKANN.dchidx(iso, x)
-        c = dphi ./ max(phi,eps)
+        c = dphi ./ max(phi,eps) # = nabla log(phi) = optimal control
         if !all(isfinite.(c))
             @show x
             @error "infinite control"
         end
-        u = σ .* c  
+        u = - σ .* c  ## TODO: check sign 
         if norm(u) > maxnorm
+            @info "clipping control from norm $(norm(u)) to $maxnorm"
             u = u / norm(u) * maxnorm
         end
 
@@ -314,6 +315,7 @@ function _girsanov(sim, x0=coords(sim); steps=steps(sim), dt=stepsize(sim), bias
 
         F = force(sim, x, reclaim=false)
         ux = bias(x)
+        rand() > .9999 && @show norm(F), norm(ux)
         if norm(F) > 100_000
             @show norm(F), norm(x)
             println()
@@ -403,10 +405,10 @@ function resample!(t::ApproxPolicyIter5, iso;
         is=sort(sample(1:length(t.Js), t.sample_n, replace=false)),
         dt = stepsize(sim))
 
-    bias = ustar(cpu(iso)) # cpu is faster for single calls
+    bias = ustar(cpu(iso)) # cpu is ~5x faster for single calls
 
-    for i in is
-        g = girsanov(iso.data.sim, coords(iso)[:, i]; steps, bias, classify=t.classifier, dt)
+    ISOKANN.CUDA.@allowscalar for i in is
+        secs = @elapsed g = girsanov(iso.data.sim, coords(iso)[:, i]; steps, bias, classify=t.classifier, dt)
 
         class = t.classifier(g.x)
         if class == :A
@@ -415,26 +417,27 @@ function resample!(t::ApproxPolicyIter5, iso;
             j = g.u2 / 2 - logclamped(t.q1)
         else
             print("x")
-            j = g.u2 / 2 - logclamped(chicoords(iso,g.x)|>only)
+            j = g.u2 / 2 - logclamped(chicoords(iso,g.x)|>cpu|>only)
         end
 
         @assert isfinite(j)
-
+        
         if DEBUG
             append!(QS[i], exp(-j))
-            h = (;i, g.T, g.u2, q_j=exp(-j), q_J=exp(-t.Js[i]), g)
-            #@show (;i, g.class, g.T, g.u2, q=exp(-j))
+            h = (;i, g.T, g.u2, q_j=exp(-j), q_J=exp(-t.Js[i]),)
+            println((;g.T, secs, class, g.u2, q=exp(-j), qold=exp(-t.Js[i]), i))
             push!(HIST, h)
         end
 
         t.Js[i] += α * (j - t.Js[i]) # moving average
+        #@show i, j, t.Js[i]
     end
 end
 
 # sample a single J realization per point (from K randomly chosen) and update moving average, return q estimate for training
 function ISOKANN.isotarget(iso, t::ApproxPolicyIter5)
     global Js
-    if t.sample_α > 0
+    if t.sample_α > 0 && t.sample_n > 0
         resample!(t, iso)
     end
     q = exp.(-t.Js)
@@ -452,8 +455,8 @@ function iso_api(; data=iso_q.data, nx=length(data), α=Float32(1 / 100), K=nx, 
         J0 = init_J(coords(data), classifier, q0, q1)
     end
     
-    transform = ApproxPolicyIter5(;Js=J0, sample_n=K, sample_α=α, classifier, q0, q1)
-    iso = Iso(data; transform, model=deepcopy(model), isoargs...)
+    target = ApproxPolicyIter5(;Js=J0, sample_n=K, sample_α=α, classifier, q0, q1)
+    iso = Iso(data; target, model=deepcopy(model), isoargs...)
     global QS = [Float32[] for i in 1:nx]
     return iso
 end
@@ -461,7 +464,7 @@ end
 function init_J(xs, classifier, q0, q1)
     c = classifier.(eachcol(xs))
     J0 = zeros(size(xs, 2))
-    J0 .= -log(q0+q1 / 2)
+    J0 .= -log((q0+q1) / 2)
     J0[c .== :A] .= -log(q0)
     J0[c .== :B] .= -log(q1)
     J0
@@ -496,13 +499,13 @@ function plot_girsanov_force(g, iso)
 end
 
 function aladip()
-    sim = sim = OpenMMSimulation(steps=200, integrator="brownian", step=5e-6) 
+    sim = OpenMMSimulation(steps=200, integrator="brownian", step=2e-6) 
     xs = laggedtrajectory(sim, 1000)
     data = SimulationData(sim, xs, 0, featurizer=x->Float32.(OpenMM.FeaturesAll()(x)))
-    model = ISOKANN.defaultmodel(data, activation=ISOKANN.Flux.tanh_fast) 
+    model = ISOKANN.defaultmodel(data, activation=ISOKANN.Flux.sigmoid_fast) 
     ia = iso_api(;data, model, classifier=classify, K=1, q0=1., q1=10.)
-    ia.transform.sample_α = 1/10
-    ia.transform.sample_maxsteps = 100
+    ia.target.sample_α = 1/10
+    ia.target.sample_maxsteps = 100
     return ia
 end
 #=
@@ -543,3 +546,6 @@ function api_data(data=DATA, n=100)
 end
 
 =#
+
+
+##

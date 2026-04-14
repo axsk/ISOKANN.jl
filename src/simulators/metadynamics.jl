@@ -46,7 +46,7 @@ end
 function MetadynamicsSimulation(iso::Iso; height=1f0, sigma=0.1f0, dt=600f0)
     isokann_rc(x) = project_onto_simplex_hyperplane(chicoords(iso, x))
     mdstate = MetadynamicsStateMatrix(chis(iso))
-    return MetadynamicsSimulation(iso.data.sim, isokann_rc, mdstate, dt, height, sigma)
+    return MetadynamicsSimulation(iso.data.sim, isokann_rc, mdstate, promote(dt, height, sigma)...)
 end
 
 deposit!(md::MetadynamicsSimulation, z) = deposit!(md.mdstate, z)
@@ -70,7 +70,12 @@ function plot_profile(md::MetadynamicsSimulation, iso;)
     else
         chivals = chis(iso) |> cpu
         F = wt_free_energy(md, chivals)
-        scatter(eachrow(chivals)..., marker_z=F, camera=(135, 35), title="Metadynamics Free Energy Profile")
+        scatter(eachrow(chivals[1:3, :])..., marker_z=F, camera=(135, 35),
+            grid=false, showaxis=false, label=false)
+        scatter!(eachrow(chivals[1:3, end:end])..., m=:star5, ms=10, label=false)
+        annotate!([(1.2, 0, 0, text("χ₁", 12)),
+                   (0, 1.2, 0, text("χ₂", 12)),
+                   (0, 0, 1.2, text("χ₃", 12))])
     end
 end
 
