@@ -518,7 +518,7 @@ trajectory(sim::OpenMMSimulation{<:Function}, steps=steps(sim); kwargs...) = lan
 
 
 """
-    langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true)
+    langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true, should_stop=nothing)
 
 Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov reweighting.
 
@@ -533,6 +533,7 @@ Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov r
 - `throw` : Whether to throw errors on invalid states.
 - `reclaim` : Whether to preallocate memory for performance.
 - `sigmascaled` : Whether the bias is scaled by the noise amplitude, i.e. whether the resulting force is `σ * bias` (true) or only `bias` (false) (default: true).
+- `should_stop` : Optional stopping criterion function called at save points with kwargs `(; k, t, logw)`. Returns `Bool` to interrupt integration (default: `nothing` for no early stopping).
 
 # Returns
 - `WeightedSamples` containing:
@@ -543,7 +544,7 @@ Perform underdamped Langevin dynamics using the ABOBA integrator with Girsanov r
 - Uses the ABOBA splitting scheme for stable underdamped Langevin integration.
 - Computes Girsanov weights to account for the applied bias.
 """
-function langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bias, saveevery=1, x0=coords(sim), resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true)
+function langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bias, saveevery=1, x0=coords(sim), sample_velocity=false, resample_velocities=false, showprogress=true, throw=true, reclaim=true, sigmascaled=true, should_stop::Union{Function, Nothing}=nothing)
     reclaim && claim_memory(sim)
     prog = ProgressMeter.Progress(steps, desc="Langevin Girsanov", dt=1)
     nout = div(steps, saveevery)
@@ -572,6 +573,7 @@ function langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bi
     η = similar(p)
     Δη = similar(p)
     logw = 0
+    nout = 0
 
     for k in 1:steps
         randn!(η)
@@ -590,11 +592,18 @@ function langevin_girsanov!(sim::OpenMMSimulation; steps=steps(sim), bias=sim.bi
         @. q += a * p # A
 
         if k % saveevery == 0
-            let i = div(k, saveevery)
-                qs[:, i] = q
-                logws[1, i] = logw
+            nout += 1
+            qs[:, nout] = q
+            logws[1, nout] = logw
+
+            # Check stopping criterion after saving
+            if !isnothing(should_stop) && should_stop(; q, p, step=k, t=k * dt, logw)
+                qs = qs[:, 1:nout]
+                logws = logws[:, 1:nout]
+                break
             end
-            if resample_velocities 
+
+            if resample_velocities
                 p = randn(length(M)) .* sqrt.(M .* kB .* T)
                 logw = 0  # reset girsanov weights for each "snippet" anew
             end
