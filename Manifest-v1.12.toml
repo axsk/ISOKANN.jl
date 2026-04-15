@@ -495,7 +495,7 @@ version = "2.5.1"
 
 [[deps.CondaPkg]]
 deps = ["JSON", "Markdown", "MicroMamba", "Pidfile", "Pkg", "Preferences", "Scratch", "TOML", "pixi_jll"]
-path = "/home/htc/bzfsikor/.julia/dev/CondaPkg"
+git-tree-sha1 = "0300af904a8c8d41ff715a60a6959136d22b8572"
 uuid = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 version = "0.2.34"
 

@@ -12,7 +12,7 @@ using ISOKANN: coords, phi, psi, force, scatter_ramachandran
 using ISOKANN.OpenMM: OpenMMSimulation, laggedtrajectory, langevin_girsanov!, stepsize
 using LinearAlgebra: norm, dot, I
 using ProgressMeter: @showprogress
-using Zygote: gradient  
+using Zygote: gradient
 using StatsBase: mean
 using JLD2: @save
 
@@ -48,16 +48,20 @@ end
 function create_bias_function(grid::Grid, dt::Real; max_force_norm::Real=1000.0)
     """Create bias function for langevin_girsanov! that stores u² per step."""
     u2_array = Float64[]
+    reported = false
     function bias(q; t=0, sigma, F=nothing)
         dJ_dx = control_from_grid(grid, q)
         u_control = -sigma .* dJ_dx
 
         u_norm = norm(u_control)
         if u_norm > max_force_norm
-            print("💥")
+            if !reported
+                print("💥")
+                reported = true
+            end
             u_control .*= max_force_norm / u_norm
         end
-        
+
         u2_inc = dot(u_control, u_control) * dt
         push!(u2_array, u2_inc)
 
@@ -90,7 +94,7 @@ function simulate(grid::Grid, sim::OpenMMSimulation, x0::AbstractVector;
     else
         # dynamic programming approach
         println("⚠ didnt terminate in A or B after $steps steps:")
-        v = u2 / 2 - interpolate_J(grid, phi(xt), psi(xt))
+        v = u2 / 2 + interpolate_J(grid, phi(xt), psi(xt))
     end
 
     q = exp(-v)
@@ -242,7 +246,7 @@ end
 function linindex(grid::RamachandranGrid, x)
     i = argmin(abs.(grid.phi_knots .- x[1]))
     j = argmin(abs.(grid.psi_knots .- x[2]))
-    return i + (j - 1) * length(grid.psi_knots)
+    return i + (j - 1) * length(grid.phi_knots)
 end
 
 
