@@ -14,8 +14,14 @@ integrator="langevin"):
     pdb = PDBFile(pdb)
 
     if mmthreads == 'gpu':
-      platform = Platform.getPlatformByName('CUDA')
-      platformargs = {}
+      try:
+        platform = Platform.getPlatformByName('CUDA')
+        platformargs = {}
+      except Exception as e:
+        import warnings
+        warnings.warn(f"CUDA platform unavailable for OpenMM ({e}); falling back to CPU.")
+        platform = Platform.getPlatformByName('CPU')
+        platformargs = {}
     else:
       platform = Platform.getPlatformByName('CPU')
       platformargs = {'Threads': str(mmthreads)}
