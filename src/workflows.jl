@@ -2,8 +2,8 @@
 
 function run_metadynamics!(iso; generations=100, iter=100, plots::Union{Bool, AbstractArray}=[], mdargs...)
     for _ in 1:generations
-        @time adaptive_metadynamics(iso; mdargs...)
-        @time run!(iso, iter)
+        adaptive_metadynamics(iso; mdargs...)
+        run!(iso, iter)
         if plots != false
             p = metadynamics_dashboard(iso; mdargs...)
             display(p)
@@ -16,7 +16,7 @@ end
 function adaptive_metadynamics(iso; deposit=OpenMM.steps(iso.data.sim), x0=coords(iso)[:, end], maxnorm=20, mdargs...)
     md = MetadynamicsSimulation(iso; mdargs...)
     t = trajectory(md; x0, saveevery=deposit)
-    @show norm(t.values[:, end]), t.values[1:3, end]
+    #@show norm(t.values[:, end]), t.values[1:3, end]
     @assert norm(t.values[:, end] .- x0) < maxnorm
     xnew = values(t)
     addcoords!(iso, xnew)

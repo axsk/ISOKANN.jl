@@ -6,7 +6,7 @@ using Test
 @testset "MetadynamicsSimulator" begin
     iso = Iso(OpenMMSimulation(), nx=10)
     run!(iso, 1)
-    ms = MetadynamicsSimulator(iso)
+    ms = MetadynamicsSimulation(iso)
     trajectory(ms)
-    run_metadynamics!(iso; generations=1, iter=1)
+    ISOKANN.run_metadynamics!(iso; generations=1, iter=1)
 end

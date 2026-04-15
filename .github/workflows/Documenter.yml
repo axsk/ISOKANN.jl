@@ -18,19 +18,9 @@ jobs:
     env:
       PYTHON: ""
     steps:
-      # - uses: actions/checkout@v4
-      #- name: "Manually add Conda.jl folder due to bug in its build step" # https://github.com/JuliaPy/Conda.jl/issues/251
-      #  run: |
-      #    mkdir -p "/home/runner/.julia/conda/3/x86_64"
-      #- uses: julia-actions/cache@v2
-      #- uses: julia-actions/julia-docdeploy@v1
-      #  env:
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate(); Pkg.build()'
       - name: Build and deploy

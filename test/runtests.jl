@@ -15,6 +15,7 @@ end
 
 @time @testset "workflow run" verbose = true begin
     include("workflow.jl")
+    @test true
 end
 
 @time @testset "MetadynamicsSimulator" verbose = true begin
@@ -57,7 +58,7 @@ for backend in backends
     @testset "Iso Transforms ($backend)" begin
         for (d, t) in zip([1, 2, 2], [ISOKANN.TransformShiftscale(), ISOKANN.TransformPseudoInv(), ISOKANN.TransformISA()])
             @testset "$t" begin
-                run!(Iso(data, model=pairnet(data, nout=d), transform=t) |> backend)
+                run!(Iso(data, model=pairnet(data, nout=d), target=t) |> backend)
                 @test true
             end
         end

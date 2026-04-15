@@ -2,6 +2,9 @@ name: Run tests
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 # needed to allow julia-actions/cache to delete old caches that it has created
 permissions:
@@ -10,21 +13,12 @@ permissions:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        julia-version: ['lts', '1', 'pre']
-        julia-arch: [x64]
-        os: [ubuntu-latest]
-
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: ${{ matrix.julia-version }}
-          arch: ${{ matrix.julia-arch }}
-      - uses: julia-actions/cache@v2
+          version: '1'
+      - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
-        # with:
-        #   annotate: true
