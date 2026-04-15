@@ -1,60 +1,93 @@
 # Installation
 
-Install Julia (v1.11 or newer) using https://github.com/JuliaLang/juliaup
+## Julia
+
+Install Julia (v1.11 or newer) with [juliaup](https://github.com/JuliaLang/juliaup):
 
 ```
 curl -fsSL https://install.julialang.org | sh
 ```
 
-After restarting your shell you should be able to start the Julia REPL via the command `julia`.
+After restarting your shell, `julia` starts the REPL.
 
-In the REPL you can add (the release version of) `ISOKANN.jl` to your project by entering the package mode (type `]`) and typing
+## ISOKANN
+
+In the REPL, enter package mode (type `]`) and add the release version:
 
 ```julia
 pkg> add ISOKANN
 pkg> test ISOKANN
 ```
 
-(Although you may skip this on the first read, make sure to get acquainted with Julias package manager (Pkg) and learn about Pkg environments at some point: https://pkgdocs.julialang.org/v1/environments/)
+For the latest development version:
 
-If you want the newest features you can instead install the newest version using `pkg> add https://github.com/axsk/ISOKANN.jl` instead.
-
-Note that this can take a while on the first run as Julia downloads and precompiles all dependencies.
-
-ISOKANN is using OpenMM for sampling, which is being called through PyCall.jl - a library facilitating python calls from withing julia.
-PyCall can install OpenMM automatically if it is using a conda environment managed by Julia through Conda.jl.
-This is the default on Windows on Mac systems, on Linux however you would need to install OpenMM via pip yourself or instruct Julia to use the Conda.jl environment by running
-
-
-Then instruct PyCall to use the Conda.jl environment by calling
 ```julia
-julia> ENV["PYTHON"] = ""
-pkg> build PyCall
+pkg> add https://github.com/axsk/ISOKANN.jl
 ```
 
-To use a shared Conda environment, e.g. because of quota limitations, you can configure it using prior to building PyCall:
-```julia
-julia> ENV["CONDA_JL_HOME"] = "/data/[...]/conda/envs/conda_jl"  # change this to your path, which contains bin/conda etc.
-pkg> build Conda
-```
+If you are new to Julia, take a moment to read about
+[Pkg environments](https://pkgdocs.julialang.org/v1/environments/); ISOKANN is
+most convenient when used inside a project environment.
 
-See also the [PyCall docs](https://github.com/JuliaPy/PyCall.jl?tab=readme-ov-file#specifying-the-python-version).
+The first run precompiles a sizeable dependency tree — expect a few minutes.
+
+## OpenMM (for molecular dynamics)
+
+Since v2.0, ISOKANN calls OpenMM through
+[PythonCall.jl](https://juliapy.github.io/PythonCall.jl/), and Python
+dependencies are managed by
+[CondaPkg.jl](https://github.com/JuliaPy/CondaPkg.jl). Installing ISOKANN should
+bring OpenMM, `joblib`, and `openmmforcefields` in automatically — no manual
+PyCall/Conda build step is needed.
+
+If you want the same conda environment available from a Python shell too
+(e.g. to use the Python bindings in [`python/`](https://github.com/axsk/ISOKANN.jl/tree/main/python)),
+point your tooling at the environment CondaPkg provisions (typically under
+`.CondaPkg/env/`), or share a single conda environment via CondaPkg's
+`CONDAPKG_BACKEND` / shared-env settings.
+
+For troubleshooting, see the
+[CondaPkg](https://github.com/JuliaPy/CondaPkg.jl) and
+[PythonCall](https://juliapy.github.io/PythonCall.jl/) docs, or open an issue on
+the ISOKANN repository.
 
 ## Development
 
-If you want to make changes to ISOKANN you should clone it into a directory
+To hack on ISOKANN itself:
 
-`git clone git@github.com:axsk/ISOKANN.jl.git`
+```
+git clone git@github.com:axsk/ISOKANN.jl.git
+cd ISOKANN.jl
+julia --project=.
+```
 
-Then start Julia in that directory, activate it with `]activate .`,
-instantiate the dependencies with `]instantiate`.
+Then inside Julia:
 
-See also the (almost mandatory read) on the [Julia Pkg docs](https://pkgdocs.julialang.org/v1/).
+```julia
+pkg> instantiate
+```
 
-We strongly recommend using the Revise.jl package through `using Revise` before loading ISOKANN, so that your changes will automatically load in your current session.
+We strongly recommend loading `Revise` before `ISOKANN` so edits take effect
+without restarting:
 
-## Workflow
-For the IDE we recommend VS Code + julia extension. If you are using Coder, make sure to try out the VS Code Remote Coder extension.
-The package was designed around interactive use in Julias REPL.
+```julia
+using Revise
+using ISOKANN
+```
 
+See the [Julia Pkg docs](https://pkgdocs.julialang.org/v1/) for a deeper tour
+of environments and development workflows.
 
+## Editor
+
+VS Code with the Julia extension works well. On a remote machine, the
+Remote-SSH / Remote Coder extensions let you drive the same setup locally. The
+package is designed around interactive use in the REPL, so keep one open
+alongside your editor.
+
+## GPU
+
+Training and most analysis routines run on CUDA GPUs via Flux/Functors. Move
+an `Iso` to and from GPU with `gpu(iso)` / `cpu(iso)`. The OpenMM simulation
+itself selects its own platform (CPU/CUDA/OpenCL) via OpenMM's platform
+mechanism.

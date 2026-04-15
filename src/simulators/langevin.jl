@@ -78,6 +78,13 @@ support(l::Diffusion) = supportbox(l, l.support)
 
 ## Double- and Triplewell potentials implemented using the generic `Diffusion`
 
+"""
+    Doublewell(; kwargs...)
+
+1-D overdamped Langevin dynamics in the double-well potential
+`V(x) = (x² − 1)²`. Returns a [`Diffusion`](@ref); `kwargs` are forwarded to it
+(e.g. `sigma`, `dt`, `lagtime`).
+"""
 Doublewell(; kwargs...) = Diffusion(;
     potential=doublewell,
     support=1.5,
@@ -86,6 +93,13 @@ Doublewell(; kwargs...) = Diffusion(;
 doublewell(x) = ((x[1])^2 - 1)^2
 
 
+"""
+    Triplewell(; kwargs...)
+
+2-D overdamped Langevin dynamics in the triple-well potential of
+Metzner, Schütte, Vanden-Eijnden (2006). Returns a [`Diffusion`](@ref);
+`kwargs` are forwarded (e.g. `sigma`, `dt`, `lagtime`).
+"""
 Triplewell(; kwargs...) = Diffusion(;
     potential=triplewell,
     dim=2,
@@ -104,6 +118,13 @@ triplewell(x,y) = (3 * exp(-x^2 - (y-1/3)^2)
 )
 
 
+"""
+    MuellerBrown(; kwargs...)
+
+2-D overdamped Langevin dynamics in the Müller–Brown potential — a standard
+test system with three metastable basins. Returns a [`Diffusion`](@ref);
+`kwargs` are forwarded (e.g. `sigma`, `dt`, `lagtime`).
+"""
 MuellerBrown(; kwargs...) = Diffusion(;
     potential=mueller_brown,
     dim=2,

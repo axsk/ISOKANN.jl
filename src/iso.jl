@@ -193,18 +193,58 @@ function train_batch!(model, xs::AbstractMatrix, ys::AbstractMatrix, opt, miniba
     return ls / numobs(xs)
 end
 
+"""
+    chis(iso::Iso, data=iso.data)
+
+Evaluate the learned χ function on `data` (a [`SimulationData`](@ref) or a
+raw `(xs, ys)` tuple). Returns a `(nout, n)` matrix whose columns are the χ
+values at the starting points. Defaults to `iso`'s own training data.
+"""
 chis(iso::Iso, data::Union{SimulationData, <:Tuple}=iso.data) = iso.model(features(data))
+
+"""
+    chicoords(iso::Iso, xs)
+
+Evaluate χ at raw coordinates `xs` (a `(d, n)` matrix), running the
+simulation's featurizer first. Handles CPU/GPU placement automatically.
+"""
 chicoords(iso::Iso, xs) = iso.model(features(iso.data, iscuda(iso.model) ? gpu(xs) : xs))
 
+"""
+    coords(iso::Iso)       -> (xs, ys)
+    features(iso::Iso)     -> (features(xs), features(ys))
+    propcoords(iso::Iso)   -> ys
+    propfeatures(iso::Iso) -> features(ys)
+
+Accessors for the training data attached to `iso`. `coords` returns the raw
+simulation coordinates, `features` the featurized inputs actually passed to
+the network; the `prop*` variants return only the propagated (Koopman) samples.
+"""
 coords(iso::Iso) = coords(iso.data)
 features(iso::Iso) = features(iso.data)
 propcoords(iso::Iso) = propcoords(iso.data)
 propfeatures(iso::Iso) = propfeatures(iso.data)
 
 
-# add new datapoints to iso, starting at positions `coords`
+"""
+    addcoords!(iso::Iso, coords::AbstractMatrix)
+    addcoords!(iso::Iso, n::Integer)
+
+Extend `iso`'s training data with new starting points and their freshly
+propagated Koopman samples. If `coords` is a matrix, use its columns as new
+starting points. If an integer `n` is given, continue a length-`n` lagged
+trajectory from the current last frame and split it into `(xs, ys)` pairs.
+"""
 addcoords!(iso::Iso, coords) = (iso.data = addcoords(iso.data, coords); nothing)
 laggedtrajectory(iso::Iso, n) = laggedtrajectory(iso.data, n)
+
+"""
+    resample_kde!(iso::Iso, ny; kwargs...)
+
+Replace/augment `iso`'s data by drawing `ny` new starting points via
+KDE-based subsampling along the current χ, then propagating them. Used by
+[`run_kde!`](@ref) but also callable directly for custom training loops.
+"""
 resample_kde!(iso, ny; kwargs...) = (iso.data = resample_kde(iso.data, iso.model, ny; kwargs...))
 addcoords!(iso::Iso, ny::Integer) = addcoords!(iso, laggedtrajectory(iso.data.sim, ny, x0=iso.data.coords[1][:, end]))
 resample_strat!(iso, ny; kwargs...) = (iso.data = resample_strat(iso.data, iso.model, ny; kwargs...))

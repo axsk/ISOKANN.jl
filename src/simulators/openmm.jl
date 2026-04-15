@@ -22,7 +22,21 @@ export trajectory, propagate, setcoords, coords, savecoords
 export atoms
 
 DEFAULT_PDB = normpath("$(@__DIR__)/../../data/systems/alanine dipeptide.pdb")
+"""
+    FORCE_AMBER
+
+Force-field XML list (`amber14-all.xml`) — vacuum / no solvent. Pass as the
+`forcefields` keyword to [`OpenMMSimulation`](@ref).
+"""
 FORCE_AMBER = ["amber14-all.xml"]
+
+"""
+    FORCE_AMBER_IMPLICIT
+
+Amber14 force field with an OBC2 implicit solvent model
+(`amber14-all.xml` + `implicit/obc2.xml`). Pass as the `forcefields`
+keyword to [`OpenMMSimulation`](@ref).
+"""
 FORCE_AMBER_IMPLICIT = ["amber14-all.xml", "implicit/obc2.xml"]
 FORCE_AMBER_EXPLICIT = ["amber14-all.xml", "amber/tip3p_standard.xml"]
 
@@ -143,6 +157,14 @@ lagtime(sim::OpenMMSimulation) = steps(sim) * stepsize(sim) # in ps
 dim(sim::OpenMMSimulation) = length(coords(sim))
 defaultmodel(sim::OpenMMSimulation; n=dim(sim), kwargs...) = ISOKANN.pairnet(;n, kwargs...)
 
+"""
+    coords(sim::OpenMMSimulation)
+    setcoords(sim::OpenMMSimulation, coords)
+
+Read or write the OpenMM context's current particle positions as a flat
+`3*natoms` vector in nanometers. `coords` returns the current state;
+`setcoords` overwrites it (e.g. to re-initialize before a propagation).
+"""
 coords(sim::OpenMMSimulation) = coords(sim.pysim)
 setcoords(sim::OpenMMSimulation, coords) = setcoords(sim.pysim, coords)
 natoms(sim::OpenMMSimulation) = div(dim(sim), 3)

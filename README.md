@@ -42,8 +42,8 @@ plot_training(iso)
 # scatter plot of all initial points colored in corresponding chi value
 scatter_ramachandran(iso)
 
-# estimate the exit rates, i.e. the metastability
-exit_rates(iso)
+# estimate the macro-state transition rate matrix (metastability)
+rates(iso)
 
 # extract the reactive path
 save_reactive_path(iso, out="path.pdb")

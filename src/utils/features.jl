@@ -18,6 +18,7 @@ featurizer(sim, radius::Number) = FeaturesPairs([calpha_pairs(sim.pysim); local_
 struct FeaturesCoords end
 (f::FeaturesCoords)(coords) = coords
 
+""" Featurizer: pairwise distances between all atoms """
 struct FeaturesAll end
 (f::FeaturesAll)(coords) = ISOKANN.flatpairdists(coords)
 
@@ -108,6 +109,13 @@ function remove_H_H2O_NACL(atom)
     )
 end
 
+"""
+    atoms(sim::OpenMMSimulation)
+
+Return the list of OpenMM atom objects (via PythonCall) from the simulation's
+topology. Useful for inspecting elements, residues, or indices when building
+custom featurizers.
+"""
 atoms(sim::OpenMMSimulation) = collect(sim.pysim.topology.atoms())
 
 function local_atom_pairs(pysim::PyObject, radius; atomfilter=remove_H_H2O_NACL)

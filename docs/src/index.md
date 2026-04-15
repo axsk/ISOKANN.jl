@@ -1,6 +1,11 @@
 # ISOKANN.jl
 
-Documentation for ISOKANN.jl
+Documentation for ISOKANN.jl.
+
+Start with the [Introduction](introduction.md) for an overview of the data model
+and training loop. The [Installation](installation.md) page walks through
+getting Julia and OpenMM set up, and [Tips](tips.md) covers practical choices
+like optimizer and regularization.
 
 ```@meta
 CurrentModule = ISOKANN
@@ -9,21 +14,34 @@ CurrentModule = ISOKANN
 ## Main entry points
 
 ```@docs
-OpenMMSimulation
-SimulationData
 Iso
+SimulationData
+OpenMMSimulation
 propagate
-isodata
 run!
+run_kde!
+chis
+rates
 plot_training
+scatter_ramachandran
+save_reactive_path
+```
+
+## Data construction and manipulation
+
+```@docs
+data_from_trajectory
+data_from_trajectories
+mergedata
+addcoords!
+resample_kde!
+laggedtrajectory
 ```
 
 ## Models and Optimizers
 ```@docs
-defaultmodel
 pairnet
 densenet
-smallnet
 AdamRegularized
 NesterovRegularized
 ```

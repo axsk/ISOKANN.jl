@@ -111,16 +111,34 @@ function save_trajectory(filename, coords::AbstractMatrix; top::String)
     traj.save(filename)
 end
 
+"""
+    atom_indices(filename::String, selector::String) -> Vector{Int}
+
+Return the 1-based atom indices matching an MDTraj `selector` expression
+(e.g. `"name CA"`, `"backbone"`, `"not element H"`) applied to the topology
+loaded from `filename`. Useful to restrict features/alignment to a subset of
+atoms.
+"""
 function atom_indices(filename::String, selector::String)
     mdtraj = PythonCall.pyimport("mdtraj")
     traj = mdtraj.load(filename, stride=-1)
-    inds = traj.top.select(selector) .+ 1 
+    inds = traj.top.select(selector) .+ 1
     inds = PythonCall.pyconvert(Vector{Int}, inds)
     return inds::Vector{Int}
 end
 
 import Chemfiles
 
+"""
+    readchemfile(source::String, steps=:) -> Matrix{Float32}
+    readchemfile(traj::Chemfiles.Trajectory, frames) -> Matrix{Float32}
+
+Load trajectory coordinates via the Chemfiles library and return them as a
+`(3*natoms, nframes)` matrix in nanometers (converted from Å). `steps` /
+`frames` selects a subset of frames; passing an `Int` returns a single
+flattened frame. Useful to pipe external trajectories into
+[`data_from_trajectory`](@ref).
+"""
 function readchemfile(source::String, steps=:)
     traj = Chemfiles.Trajectory(source, 'r')
     try

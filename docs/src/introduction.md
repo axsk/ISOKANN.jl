@@ -1,101 +1,157 @@
 # Introduction
 
-This package provides the core ISOKANN algorithm as well as some wrappers and convenience routines to work with different kind of simulations and data.
+ISOKANN.jl learns slow reaction coordinates (χ, "chi") as eigenfunctions of the
+Koopman operator from short trajectory data. This page covers the data model,
+the training loop, and the handful of types you will use most.
 
-The core ISOKANN algorithm is accessed by the `Iso` type,
-which holds the neural network, optimizer, ISOKANN parameters and training data.
+## The data model
 
-You can construct it by passing a tuple of `(xs, ys)` of arrays as input data. Here `xs` is a matrix where the columns are starting points of trajectories and `ys` is a 3 dimensional array where `ys[d,k,n]` is the `d`-th coordinate of the `k`-th Koopman-replica of the `n`-th trajectory.
+ISOKANN needs two kinds of samples:
 
-To start training the neural network simply call the `run!` function passing the `Iso` object and the number of ISOKANN iterations.
-The resulting \chi values can be obtained via the `chis` method
+- `xs`: a matrix of shape `(d, n)` — `n` starting points in a `d`-dimensional
+  state or feature space.
+- `ys`: a 3-D array of shape `(d, nk, n)` — for each starting point in `xs`,
+  `nk` Koopman replicas obtained by propagating the dynamics with a common
+  lag time.
+
+These are used to estimate the action of the Koopman operator via a Monte-Carlo
+approximation,
+
+```math
+[K\chi](x) = \mathbb{E}_{X_0 = x} [\chi(X_t)] \approx \frac{1}{N} \sum_{i=1}^{N} \chi(y_i).
+```
+
+The starting points can be sampled arbitrarily (they do not need to come from
+the stationary distribution), but the learned χ can only represent the part of
+the dynamics covered by `xs`. The `ys` must be propagated from the corresponding
+`xs` under the system's dynamics with a common lag time.
+
+## Minimal example
+
+For raw `(xs, ys)` data you can construct an [`Iso`](@ref) directly:
 
 ```julia
-iso=Iso((rand(3,100), rand(3,10,100)))
-run!(iso)
+using ISOKANN
+
+xs = rand(3, 100)
+ys = rand(3, 10, 100)
+iso = Iso((xs, ys))
+run!(iso, 100)   # 100 ISOKANN iterations
+chis(iso)        # learned χ values
+```
+
+## Using a simulation
+
+For adaptive sampling and for bookkeeping the link between coordinates and
+network features, wrap the dynamics in a [`SimulationData`](@ref):
+
+```julia
+using ISOKANN
+
+sim  = Doublewell()                        # 1D analytical potential
+data = SimulationData(sim, 100, 10)        # 100 starting points, 10 Koopman samples each
+iso  = Iso(data)
+run!(iso, 100)
 chis(iso)
 ```
 
-For more advanced use, such as with the adaptive sampling algorithms we pass a `SimulationData` object instead of the data tuple to the `Iso` constructor.
+Built-in simulations include [`Doublewell`](@ref), [`Triplewell`](@ref),
+[`MuellerBrown`](@ref), [`Diffusion`](@ref) (general Langevin dynamics) and
+[`OpenMMSimulation`](@ref) (molecular dynamics via OpenMM). You can also plug in
+your own dynamics by implementing the `IsoSimulation` interface (at minimum
+[`propagate`](@ref)) or provide externally-generated trajectories via
+`ExternalSimulation` / `data_from_trajectory`.
 
-The `SimulationData` itself is composed of a `Simulation`, its simulated trajectory data as well as the features fed into the neural network for training.
-We supply some basic simulations which can generate the data, e.g. [`Doublewell`](@ref), [`MuellerBrown`](@ref), [`Diffusion`](@ref), [`MollySimulation`](@ref) and [`OpenMMSimulation`](@ref).
-Of course you can write your own `Simulation` which in its most basic form needs to supply only the [`propagate`](@ref) method.
+## OpenMM quick start
 
 ```julia
-sim = Doublewell()
-data = isodata(sim, 100, 20)
-iso = Iso(data)
+using ISOKANN
+
+sim  = OpenMMSimulation()                  # bundled alanine dipeptide
+data = SimulationData(sim, 100, 5)
+iso  = Iso(data)
+
+run!(iso, 100)                             # or: run_kde!(iso; generations=5, iter=100)
+
+plot_training(iso)
+scatter_ramachandran(iso)
+rates(iso)                                 # macro-state transition rates
+save_reactive_path(iso, out="path.pdb")
 ```
 
-We also provide different type of wrappers to load simulations [`vgv`] or generate data from trajectories [`IsoMu`].
+## Classical ISOKANN on precomputed trajectories
 
-For an advanced example take a look at the `scripts/vgvadapt.jl` file.
+If you already have trajectory data and just want to run ISOKANN on it (no new
+sampling), turn your trajectories into `(xs, ys)` pairs with
+[`data_from_trajectory`](@ref) (single trajectory) or
+[`data_from_trajectories`](@ref) (many). Both support `stride`, `lag`, and
+`reverse` (treat the trajectory as time-reversible, which doubles the data):
 
+```julia
+# single trajectory of shape (d, nframes)
+data = SimulationData(sim, data_from_trajectory(xs; lag=10, stride=1))
 
-# Components
+# many trajectories of varying length
+data = SimulationData(sim, data_from_trajectories([xs1, xs2, ...]; lag=10))
 
-The `OpenMMSimulation` is a good example for an `Simulation` object. It parametrises a system by specifying a molecular simulation by reading the molecular structure from a .pdb file but also the system temperature, the simulation lag time and other simulation parameters.
+# or, if you have no `sim` and only raw arrays
+data = SimulationData(xs, ys)
+```
 
-The `SimulationData` in turn links such a simulation `Simulation` to actual simulation data which is used by ISOKANN for training.
-Through the specification of a `featurizer` the neural network does not need to digest the simulation coordinates but can use optimized features which for example guarantee invariance under rigid transformations.
-By default the `featurizer` is inhereted from the default `featurizer` of the `Simulation`. For the `OpenMMSimulation` we have pre-implemented pairwise distances between all atoms, locally close atoms and/or the c-Alpha atoms (c.f. the `OpenMMSimulation` docstring).
+For OpenMM trajectories on disk, [`load_trajectory`](@ref) / `readchemfile`
+return a `(d, nframes)` coordinate matrix ready to pass into
+`data_from_trajectory`.
 
-The `Iso` object then brings together the `SimulationData` with a neural network `model` and an `optimizer`.
-Its main use is together with the training routine `run!()` which computes the ISOKANN iteration via `isotarget` and updates the networks weights with `train_batch`.
-The `logger` field allows to ammend other operations such as the default `autoplot()` which displays the progress during training.
-The default model is the `pairnet` which constructs a fully connected network of a given number of layers of descreasing width and the default optimizer is Adam with weight decay.
+## What the pieces do
 
-Adaptive sampling is facilitated either by the `runadaptive!` method, or the individual `adddata!`, `resample_kde!`, `addextrapolates!` used in a custom training routine.
+- [`Iso`](@ref) is the main training object. It holds the neural network, the
+  optimizer, training data, the target transform, and loss/log history.
+- [`SimulationData`](@ref) wraps an `IsoSimulation` together with its sampled
+  `coords` and the derived `features` that are actually fed into the network.
+  The mapping `coords → features` is defined by the simulation's featurizer
+  (for `OpenMMSimulation` the default is pairwise distances, selectable between
+  all atoms, locally close atoms, or only C-α atoms; see its docstring).
+- Training is driven by [`run!`](@ref). Each iteration computes a target from
+  `E[χ(ys)]` via a configurable transform (`TransformShiftscale` for 1-D χ,
+  `TransformISA` / `TransformPseudoInv` for multi-dim χ) and takes a batch of
+  gradient steps against `‖model(xs) − target‖²`.
+- Adaptive sampling is available via [`run_kde!`](@ref), which interleaves
+  KDE-based resampling along the current χ with training. (The older
+  `runadaptive!` is a deprecated alias.)
+- Results: [`chis`](@ref) returns the learned χ values, [`rates`](@ref) returns
+  the macro-state transition rate matrix, [`save_reactive_path`](@ref) writes
+  a PDB of the extracted reaction path.
 
+## Accessing data
 
-The learned chi values can be accessed via `chis(::Iso)` and the reaction rates via `exit_rates(::Iso)`
+`SimulationData` lets you reach either view of the samples:
 
+- [`coords`](@ref) / [`propcoords`](@ref) — raw `xs` / `ys` coordinates.
+- [`features`](@ref) / [`propfeatures`](@ref) — featurized `xs` / `ys`
+  actually passed to the network.
 
-# Contents of the source files
+## Source layout
 
 Core:
 
-- `simulation.jl`: handling of `SimulationData` which mainly dispatches to other lower-level functions
-- `data.jl`: low level functions for accessing and manipulating the data tuple
-- `iso2.jl`: main training routine
-- `isotarget.jl`:  different ISOKANN iteration targets  for 1D and higher dimensional chi functions
-- `models.jl`: convencience functions for the contruction/manipulation of `model` and `optimiser`
+- `src/iso.jl` — the `Iso` type and the training loop (`run!`, `run_kde!`)
+- `src/simulation.jl` — `SimulationData` and the `IsoSimulation` interface
+- `src/data.jl` — low-level operations on the `(xs, ys)` tuple
+- `src/isotarget.jl` — ISOKANN target transforms (1-D and multi-dim)
+- `src/models.jl` — default networks and optimizers
 
 Simulators:
 
-- `simulators/langevin.jl`: A simulator for the Langevin equation
-- `simulators/openmm.jl`: Wrapper around OpenMM for molecular dynamics simulations
+- `src/simulators/langevin.jl` — analytical potentials (Doublewell, Triplewell,
+  MuellerBrown) integrated via StochasticDiffEq
+- `src/simulators/openmm.jl` — OpenMM wrapper (through PythonCall)
+- `src/simulators/bridge.jl` — guided Langevin bridges toward target χ values
+- `src/simulators/metadynamics.jl` — draft metadynamics implementation
 
-Utility:
-- `molutils.jl`: different utilities to work with molecules and molecular data, such as alignment, dihedrals etc.
-- `pairdists.jl`: different methods to compute pairwise distance features
-- `plots.jl`: plotting functionality
-- `subsample.jl`: stratified or KDE based uniform subsampling along a given reaction coordinate
+Utilities:
 
-Experimental:
-
-- `extrapolate.jl`: generation of new sampling points by extrapolating on the neural network (dreaming)
-- `bonito.jl` and `makie.jl`: live visualizations via Makie.jl/WebGL and the dashboard using the Bonito.jl webserver
-- `reactionpath.jl`: reaction paths by integration on the neural network
-- `reactionpath2.jl`: reactive path extraction from sampled data by solving shortest paths problems
-
-# On the representation of the data
-
-In order to estimate the chi functions ISOKANN requires two kinds of samples, starting points `xs` and propagated points `ys`.
-These are used to estimate the action of the Koopman operator through a Monte-Carlo approximation, i.e.
-`` [K\chi](x) = \mathbb{E}_{X_0 = x} [\chi(X_t)] \approx \frac{1}{N} \sum_{i=1}^N \chi(y_i).``
-
-The starting points can be sampled without any restriction. In particular they do not need to be sampled from the stationary distribution.
-Note however, that the learned chi function can only represent the part of the dynamics covered by `xs`. Furthermore, regions with more samples have higher contribution to the loss, i.e. will be resolved more precisely.
-
-The `ys` samples however have to be propagated from their respective `xs` according to the processes dynamics and with a common lagtime amongst all samples.
-
-Internally ISOKANN.jl handles the `xs` and `ys` as 2-dimensional resp. 3-dimensional Arrays.
-In particular `xs` has the size `(ndim, nsamples)` and `ys` has size `(ndim, nkoop, nsamples)`, where `ndim` is the size of the state- or feature-space, `nkoop` the number of Koopman-/Batch-samples per starting point and `nsamples` is the number of total samples.
-
-You can create an `Iso` object directly from raw data of this type, by passing in a tuple of `(xs, ys)` as data.
-
-Alternatively, you can use the `SimulationData` object, whose main task is to keep together the original samples' coordinates as well as their corresponding features which are passed as arguments to the neural network representing `chi`.
-You can access its coordinates or features (i.e. the above `xs`) through the methods `coords` or `features`, and the corresponding Koopman samples (the `ys`) through `propcoords` and `propfeatures`.
-`SimulationData` futhermore allows to link the data to a `IsoSimulation` and provides futher methods to conveniently augment the data with new samples, merge data sets, sample adaptively etc.
+- `src/molutils.jl` — alignment, dihedrals, and other molecular helpers
+- `src/pairdists.jl` — pairwise-distance features
+- `src/plots.jl` — training / χ plots
+- `src/subsample.jl` — stratified and KDE-based subsampling
+- `src/reactionpath.jl`, `src/reactionpath2.jl` — reaction-path extraction

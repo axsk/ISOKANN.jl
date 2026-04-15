@@ -33,6 +33,13 @@ end
 
 ## Plotting
 
+"""
+    plot_training(iso; maxpoints=0)
+
+Summary dashboard of an `Iso` training run: loss history, learned χ values,
+and a scatter of χ vs. its training-target fix point. `maxpoints` caps the
+number of points drawn in the scatter/χ plots (0 = all).
+"""
 function plot_training(iso; maxpoints=0)
     (; losses, data, model) = iso
 
@@ -168,6 +175,15 @@ end
 # good colors
 # berlin, delta, roma, tofino, tokyo
 
+"""
+    scatter_ramachandran(iso::Iso; kwargs...)
+    scatter_ramachandran(x, z; kwargs...)
+
+Ramachandran scatter: plots each configuration's backbone dihedrals (φ, ψ)
+coloured by χ. Accepts an [`Iso`](@ref), a `(coords, model)` pair, or a
+coordinate matrix with explicit χ values. Extra `kwargs` are forwarded to
+`Plots.scatter`.
+"""
 scatter_ramachandran(iso::Iso; kwargs...) = scatter_ramachandran(coords(iso.data) |> cpu, iso.model(features(iso.data)) |> cpu; kwargs...)
 
 scatter_ramachandran(x, model; kwargs...) = scatter_ramachandran(x, vec(model(x)); kwargs...)

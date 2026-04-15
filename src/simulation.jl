@@ -29,6 +29,15 @@ end
 trajectory(sim::IsoSimulation, steps) = error("not implemented")
 laggedtrajectory(sim::IsoSimulation, nx) = error("not implemented")
 
+"""
+    ExternalSimulation(; pdbfile=nothing, masses=nothing, lagtime=1, kwargs...)
+
+Placeholder `IsoSimulation` for data that was sampled outside of ISOKANN.
+It stores metadata (topology, lagtime, masses, …) without the ability to
+propagate new samples — use it together with
+[`data_from_trajectory`](@ref) / [`data_from_trajectories`](@ref) and
+[`SimulationData`](@ref) to train on precomputed trajectories.
+"""
 mutable struct ExternalSimulation <: IsoSimulation
     dict::Dict{Symbol, Any}
 end
@@ -164,6 +173,13 @@ end
 @deprecate Base.merge(d1::SimulationData, d2::SimulationData) mergedata(d1, d2) false
 
 
+"""
+    addcoords(d::SimulationData, coords::AbstractMatrix) -> SimulationData
+
+Propagate `coords` under `d.sim` (reusing the existing `nk` and featurizer)
+and return a new `SimulationData` that concatenates the new `(xs, ys)` pairs
+onto `d`. Non-mutating counterpart to [`addcoords!`](@ref).
+"""
 function addcoords(d::SimulationData, coords::AbstractMatrix)
     mergedata(d, SimulationData(d.sim, coords, nk(d), featurizer=d.featurizer))
 end
