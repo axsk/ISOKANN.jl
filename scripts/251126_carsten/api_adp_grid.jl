@@ -18,20 +18,24 @@ using JLD2: @save
 
 abstract type Grid end
 
+global JS = []
+global xs
 
-function (@main)(; nx=100_000, ngrid=20, niter=10)
+function (@main)(; nx=100_000, ngrid=20, niter=10, alpha=0.5, n_mc=20, max_force_norm=1000, steps=10_000)
     sim = OpenMMSimulation() # ADP by default
-    xs = laggedtrajectory(sim, nx)
+    global xs = laggedtrajectory(sim, nx)
     grid = RamachandranGrid(n=ngrid)
     J0 = J0_from_trajectory(grid, xs) # committor estimation through tranfer matrix and linear system
-    Js = api(J0, sim, niter; xs)
+    global JS = []
+    api(J0, sim, niter; xs, alpha, n_mc, max_force_norm, steps)
 
-    @save "api_adp_grid.jld2" xs Js
-    p = visualize_q(Js[end])
+    @save "api_adp_grid.jld2" xs JS
+    p = visualize_q(JS[end])
     savefig("api_adp_grid.png")
-    display(p)
 
-    return (; xs, Js)
+    visualize_q(JS) # show all iterations
+
+    return (; xs, JS)
 end
 
 test() = main(nx=1000, ngrid=10, niter=1)
@@ -45,13 +49,21 @@ function control_from_grid(grid::Grid, x::AbstractVector)
     return only(dJ_dx)
 end
 
-function create_bias_function(grid::Grid, dt::Real; max_force_norm::Real=1000.0)
+function create_bias_function(grid::Grid, sim; max_force_norm::Real=10.0)
     """Create bias function for langevin_girsanov! that stores u² per step."""
+    (;dt, kB, T, gamma, M) = OpenMM.constants(sim)
+
+    # TODO: note we are using sigma_ODL^2 = 2kT/(γM), but sigma_UDL^2 = 2kTγM in the Girsanov integrator.
+    # This way masses/gamma cancel out and we remain with sigma_ODL * sigma_UDL = 2 kB T, which is (?) the correct fluctuation-dissipation balance for the controlled process.
+    # We accumulate u^2 = (sigma_ODL * dJ_dx)^2, which would be the correct control cost for the ODL process. But this is a bit subtle and I might be missing something.
+
+    sigma_ODL = @. sqrt(2 * kB * T / (gamma * M))
     u2_array = Float64[]
     reported = false
-    function bias(q; t=0, sigma, F=nothing)
+    function bias(q; kwargs...)
         dJ_dx = control_from_grid(grid, q)
-        u_control = -sigma .* dJ_dx
+        u_control = -sigma_ODL .* dJ_dx
+
 
         u_norm = norm(u_control)
         if u_norm > max_force_norm
@@ -71,28 +83,37 @@ function create_bias_function(grid::Grid, dt::Real; max_force_norm::Real=1000.0)
 end
 
 function simulate(grid::Grid, sim::OpenMMSimulation, x0::AbstractVector;
-                            steps::Int=100_000, max_force_norm::Real=1000.0, n=1)
+                            steps::Int=10_000, max_force_norm::Real=10.0, plotrate=0.0)
     """Simulate trajectory with grid-based control, scan for A/B hits, return the integral of the value function expectation."""
-    dt = stepsize(sim)
-    bias, u2_array = create_bias_function(grid, dt; max_force_norm)
+    bias, u2_array = create_bias_function(grid, sim; max_force_norm)
 
     should_stop(;q, kwargs...) = classify(q) in (:A, :B)
 
-    xs = langevin_girsanov!(sim; saveevery=1, sigmascaled=true, steps, bias, x0, should_stop, showprogress=false) |> values
-    scatter_ramachandran(xs[:, 1:10:end]) |> display
+    if !should_stop(q=x0)
+        xs = langevin_girsanov!(sim; saveevery=1, sigmascaled=true, steps, bias, x0, should_stop, showprogress=false) |> values
+    else
+        xs = reshape(x0, :, 1)
+    end
+
+    # sporadic visualization of the trajectory
+    if rand() < plotrate
+        zs = xs[:, [1, size(xs, 2)]]
+        rand() < 0.1 && scatter!([phi.(eachcol(zs))], [psi.(eachcol(zs))], markersize=2, legend=false) |> display
+    end
 
     xt = xs[:, end]
     class = classify(xt)
     u2 = sum(u2_array)
 
     q0, q1 = 0.01, 0.99 # TODO
+    #q0, q1 = 1.0, 2.0  # shifted committor, without the log(0) singularity. not really sure if this is not breaking some assumption, but i coldnt find an issue
 
     if class == :A
         v = u2 / 2 - log(q0)
     elseif class == :B
         v = u2 / 2 - log(q1)
     else
-        # dynamic programming approach
+        # dynamic programming continuation
         println("⚠ didnt terminate in A or B after $steps steps:")
         v = u2 / 2 + interpolate_J(grid, phi(xt), psi(xt))
     end
@@ -109,7 +130,18 @@ function api_step(grid::Grid, sim::OpenMMSimulation; alpha=1, n_mc=10, xs, kwarg
     @showprogress for ij in CartesianIndices(bins)
         isempty(bins[ij]) && continue # no update
         x0s = rand(bins[ij], n_mc)
-        E = mean(simulate(grid, sim, x; kwargs...) for x in x0s)
+        vs = [simulate(grid, sim, x; kwargs...) for x in x0s]
+        E = mean(vs)
+
+
+        phipsi = torsion(x0s[1])
+        println("Grid point $ij ($phipsi), mean v: $(round(mean(vs); digits=2)), std: $(round(std(vs); digits=2)), q: $(round(exp(-mean(vs)); digits=2))")
+
+        # attempeted hotfix: use mean of q to reduce variance
+        #qs = mean(exp(-simulate(grid, sim, x; kwargs...)) for x in x0s)
+        #E = -log(qs)
+        # did not help.
+
         Jk[ij] = (1 - alpha) * Jk[ij] + alpha * E
     end
     return similar(grid, Jk)
@@ -124,20 +156,23 @@ function binned_samples(grid, xs)
     return bins
 end
 
+
 function api(J0::Grid, sim::OpenMMSimulation, n; xs, kwargs...)
-    Js = [J0]
+    global JS
+    J = J0
     times = []
     for i in 1:n
-        t = @elapsed push!(Js, api_step(Js[end], sim; xs, kwargs...))
+        t = @elapsed J = api_step(J, sim; xs, kwargs...)
         push!(times, t)
+        push!(JS, J)
     end
     @show times
-    return Js
+    return JS
 end
 
-function J0_from_trajectory(grid::Grid, xs; eps=1e-8, kwargs...)
+function J0_from_trajectory(grid::Grid, xs; kwargs...)
     T = transfermatrix(xs, grid)
-    q = committor(grid, T) .+ eps
+    q = committor(grid, T)
     #return q
     J = similar(grid, -log.(q))
     return J
@@ -145,6 +180,10 @@ end
 
 function visualize_q(grid::Grid)
     heatmap(exp.(-grid.J)', xlabel="phi", ylabel="psi", title="Committor ")
+end
+
+visualize_q(grids::AbstractVector{<:Grid}) = foreach(grids) do grid
+    visualize_q(grid) |> display
 end
 
 
@@ -181,17 +220,18 @@ function transfermatrix(xs, grid=RamachandranGrid())
 end
 
 function committor(grid::Grid, T)
+    q0, q1 = 0.01, 0.99 # TODO
     A = T - I
     b = zeros(length(grid.itp))
     for (i,x) in enumerate(knots(grid.itp))
         if inbox(x, boxA)
             A[i, :] .= 0
             A[i, i] = 1
-            b[i] = 0
+            b[i] = q0
         elseif inbox(x, boxB)
             A[i, :] .= 0
             A[i, i] = 1
-            b[i] = 1
+            b[i] = q1
         end
     end
     q = A \ b
@@ -248,68 +288,3 @@ function linindex(grid::RamachandranGrid, x)
     j = argmin(abs.(grid.psi_knots .- x[2]))
     return i + (j - 1) * length(grid.phi_knots)
 end
-
-
-## graveyard
-
-#=
-function interpolate_J_grad(grid::RamachandranGrid, phi_deg::Real, psi_deg::Real)
-    grad = Interpolations.gradient(grid.itp, phi_deg, psi_deg)
-    return (dJ_dphi=grad[1], dJ_dpsi=grad[2])
-end
-
-function update_grid_point!(grid::RamachandranGrid, phi_deg::Real, psi_deg::Real, J_target::Real; α::Float64=0.1)
-    i, j = find_nearest_grid_point(grid, phi_deg, psi_deg)
-    J_old = grid.J[i, j]
-    grid.J[i, j] += α * (J_target - J_old)
-    grid.itp = build_interpolation(grid.J, grid.phi_knots, grid.psi_knots)
-    return J_target - J_old
-end
-
-function update_grid!(grid::RamachandranGrid, J_new::Matrix{<:Real}; α::Float64=0.1)
-    """Update entire J matrix with moving average and rebuild interpolation."""
-    @assert size(J_new) == size(grid.J) "J_new must match grid dimensions"
-    grid.J .+= α .* (J_new .- grid.J)
-    grid.itp = build_interpolation(grid.J, grid.phi_knots, grid.psi_knots)
-end
-
-
-initialize_grid(sim::OpenMMSimulation; n_grid=20, steps=1000) = initialize_grid(laggedtrajectory(sim, steps, resample_velocities=false); n_grid)
-function initialize_grid(xs; n_grid=20)
-    """Initialize J on grid from distance-based committor estimate."""
-    grid = RamachandranGrid(n_phi=n_grid, n_psi=n_grid)
-    grid.J .= -log(0.5)
-    for x in eachcol(xs)
-        i, j = find_nearest_grid_point(grid, phi(x), psi(x))
-        q = committor_from_distance(x)
-        grid.J[i, j] = -log(clamp(q, 1e-6, 1.0 - 1e-6))
-    end
-    grid.itp = build_interpolation(grid.J, grid.phi_knots, grid.psi_knots)
-    return grid
-end
-
-
-function distance_to_box(ta::Union{AbstractVector,Tuple}, box)
-    """Euclidean distance from torsion angles to box (0 if inside)."""
-    inbox(ta, box) && return 0.0
-    dx = max(box[1, 1] - ta[1], ta[1] - box[1, 2], 0.0)
-    dy = max(box[2, 1] - ta[2], ta[2] - box[2, 2], 0.0)
-    return sqrt(dx^2 + dy^2)
-end
-
-function committor_from_distance(x::AbstractVector)
-    """Initialize committor value based on distance to A and B."""
-    ta = torsion(x)
-    dist_A = distance_to_box(ta, boxA)
-    dist_B = distance_to_box(ta, boxB)
-    if dist_A == 0.0
-        return 0.01
-    elseif dist_B == 0.0
-        return 0.99
-    else
-        total = dist_A + dist_B
-        return 0.01 * (dist_B / total) + 0.99 * (dist_A / total)
-    end
-end
-
-=#
