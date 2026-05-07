@@ -8,32 +8,39 @@ Uses OpenMM simulation + Girsanov importance sampling + moving average updates.
 using Plots
 using Interpolations
 
-using ISOKANN: coords, phi, psi, force, scatter_ramachandran
+using ISOKANN: coords, phi, psi, force, scatter_ramachandran, OpenMM
 using ISOKANN.OpenMM: OpenMMSimulation, laggedtrajectory, langevin_girsanov!, stepsize
 using LinearAlgebra: norm, dot, I
 using ProgressMeter: @showprogress
 using Zygote: gradient
-using StatsBase: mean
+using StatsBase: mean, std
 using JLD2: @save
+using ImageFiltering: imfilter, Kernel
+
 
 abstract type Grid end
 
 global JS = []
 global xs
 
-function (@main)(; nx=100_000, ngrid=20, niter=10, alpha=0.5, n_mc=20, max_force_norm=1000, steps=10_000)
-    sim = OpenMMSimulation() # ADP by default
-    global xs = laggedtrajectory(sim, nx)
-    grid = RamachandranGrid(n=ngrid)
+function (@main)(; nx=100_000, ngrid=20, niter=10, alpha=0.5, n_mc=20, max_force_norm=1000, steps=10_000, temp=310, friction=1, sigma=0, gain=1)
+    global xs, sim, JS
+    sim = OpenMMSimulation(; temp, friction) # ADP by default
+    if isdefined(Main, :xs) && size(xs, 2) == nx
+        @info "Reusing previously computed `xs`"
+    else
+        xs = laggedtrajectory(sim, nx)
+        scatter_ramachandran(xs) |> display
+    end
+    grid = RamachandranGrid(;n=ngrid, sigma)
     J0 = J0_from_trajectory(grid, xs) # committor estimation through tranfer matrix and linear system
-    global JS = []
-    api(J0, sim, niter; xs, alpha, n_mc, max_force_norm, steps)
+    visualize_q(J0) |> display
+    JS = [J0]
+    api(J0, sim, niter; xs, alpha, n_mc, max_force_norm, steps, gain)
 
     @save "api_adp_grid.jld2" xs JS
     p = visualize_q(JS[end])
     savefig("api_adp_grid.png")
-
-    visualize_q(JS) # show all iterations
 
     return (; xs, JS)
 end
@@ -44,12 +51,12 @@ test() = main(nx=1000, ngrid=10, niter=1)
 function control_from_grid(grid::Grid, x::AbstractVector)
     """Compute control u = ∇J via autodiff through torsion angles."""
     dJ_dx = gradient(x) do x
-        interpolate_J(grid, phi(x), psi(x))
+        grid(phi(x), psi(x))
     end
     return only(dJ_dx)
 end
 
-function create_bias_function(grid::Grid, sim; max_force_norm::Real=10.0)
+function create_bias_function(grid::Grid, sim; max_force_norm::Real=10.0, gain=1)
     """Create bias function for langevin_girsanov! that stores u² per step."""
     (;dt, kB, T, gamma, M) = OpenMM.constants(sim)
 
@@ -62,8 +69,8 @@ function create_bias_function(grid::Grid, sim; max_force_norm::Real=10.0)
     reported = false
     function bias(q; kwargs...)
         dJ_dx = control_from_grid(grid, q)
-        u_control = -sigma_ODL .* dJ_dx
-
+        u_control = -sigma_ODL .* dJ_dx * gain
+        # TODO: is gain actually compatible with the no-reweighting scheme or does that presuppose gain=1?
 
         u_norm = norm(u_control)
         if u_norm > max_force_norm
@@ -83,9 +90,9 @@ function create_bias_function(grid::Grid, sim; max_force_norm::Real=10.0)
 end
 
 function simulate(grid::Grid, sim::OpenMMSimulation, x0::AbstractVector;
-                            steps::Int=10_000, max_force_norm::Real=10.0, plotrate=0.0)
+                            steps::Int=10_000, max_force_norm::Real=10.0, plotrate=0.0, gain=1)
     """Simulate trajectory with grid-based control, scan for A/B hits, return the integral of the value function expectation."""
-    bias, u2_array = create_bias_function(grid, sim; max_force_norm)
+    bias, u2_array = create_bias_function(grid, sim; max_force_norm, gain)
 
     should_stop(;q, kwargs...) = classify(q) in (:A, :B)
 
@@ -115,7 +122,7 @@ function simulate(grid::Grid, sim::OpenMMSimulation, x0::AbstractVector;
     else
         # dynamic programming continuation
         println("⚠ didnt terminate in A or B after $steps steps:")
-        v = u2 / 2 + interpolate_J(grid, phi(xt), psi(xt))
+        v = u2 / 2 + grid(phi(xt), psi(xt))
     end
 
     q = exp(-v)
@@ -135,7 +142,7 @@ function api_step(grid::Grid, sim::OpenMMSimulation; alpha=1, n_mc=10, xs, kwarg
 
 
         phipsi = torsion(x0s[1])
-        println("Grid point $ij ($phipsi), mean v: $(round(mean(vs); digits=2)), std: $(round(std(vs); digits=2)), q: $(round(exp(-mean(vs)); digits=2))")
+        @info "⌊ Grid point $ij ($phipsi), mean v: $(round(mean(vs); digits=2)), std: $(round(std(vs); digits=2)), q: $(round(exp(-mean(vs)); digits=2))"
 
         # attempeted hotfix: use mean of q to reduce variance
         #qs = mean(exp(-simulate(grid, sim, x; kwargs...)) for x in x0s)
@@ -165,6 +172,7 @@ function api(J0::Grid, sim::OpenMMSimulation, n; xs, kwargs...)
         t = @elapsed J = api_step(J, sim; xs, kwargs...)
         push!(times, t)
         push!(JS, J)
+        visualize_q(J) |> display
     end
     @show times
     return JS
@@ -179,10 +187,14 @@ function J0_from_trajectory(grid::Grid, xs; kwargs...)
 end
 
 function visualize_q(grid::Grid)
-    heatmap(exp.(-grid.J)', xlabel="phi", ylabel="psi", title="Committor ")
+    #heatmap(exp.(-grid.J)', xlabel="phi", ylabel="psi", title="Committor", aspect_ratio=1)
+    heatmap(
+        -pi:0.1:pi, -pi:0.1:pi,
+        (x,y) -> exp(-grid(x,y)),
+        xlabel="phi", ylabel="psi", title="q", aspect_ratio=1, xlims=(-pi, pi) )
 end
 
-visualize_q(grids::AbstractVector{<:Grid}) = foreach(grids) do grid
+visualize_q(grids::AbstractVector) = foreach(grids) do grid
     visualize_q(grid) |> display
 end
 
@@ -246,6 +258,7 @@ mutable struct RamachandranGrid <: Grid
     phi_knots::AbstractRange{Float64}
     psi_knots::AbstractRange{Float64}
     J::Matrix{Float64}
+    sigma::Float64
     itp::Any
 end
 
@@ -253,17 +266,21 @@ function RamachandranGrid(;
     phi_range::Tuple{Float64,Float64}=(-pi * 1, pi * 1),
     psi_range::Tuple{Float64,Float64}=(-pi * 1, pi * 1),
     n=20,
+    sigma = 0,
     n_phi::Int=n, n_psi::Int=n,
     phi_knots=range(phi_range[1], phi_range[2], length=n_phi),
     psi_knots=range(psi_range[1], psi_range[2], length=n_psi),
     J=zeros(Float64, n_phi, n_psi),
-    itp=build_interpolation(J, phi_knots, psi_knots))
-    RamachandranGrid(phi_knots, psi_knots, J, itp)
+    itp=build_interpolation(J, phi_knots, psi_knots, sigma))
+    RamachandranGrid(phi_knots, psi_knots, J, sigma, itp)
 end
 
-function build_interpolation(J::Matrix{Float64}, phi_knots, psi_knots)
+function build_interpolation(J::Matrix{Float64}, phi_knots, psi_knots, sigma)
     """Build cubic spline interpolation with periodic boundary conditions."""
-    itp_base = interpolate(J, BSpline(Cubic(Periodic(OnGrid()))))
+    if sigma > 0
+        J = imfilter(J, Kernel.gaussian((sigma, sigma)), "circular")
+    end
+    itp_base = interpolate(J, BSpline(Cubic(Periodic(OnGrid()))))  # consider Linear instead of Cubic?
     return scale(itp_base, phi_knots, psi_knots)
 end
 
@@ -271,11 +288,10 @@ RamachandranGrid(J) = RamachandranGrid(; n_phi=size(J, 1), n_psi=size(J, 2), J=J
 
 Base.size(grid::RamachandranGrid, args...) = size(grid.J, args...)
 Base.similar(g::RamachandranGrid, J::Matrix) = RamachandranGrid(
-    g.phi_knots, g.psi_knots, J, build_interpolation(J, g.phi_knots, g.psi_knots)
+    g.phi_knots, g.psi_knots, J, g.sigma, build_interpolation(J, g.phi_knots, g.psi_knots, g.sigma)
 )
 
-interpolate_J(grid::RamachandranGrid, phi_deg::Real, psi_deg::Real) =
-    grid.itp(phi_deg, psi_deg)
+(grid::RamachandranGrid)(phi, psi) = grid.itp(phi, psi)
 
 function find_nearest_grid_point(grid::RamachandranGrid, phi_deg::Real, psi_deg::Real)
     i = argmin(abs.(grid.phi_knots .- phi_deg))
